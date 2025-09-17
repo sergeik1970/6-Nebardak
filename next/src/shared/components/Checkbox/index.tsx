@@ -13,15 +13,15 @@ const Checkbox = (props: ICheckbox): ReactElement => {
     const change = (e: any) => {
         onChange(e);
         setChecked(e.target.checked);
-    }
+    };
 
     return (
         <div className={styles["checkbox"]}>
-            <label className={clsx({ [styles["checked"]]: checked })}>
+            <label className={clsx({ [styles["checked"]]: checked }, styles["test"])}>
                 <input type="checkbox" checked={checked} onChange={change} />
             </label>
         </div>
-    )
-}
+    );
+};
 
 export default Checkbox;

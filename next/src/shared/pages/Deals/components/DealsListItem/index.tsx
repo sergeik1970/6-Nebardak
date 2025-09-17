@@ -23,17 +23,17 @@ const DealsListItem = ({ item }: { item: IDeal }): ReactElement => {
         if (e.target.value.trim() !== currentItem.name) {
             setItem({
                 ...currentItem,
-                name: e.target.value || ""
-            })
+                name: e.target.value || "",
+            });
         }
-    }
+    };
 
     const changeDone = (e: any) => {
         setItem({
             ...currentItem,
-            done: e.target.checked
-        })
-    }
+            done: e.target.checked,
+        });
+    };
 
     useEffect(() => {
         if (currentItem && currentItem !== item) {
@@ -44,7 +44,11 @@ const DealsListItem = ({ item }: { item: IDeal }): ReactElement => {
     return (
         <li className={styles["item"]}>
             <div className={styles["item-wrap"]}>
-                <InputText className={styles["input"]} defaultValue={item.name} onChange={changeName} />
+                <InputText
+                    className={styles["input"]}
+                    defaultValue={item.name}
+                    onChange={changeName}
+                />
                 <Checkbox defaultChecked={item.done} onChange={changeDone} />
             </div>
             <Button onClick={deleteClick}>delete</Button>

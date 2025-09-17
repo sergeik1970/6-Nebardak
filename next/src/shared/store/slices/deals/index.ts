@@ -25,7 +25,7 @@ const dealsSlice = createSlice({
 
         builder.addCase(changeDeal.fulfilled, (state, action) => {
             console.log(action);
-        })
+        });
     },
 });
 

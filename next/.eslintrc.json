@@ -1,16 +1,10 @@
 {
-  "extends": ["next/core-web-vitals", "prettier"],
+  "root": true,
+  "extends": ["prettier","next","next/core-web-vitals"],
   "plugins": ["prettier"],
+  "parser": "@typescript-eslint/parser",
   "rules": {
-    "react/display-name": "off",
-    "prettier/prettier": [
-      "error",
-      {
-        "endOfLine": "auto"
-      },
-      {
-        "eslintreact-hooks/exhaustive-deps": false,
-      }
-    ],
+    "prettier/prettier": "error",
+    "react/display-name": "off"
   }
 }

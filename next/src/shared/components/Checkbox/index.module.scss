@@ -3,6 +3,10 @@
         display: none;
     }
 
+    &-test {
+        background-color: red;
+    }
+
     label {
         display: block;
         margin: 0;
@@ -15,4 +19,8 @@
             border-color: green;
         }
     }
+}
+
+.test {
+    color: red;
 }

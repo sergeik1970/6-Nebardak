@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import debounce, { DebouncedFunc } from "./debounce";
 import { useLatest } from "./useLatest";
 import { useMemo } from "react";
@@ -11,4 +10,4 @@ const useDebounce = <T extends (...args: any) => any>(cb: T, ms: number): Deboun
     }, [ms, latestCb]);
 };
 
-export default useDebounce
+export default useDebounce;
