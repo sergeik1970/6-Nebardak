@@ -1,5 +1,5 @@
 export interface IDeals {
-    deals: Array<IDeal>;
+    deals: Array<IDeal> | null | undefined;
 }
 
 export interface IDeal {

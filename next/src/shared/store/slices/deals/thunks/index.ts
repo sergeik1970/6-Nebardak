@@ -15,14 +15,32 @@ export const addDeal = createAsyncThunk(
     "deals/addDeal",
     async ({ name }: { name: string }, { rejectWithValue }) => {
         try {
-            return await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/deals/add`, {
+            const url = `${process.env.NEXT_PUBLIC_API_URL}/api/deals/add`;
+            console.log("addDeal - sending request to:", url);
+            console.log("addDeal - payload:", { name });
+
+            const response = await fetch(url, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({ name }),
-            }).then((res) => res.json());
+            });
+
+            console.log("addDeal - response status:", response.status);
+            console.log("addDeal - response ok:", response.ok);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("addDeal - error response:", errorText);
+                return rejectWithValue(`HTTP ${response.status}: ${errorText}`);
+            }
+
+            const result = await response.json();
+            console.log("addDeal - success result:", result);
+            return result;
         } catch (err) {
+            console.error("addDeal - catch error:", err);
             return rejectWithValue(err);
         }
     },

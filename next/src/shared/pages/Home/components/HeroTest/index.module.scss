@@ -1,0 +1,519 @@
+// Шрифты подключены глобально в fonts.scss
+
+/* Базовые стили для мобильных устройств (320px+) */
+.hero-test {
+    position: relative;
+    width: 100%;
+    /* min-height: 100vh; */
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    margin-top: -2rem;
+    overflow: hidden;
+}
+
+.hero-test-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+    max-width: 100%;
+    width: 100%;
+}
+
+.hero-test-title {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    color: #2c2c2c;
+    margin: 0 0 1rem 0;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    text-align: left;
+    letter-spacing: 1px;
+}
+
+.hero-test-title-desktop {
+    display: none;
+}
+
+.hero-test-title-mobile {
+    display: block;
+}
+
+.hero-test-visual {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 3rem;
+    width: 100%;
+    align-self: center;
+}
+
+.hero-test-capsule {
+    position: relative;
+    width: 280px;
+    height: 350px;
+    margin: 0 auto;
+}
+
+.hero-test-capsule img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+}
+
+.hero-test-arrow {
+    display: none; /* Скрываем стрелку на мобильных */
+}
+
+.hero-test-buttons {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: 400px;
+    align-self: center;
+    position: relative;
+    padding: 0rem 1rem;
+    border-radius: 15px;
+}
+
+.hero-test-buttons::before,
+.hero-test-buttons::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100vw;
+    height: 1px;
+    background-color: #e0e0e0;
+}
+
+.hero-test-buttons::before {
+    top: -1.5rem;
+}
+
+.hero-test-buttons::after {
+    bottom: -1.5rem;
+}
+
+.hero-test-btn {
+    font-family: var(--font-primary);
+    padding: 1rem 2rem;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 100px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hero-test-btn-results {
+    background: transparent;
+    color: #ff8c00;
+    border: none;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.hero-test-btn-results:hover {
+    background: transparent;
+    color: #e67c00;
+    transform: none;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+.hero-test-btn-test {
+    background: #ffb340;
+    color: white;
+    padding: 0.5rem 2rem;
+    min-width: 10px;
+}
+
+.hero-test-btn-test:hover {
+    background: #e67c00;
+    border-color: #e67c00;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(255, 140, 0, 0.4);
+}
+
+@media (min-width: 360px) {
+    .hero-test-btn {
+        font-size: 1.1rem;
+    }
+}
+
+@media (min-width: 400px) {
+    .hero-test-btn {
+        font-size: 1.2rem;
+    }
+}
+
+/* Планшеты маленькие (480px+) */
+@media (min-width: 480px) {
+    .hero-test-capsule {
+        width: 320px;
+        height: 400px;
+    }
+
+    .hero-test-title {
+        font-size: 2rem;
+        /* margin-bottom: 2.5rem; */
+    }
+
+    .hero-test-buttons {
+        gap: 2rem;
+    }
+
+    .hero-test-btn {
+        font-size: 1.3rem;
+    }
+
+    .hero-test-btn-test {
+    }
+}
+
+/* Планшеты (768px+) */
+@media (min-width: 768px) {
+    .hero-test {
+        /* min-height: 80vh; */
+        padding: 0;
+        margin-top: -3rem;
+        /* padding: 3rem 2rem; */
+    }
+
+    .hero-test-content {
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        max-width: 1400px;
+        text-align: center;
+    }
+
+    .hero-test-title-mobile {
+        display: none;
+    }
+
+    .hero-test-title {
+        margin: 0;
+    }
+
+    .hero-test-title-desktop {
+        display: block;
+        margin-left: 4rem;
+        font-size: 1.8rem;
+        font-weight: 200;
+        flex-shrink: 0;
+    }
+
+    .hero-test-visual {
+        margin-bottom: 2rem;
+        position: relative;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 2rem;
+    }
+
+    .hero-test-arrow {
+        display: block;
+        width: 500px;
+        height: 620px;
+        background-image: url("/images/Home/arrow.jpg");
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        position: absolute;
+        top: 70%;
+        left: 33%;
+        transform: translate(-50%, -50%) rotate(75deg);
+        z-index: 1;
+        pointer-events: none;
+    }
+
+    .hero-test-capsule {
+        width: 320px;
+        height: 400px;
+        z-index: 2;
+        position: relative;
+        margin-left: auto;
+        margin-right: 6%;
+    }
+
+    .hero-test-buttons {
+        flex-direction: row;
+        gap: 2rem;
+        max-width: 1400px;
+        padding: 2.5rem 1.5rem;
+        align-items: center;
+        justify-content: space-between;
+        position: relative;
+        background-color: #ebebeb;
+        border-radius: 0px;
+        z-index: 3;
+    }
+
+    .hero-test-buttons-group {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        margin-right: 4rem;
+    }
+
+    .hero-test-buttons::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100vw;
+        height: 100%;
+        background-color: #f8f9fa;
+        z-index: -1;
+    }
+
+    .hero-test-btn {
+        /* min-width: 100px; */
+        font-size: 1rem;
+    }
+
+    .hero-test-btn-results {
+        padding: 1rem 1.5rem;
+        background-color: #ffdfb0;
+        color: black;
+    }
+
+    .hero-test-btn-test {
+        padding: 1rem 1.5rem;
+        /* padding: 1rem 2rem; */
+        /* min-width: 120px; */
+    }
+
+    .hero-test-buttons::after {
+        display: none;
+    }
+
+    .hero-test-visual {
+        margin-bottom: 0;
+        gap: 0;
+    }
+}
+
+@media (min-width: 900px) {
+    .hero-test-arrow {
+        left: 35%;
+        width: 550px;
+    }
+    .hero-test-capsule {
+        width: 350px;
+        height: 450px;
+    }
+}
+
+/* Десктопы маленькие (1024px+) */
+@media (min-width: 1024px) {
+    .hero-test {
+        min-height: 90vh;
+        /* padding: 4rem 3rem; */
+    }
+
+    .hero-test-title-desktop {
+        /* font-size: 2.2rem; */
+    }
+
+    .hero-test-arrow {
+        width: 650px;
+        height: 800px;
+        position: absolute;
+        top: 60%;
+        left: 30%;
+        transform: translate(-50%, -50%) rotate(80deg);
+        z-index: 1;
+        pointer-events: none;
+    }
+
+    .hero-test-capsule {
+        width: 400px;
+        height: 500px;
+        z-index: 2;
+        position: relative;
+        margin-left: auto;
+        margin-right: 5%;
+    }
+
+    .hero-test-buttons {
+        padding: 3rem 2rem;
+        /* max-width: 900px; */
+        z-index: 3;
+    }
+
+    .hero-test-buttons-group {
+        gap: 1.5rem;
+        /* min-height: 60px; */
+    }
+
+    .hero-test-btn {
+        /* padding: 1.5rem 3rem; */
+        font-size: 1.3rem;
+        min-width: 200px;
+    }
+
+    .hero-test-btn-test {
+        /* padding: 1.5rem 3rem; */
+        /* min-width: 200px; */
+    }
+}
+
+@media (min-width: 1100px) {
+    .hero-test-arrow {
+        top: 60%;
+        left: 35%;
+        width: 700px;
+    }
+    .hero-test-capsule {
+        margin-right: 9%;
+    }
+}
+
+/* Десктопы большие (1200px+) */
+@media (min-width: 1200px) {
+    .hero-test-content {
+        max-width: 1400px;
+    }
+
+    .hero-test-title-desktop {
+        font-size: 2.5rem;
+    }
+
+    .hero-test-arrow {
+        width: 750px;
+        height: 920px;
+        position: absolute;
+        top: 65%;
+        left: 32%;
+        transform: translate(-50%, -50%) rotate(75deg);
+        z-index: 1;
+        pointer-events: none;
+    }
+
+    .hero-test-capsule {
+        width: 450px;
+        height: 560px;
+        z-index: 2;
+        position: relative;
+        margin-left: auto;
+        margin-right: 6%;
+        margin-top: 4%;
+    }
+}
+
+@media (min-width: 1300px) {
+    .hero-test-arrow {
+        width: 850px;
+        left: 35%;
+    }
+    .hero-test-capsule {
+        margin-right: 8%;
+    }
+}
+
+/* Десктопы очень большие (1400px+) */
+@media (min-width: 1400px) {
+    .hero-test {
+        max-width: 1600px;
+        margin: 0 auto;
+    }
+
+    .hero-test-title-desktop {
+        font-size: 3rem;
+    }
+
+    .hero-test-arrow {
+        width: 850px;
+        height: 1040px;
+        position: absolute;
+        top: 70%;
+        left: 35%;
+        transform: translate(-50%, -50%) rotate(75deg);
+        z-index: 1;
+        pointer-events: none;
+        width: 850px;
+    }
+
+    .hero-test-capsule {
+        width: 500px;
+        height: 620px;
+        z-index: 2;
+        position: relative;
+        margin-left: auto;
+        margin-right: 8%;
+    }
+
+    .hero-test-buttons {
+        /* padding: 3.5rem 2.5rem; */
+        /* max-width: 1000px; */
+        z-index: 3;
+    }
+
+    .hero-test-buttons-group {
+        gap: 3rem;
+    }
+
+    .hero-test-btn-result {
+        min-height: 60px;
+    }
+
+    .hero-test-btn {
+        /* padding: 2rem 3.5rem; */
+        /* font-size: 1.4rem; */
+        /* min-width: 220px; */
+    }
+
+    .hero-test-btn-test {
+        /* padding: 2rem 3.5rem; */
+        /* min-width: 220px; */
+    }
+}
+
+/* Анимация появления */
+.hero-test-content {
+    animation: fadeInUp 1s ease-out;
+}
+
+/* .hero-test-capsule {
+  animation: float 6s ease-in-out infinite;
+} */
+
+.hero-test-btn {
+    animation: fadeInUp 1s ease-out 0.3s both;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes float {
+    0%,
+    100% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}

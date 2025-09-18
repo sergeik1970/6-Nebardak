@@ -1,10 +1,15 @@
 @import '~normalize.css';
-@import url('https://fonts.googleapis.com/css2?family=Racing+Sans+One&family=Titillium+Web:wght@300;400;600;700&display=swap');
-body {
-	font-family: 'Titillium Web', sans-serif;
+@import '../shared/styles/fonts.scss';
+
+* {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
 }
 
-*,
 body {
-	box-sizing: border-box;
+	font-family: var(--font-primary);
+	line-height: 1.6;
+	color: #2c2c2c;
+	background-color: #ffffff;
 }

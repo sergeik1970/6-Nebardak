@@ -1,11 +1,8 @@
 import React from "react";
+import Home from "@/shared/pages/Home";
 
 const Main = () => {
-    return (
-        <div>
-            <span>asdasdasd</span>
-        </div>
-    );
+    return <Home />;
 };
 
 export default Main;

@@ -10,7 +10,4 @@ export class Deals {
 
     @Column("boolean", { default: false })
     done: boolean = false;
-
-    @Column("boolean", { default: false })
-    test: boolean = false;
 }

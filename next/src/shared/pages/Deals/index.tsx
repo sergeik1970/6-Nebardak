@@ -12,8 +12,15 @@ const Deals = (): ReactElement => {
     const inputRef = createRef<HTMLInputElement>();
 
     const click = () => {
-        if (value) dispatch(addDeal({ name: value }));
+        console.log('Deals - click handler called, value:', value);
+        if (value) {
+            console.log('Deals - dispatching addDeal with name:', value);
+            dispatch(addDeal({ name: value }));
+        } else {
+            console.log('Deals - value is empty, not dispatching');
+        }
         if (inputRef.current) inputRef.current.value = "";
+        setValue(""); // Очищаем состояние
     };
 
     const change = (e: any) => {
