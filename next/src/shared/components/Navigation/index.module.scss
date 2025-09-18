@@ -58,7 +58,7 @@
 
 .nav-register-btn {
   font-family: var(--font-primary);
-  background-color: #e67e22;
+  background-color: #ffb340;
   color: white;
   border: none;
   padding: 12px 24px;
@@ -69,9 +69,41 @@
   transition: all 0.3s ease;
 
   &:hover {
-    background-color: #d35400;
+    background-color: #e56f21;
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(230, 126, 34, 0.3);
+  }
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-name {
+  font-family: var(--font-primary);
+  color: #333;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.nav-logout-btn {
+  font-family: var(--font-primary);
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background-color: #c82333;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(220, 53, 69, 0.3);
   }
 }
 
@@ -162,6 +194,17 @@
   margin-bottom: 10px;
 }
 
+.mobile-user-info {
+  font-family: var(--font-primary);
+  color: #ffb340;
+  font-size: 18px;
+  font-weight: 600;
+  padding: 15px 0;
+  text-align: left;
+  border-bottom: 1px solid #e5e5e5;
+  margin-bottom: 10px;
+}
+
 .mobile-nav-link {
   font-family: var(--font-primary);
   text-decoration: none;
@@ -174,6 +217,10 @@
   display: flex;
   align-items: center;
   gap: 15px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
 
   &::before {
     content: '☆';

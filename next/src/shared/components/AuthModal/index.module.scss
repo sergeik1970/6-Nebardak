@@ -1,0 +1,306 @@
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    padding: 20px;
+}
+
+.modal {
+    background: white;
+    border-radius: 20px;
+    padding: 40px;
+    width: 100%;
+    max-width: 450px;
+    position: relative;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    animation: modalAppear 0.3s ease-out;
+}
+
+@keyframes modalAppear {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.closeButton {
+    position: absolute;
+    top: 20px;
+    right: 25px;
+    background: none;
+    border: none;
+    font-size: 30px;
+    color: #99999919;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+
+    &:hover {
+        color: #333;
+    }
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.title {
+    font-family: var(--font-primary);
+    font-size: 28px;
+    font-weight: 700;
+    color: #333;
+    margin: 0 0 8px 0;
+}
+
+.subtitle {
+    font-family: var(--font-primary);
+    font-size: 16px;
+    color: #666;
+    margin: 0;
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.label {
+    font-family: var(--font-primary);
+    font-size: 16px;
+    font-weight: 500;
+    color: #333;
+    margin: 0;
+}
+
+.input {
+    font-family: var(--font-primary);
+    padding: 16px 20px;
+    border: 2px solid #e5e5e5;
+    border-radius: 12px;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    background-color: #fafafa;
+
+    &::placeholder {
+        color: #999;
+        font-size: 16px;
+    }
+
+    &:focus,
+    &:hover {
+        outline: none;
+        border-color: #ffb340;
+        background-color: white;
+        box-shadow: 0 0 0 3px rgba(255, 179, 64, 0.1);
+    }
+}
+
+// Переопределяем стили кнопки для модального окна
+.form :global(.button) {
+    font-family: var(--font-primary);
+    background-color: #ffb340 !important;
+    color: white !important;
+    border: none !important;
+    padding: 16px 24px;
+    border-radius: 12px !important;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 8px;
+    height: auto !important;
+
+    &:hover {
+        background-color: #e56f21 !important;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(230, 126, 34, 0.4);
+    }
+
+    &:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 8px rgba(230, 126, 34, 0.3);
+    }
+}
+
+.error {
+    background-color: #fee;
+    color: #c53030;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid #feb2b2;
+    font-size: 14px;
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.submitButton {
+    font-family: var(--font-primary);
+    background-color: #ffb340;
+    color: white;
+    border: none;
+    padding: 16px 24px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 8px;
+    width: 100%;
+    height: auto;
+
+    &:hover:not(:disabled) {
+        background-color: #e56f21;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(230, 126, 34, 0.4);
+    }
+
+    &:active:not(:disabled) {
+        transform: translateY(0);
+        box-shadow: 0 2px 8px rgba(230, 126, 34, 0.3);
+    }
+
+    &:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(255, 179, 64, 0.3);
+    }
+
+    &:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+}
+
+.switchMode {
+    text-align: center;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid #e5e5e5;
+
+    p {
+        font-family: var(--font-primary);
+        font-size: 14px;
+        color: #666;
+        margin: 0;
+    }
+}
+
+.switchButton {
+    background: none;
+    border: none;
+    color: #ffb340;
+    font-family: var(--font-primary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-left: 6px;
+    transition: color 0.2s ease;
+
+    &:hover {
+        color: #e56f21;
+        text-decoration: underline;
+    }
+}
+
+// Мобильная адаптация
+@media (max-width: 480px) {
+    .modal {
+        padding: 30px 25px;
+        margin: 20px;
+        max-width: none;
+        border-radius: 16px;
+    }
+
+    .title {
+        font-size: 24px;
+    }
+
+    .subtitle {
+        font-size: 14px;
+    }
+
+    .label {
+        font-size: 14px;
+    }
+
+    .input {
+        padding: 14px 16px;
+        font-size: 14px;
+
+        &::placeholder {
+            font-size: 14px;
+        }
+    }
+
+    .form :global(.button) {
+        padding: 14px 20px;
+        font-size: 14px;
+        background-color: #ffb340 !important;
+        
+        &:hover {
+            background-color: #e56f21 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(230, 126, 34, 0.3);
+        }
+
+        &:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 6px rgba(230, 126, 34, 0.2);
+        }
+    }
+
+    .submitButton {
+        padding: 14px 20px;
+        font-size: 14px;
+        
+        &:hover:not(:disabled) {
+            background-color: #e56f21;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(230, 126, 34, 0.3);
+        }
+
+        &:active:not(:disabled) {
+            transform: translateY(0);
+            box-shadow: 0 2px 6px rgba(230, 126, 34, 0.2);
+        }
+
+        &:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+    }
+
+    .closeButton {
+        top: 15px;
+        right: 20px;
+        font-size: 24px;
+    }
+}

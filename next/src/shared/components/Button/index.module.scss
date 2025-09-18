@@ -9,7 +9,12 @@
 
     &-primary {
         border-radius: 8px;
-        background-color: #000;
+        background-color: #ffb340;
         color: #fff;
     }
+    &:hover {
+            background-color: #e56f21 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(230, 126, 34, 0.3);
+        }
 }
