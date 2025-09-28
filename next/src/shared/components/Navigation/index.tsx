@@ -40,7 +40,7 @@ const Navigation: React.FC = () => {
 
                 {/* Меню для десктопа и планшета */}
                 <div className={styles["nav-menu"]}>
-                    <a href="#" className={styles["nav-link"]}>
+                    <a href="/" className={styles["nav-link"]}>
                         Главная
                     </a>
                     <a href="#" className={styles["nav-link"]}>
@@ -49,7 +49,7 @@ const Navigation: React.FC = () => {
                     <a href="#" className={styles["nav-link"]}>
                         Контакты
                     </a>
-                    <a href="#" className={styles["nav-link"]}>
+                    <a href="/test" className={styles["nav-link"]}>
                         Тест
                     </a>
 
@@ -104,7 +104,7 @@ const Navigation: React.FC = () => {
                         О нас
                     </a>
                     <a
-                        href="#"
+                        href="/test"
                         className={styles["mobile-nav-link"]}
                         onClick={() => setIsMenuOpen(false)}
                     >
