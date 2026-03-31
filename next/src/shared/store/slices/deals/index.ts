@@ -7,8 +7,6 @@ const initialState: IDeals = {
     deals: [],
 };
 
-// Логирование для отладки
-console.log('Deals slice - initialState:', initialState);
 const dealsSlice = createSlice({
     name: "deals",
     initialState,
@@ -27,29 +25,13 @@ const dealsSlice = createSlice({
         });
 
         builder.addCase(changeDeal.fulfilled, (state, action) => {
-            console.log(action);
-        });
-
-        // Обработка ошибок
-        builder.addCase(getDeals.rejected, (state, action) => {
-            console.error('Failed to get deals:', action.error);
-        });
-
-        builder.addCase(addDeal.rejected, (state, action) => {
-            console.error('Failed to add deal:', action.error);
-        });
-
-        builder.addCase(deleteDeal.rejected, (state, action) => {
-            console.error('Failed to delete deal:', action.error);
-        });
-
-        builder.addCase(changeDeal.rejected, (state, action) => {
-            console.error('Failed to change deal:', action.error);
+            state.deals = (state.deals || []).map((deal) =>
+                deal.id === action.payload?.id ? action.payload : deal,
+            );
         });
     },
 });
 
-// export const { increment, decrement, incrementByAmount } = dealsSlice.actions;
 export const selectDeals = (state: RootState) => {
     if (!state || !state.deals || !Array.isArray(state.deals.deals)) {
         return [];

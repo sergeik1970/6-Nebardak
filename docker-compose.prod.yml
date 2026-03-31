@@ -6,14 +6,25 @@ services:
             context: ./nest
         tty: true
         working_dir: /opt/nest
+        environment:
+            NODE_ENV: prod
+            DB_HOST: db
+            DB_PORT: 5432
+            DB_USERNAME: ${DB_USERNAME}
+            DB_PASSWORD: ${DB_PASSWORD}
+            DB_NAME: ${DB_NAME}
+            JWT_SECRET: ${JWT_SECRET}
         expose:
             - '3001'
         depends_on:
             - db
+        restart: always
 
     next:
         build:
             context: ./next
+            args:
+                NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
         tty: true
         working_dir: /opt/next
         expose:
@@ -21,29 +32,28 @@ services:
         depends_on:
             - db
             - nest
+        restart: always
 
     db:
         image: postgres:16
         environment:
-            POSTGRES_DB: "postgres"
-            POSTGRES_USER: "postgres"
-            POSTGRES_PASSWORD: "postgres"
+            POSTGRES_DB: ${DB_NAME}
+            POSTGRES_USER: ${DB_USERNAME}
+            POSTGRES_PASSWORD: ${DB_PASSWORD}
         volumes:
             - database:/var/lib/postgresql/data:delegated
         expose:
             - '5432'
-        ports:
-            - "127.0.0.1:5432:5432"
         restart: always
 
     nginx:
         container_name: proxy_nginx
         depends_on:
             - nest
-            - db
+            - next
         image: nginx:latest
         ports:
-            - '127.0.0.2:80:80'
+            - '80:80'
         volumes:
             - ./nginx:/etc/nginx/conf.d
             - ./static:/var/www/static

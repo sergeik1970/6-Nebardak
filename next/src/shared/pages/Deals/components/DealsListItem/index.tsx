@@ -19,7 +19,7 @@ const DealsListItem = ({ item }: { item: IDeal }): ReactElement => {
         dispatch(changeDeal({ id: String(item.id), element: newItem }));
     }, 300);
 
-    const changeName = (e: any) => {
+    const changeName = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.value.trim() !== currentItem.name) {
             setItem({
                 ...currentItem,
@@ -28,7 +28,7 @@ const DealsListItem = ({ item }: { item: IDeal }): ReactElement => {
         }
     };
 
-    const changeDone = (e: any) => {
+    const changeDone = (e: React.ChangeEvent<HTMLInputElement>) => {
         setItem({
             ...currentItem,
             done: e.target.checked,

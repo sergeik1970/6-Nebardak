@@ -10,10 +10,6 @@ export class DealsService {
         private readonly dealsRepository: Repository<Deals>,
     ) {}
 
-    getHello(): string {
-        return JSON.stringify({ a: "Hello World!a" });
-    }
-
     async createDeal(name: string): Promise<Deals> {
         const deal = this.dealsRepository.create({ name });
         return this.dealsRepository.save(deal);
@@ -29,7 +25,7 @@ export class DealsService {
     }
 
     async changeDeal(id: string, data: Deals): Promise<Deals> {
-        await this.dealsRepository.update(id, data);
+        await this.dealsRepository.update({ id: Number(id) }, data);
         return (
             await this.dealsRepository.find({ where: { id: Number(id) } })
         )[0];

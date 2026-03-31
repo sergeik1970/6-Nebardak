@@ -32,7 +32,7 @@ export class AuthService {
         private readonly userRepository: Repository<User>,
     ) {}
 
-    private readonly JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+    private readonly JWT_SECRET = process.env.JWT_SECRET;
     private readonly JWT_EXPIRES_IN = "30d"; // 30 дней
 
     async register(registerDto: RegisterDto): Promise<AuthResponse> {
@@ -65,7 +65,7 @@ export class AuthService {
         // Генерируем JWT токен
         const token = jwt.sign(
             { userId: savedUser.id, email: savedUser.email },
-            this.JWT_SECRET,
+            this.JWT_SECRET!,
             { expiresIn: this.JWT_EXPIRES_IN },
         );
 
@@ -103,7 +103,7 @@ export class AuthService {
         // Генерируем JWT токен
         const token = jwt.sign(
             { userId: user.id, email: user.email },
-            this.JWT_SECRET,
+            this.JWT_SECRET!,
             { expiresIn: this.JWT_EXPIRES_IN },
         );
 
@@ -119,7 +119,7 @@ export class AuthService {
 
     async validateToken(token: string): Promise<User | null> {
         try {
-            const decoded = jwt.verify(token, this.JWT_SECRET) as any;
+            const decoded = jwt.verify(token, this.JWT_SECRET!) as jwt.JwtPayload;
             const user = await this.userRepository.findOne({
                 where: { id: decoded.userId },
             });

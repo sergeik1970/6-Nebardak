@@ -1,4 +1,4 @@
-import React, { ReactElement, createRef, useEffect, useRef, useState } from "react";
+import React, { ReactElement, useRef, useEffect, useState } from "react";
 import Button from "@/shared/components/Button";
 import { useDispatch } from "@/shared/store/store";
 import { getDeals, addDeal } from "@/shared/store/slices/deals/thunks";
@@ -9,21 +9,17 @@ import styles from "./index.module.scss";
 const Deals = (): ReactElement => {
     const dispatch = useDispatch();
     const [value, setValue] = useState("");
-    const inputRef = createRef<HTMLInputElement>();
+    const inputRef = useRef<HTMLInputElement>(null);
 
     const click = () => {
-        console.log('Deals - click handler called, value:', value);
         if (value) {
-            console.log('Deals - dispatching addDeal with name:', value);
             dispatch(addDeal({ name: value }));
-        } else {
-            console.log('Deals - value is empty, not dispatching');
         }
         if (inputRef.current) inputRef.current.value = "";
-        setValue(""); // Очищаем состояние
+        setValue("");
     };
 
-    const change = (e: any) => {
+    const change = (e: React.ChangeEvent<HTMLInputElement>) => {
         setValue(e.target.value);
     };
 
