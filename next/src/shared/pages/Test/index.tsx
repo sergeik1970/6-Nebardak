@@ -4,162 +4,366 @@ import Navigation from "@/shared/components/Navigation";
 import Footer from "@/shared/components/Footer";
 import styles from "./index.module.scss";
 
-const TOTAL_ROUNDS = 5;
+// ─── Types ─────────────────────────────────────────────────────────────────
 
-const NATURA_IMAGES = Array.from(
-    { length: 13 },
-    (_, i) => `/images/Home/test-images/Природа/Природа ${i + 1}.png`,
-);
-
-const TECHNO_IMAGES = Array.from(
-    { length: 13 },
-    (_, i) => `/images/Home/test-images/Техно/Техно ${i + 1}.png`,
-);
-
-type Category = "natura" | "techno";
-
-interface RoundLog {
-    round: number;
-    chosen: Category;
+interface Cat {
+    key: string;
+    folder: string; // relative to /images/Home/test-images/
+    name: string; // image filename prefix (e.g. "Техно" → "Техно 1.png")
+    count: number;
+    label: string;
 }
 
-interface Pair {
-    naturaImg: string;
-    technoImg: string;
-    naturaOnLeft: boolean;
+interface BinaryNode {
+    type: "binary";
+    left: Cat;
+    right: Cat;
+    next: (winner: string) => GameNode;
 }
 
-function pickUnused(images: string[], used: string[]): string {
-    const available = images.filter((img) => !used.includes(img));
-    const pool = available.length > 0 ? available : images;
+interface LeafNode {
+    type: "leaf";
+    styles: [Cat, Cat, Cat];
+}
+
+type GameNode = BinaryNode | LeafNode;
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+const c = (key: string, folder: string, name: string, count: number, label: string): Cat => ({
+    key,
+    folder,
+    name,
+    count,
+    label,
+});
+
+const imgPath = (cat: Cat, n: number) =>
+    `/images/Home/test-images/${cat.folder}/${cat.name} ${n}.png`;
+
+function pickUnused(count: number, used: number[]): number {
+    const all = Array.from({ length: count }, (_, i) => i + 1);
+    const available = all.filter((n) => !used.includes(n));
+    const pool = available.length > 0 ? available : all;
     return pool[Math.floor(Math.random() * pool.length)];
 }
 
-function generatePair(usedNatura: string[], usedTechno: string[]): Pair {
+// ─── Game tree (defined bottom-up) ─────────────────────────────────────────
+
+// Leaf nodes
+
+const LEAF_DIGITAL: LeafNode = {
+    type: "leaf",
+    styles: [
+        c("futorizm", "Футуризм", "Футуризм", 8, "Футуризм"),
+        c("cyberpunk", "Киберпанк", "Киберпанк", 8, "Киберпанк"),
+        c("dopamine", "Дофаминовый", "Дофаминовый", 8, "Дофаминовый"),
+    ],
+};
+
+const LEAF_METAL_STYLE: LeafNode = {
+    type: "leaf",
+    styles: [
+        c("loft", "Лофт", "Лофт", 8, "Лофт"),
+        c("techno_leaf", "Техно", "Техно", 13, "Техно"),
+        c("hightech", "Хайтек", "Хайтек", 8, "Хайтек"),
+    ],
+};
+
+const LEAF_NOSTALGIA: LeafNode = {
+    type: "leaf",
+    styles: [
+        c("retrofuturism", "Ретрофутуризм", "Ретрофутуризм", 8, "Ретрофутуризм"),
+        c("grunge", "Гранж", "Гранж", 8, "Гранж"),
+        c("bauhaus", "Баухаус", "Баухаус", 8, "Баухаус"),
+    ],
+};
+
+const LEAF_ORDER: LeafNode = {
+    type: "leaf",
+    styles: [
+        c("minimalism", "Минимализм", "Минимализм", 8, "Минимализм"),
+        c("eclectic", "Эклектика", "Эклектика", 8, "Эклектика"),
+        c("contemporary", "Контемпорари", "Контемпорари", 8, "Контемпорари"),
+    ],
+};
+
+const LEAF_NORTH: LeafNode = {
+    type: "leaf",
+    styles: [
+        c("russian", "Русский", "Русский", 8, "Русский"),
+        c("scandinavian", "Скандинавский", "Скандинавский", 8, "Скандинавский"),
+        c("country", "Кантри", "Кантри", 8, "Кантри"),
+    ],
+};
+
+const LEAF_SOUTH: LeafNode = {
+    type: "leaf",
+    styles: [
+        c("japanese", "Японский", "Японский", 8, "Японский"),
+        c("provence", "Прованс", "Прованс", 8, "Прованс"),
+        c("mediterranean", "Средиземноморский", "Средиземноморский", 8, "Средиземноморский"),
+    ],
+};
+
+const LEAF_SPIRIT: LeafNode = {
+    type: "leaf",
+    styles: [
+        c("rustic", "Рустик", "Рустик", 8, "Рустик"),
+        c("wabisabi", "Ваби-саби", "Ваби-саби", 8, "Ваби-саби"),
+        c("eco", "Эко", "Эко", 8, "Эко"),
+    ],
+};
+
+const LEAF_BIO: LeafNode = {
+    type: "leaf",
+    styles: [
+        c("biodesign", "Биодизайн", "Биодизайн", 8, "Биодизайн"),
+        c("boho", "Бохо-шик", "Бохо-шик", 8, "Бохо-шик"),
+        c("tropical", "Тропический", "Тропический", 8, "Тропический"),
+    ],
+};
+
+// Level 2 binary nodes
+
+const LEVEL2_MEGAPOLIS: BinaryNode = {
+    type: "binary",
+    left: c("digital", "1.2 Цифровой", "Цифровой", 7, "Цифровой"),
+    right: c("metal", "1.2 Металл", "Металл", 7, "Металл"),
+    next: (w) => (w === "digital" ? LEAF_DIGITAL : LEAF_METAL_STYLE),
+};
+
+const LEVEL2_GORODOK: BinaryNode = {
+    type: "binary",
+    left: c("nostalgia", "1.2 Ностальгия", "Ностальгия", 7, "Ностальгия"),
+    right: c("order", "1.2 Порядок", "Порядок", 7, "Порядок"),
+    next: (w) => (w === "nostalgia" ? LEAF_NOSTALGIA : LEAF_ORDER),
+};
+
+const LEVEL2_ETHNO: BinaryNode = {
+    type: "binary",
+    left: c("north", "2.2 Север", "Север", 7, "Север"),
+    right: c("south", "2.2 Юг", "Юг", 7, "Юг"),
+    next: (w) => (w === "north" ? LEAF_NORTH : LEAF_SOUTH),
+};
+
+const LEVEL2_PLANTS: BinaryNode = {
+    type: "binary",
+    left: c("spirit", "2.2 Дух", "Дух", 7, "Дух"),
+    right: c("biosphere", "2.2 Биосфера", "Биосфера", 7, "Биосфера"),
+    next: (w) => (w === "spirit" ? LEAF_SPIRIT : LEAF_BIO),
+};
+
+// Level 1 binary nodes
+
+const LEVEL1_TECHNO: BinaryNode = {
+    type: "binary",
+    left: c("megapolis", "1.1 Мегаполис", "Мегаполис", 7, "Мегаполис"),
+    right: c("gorodok", "1.1 Городок", "Городок", 7, "Городок"),
+    next: (w) => (w === "megapolis" ? LEVEL2_MEGAPOLIS : LEVEL2_GORODOK),
+};
+
+const LEVEL1_NATURE: BinaryNode = {
+    type: "binary",
+    left: c("ethno", "2.1 Этно", "Этно", 11, "Этно"),
+    right: c("plants", "2.1 Растения", "Растения", 11, "Растения"),
+    next: (w) => (w === "ethno" ? LEVEL2_ETHNO : LEVEL2_PLANTS),
+};
+
+// Root
+
+const ROOT_NODE: BinaryNode = {
+    type: "binary",
+    left: c("techno", "1.0 Техно", "Техно", 13, "Техно"),
+    right: c("natura", "2.0 Природа", "Природа", 13, "Природа"),
+    next: (w) => (w === "techno" ? LEVEL1_TECHNO : LEVEL1_NATURE),
+};
+
+// ─── Game config ───────────────────────────────────────────────────────────
+
+const BINARY_ROUNDS = 5;
+const BINARY_WIN = 3;
+const LEAF_ROUNDS = 5;
+
+// ─── Slot / State ──────────────────────────────────────────────────────────
+
+interface Slot {
+    cat: Cat;
+    imgIndex: number;
+}
+
+interface GameState {
+    phase: "playing" | "results";
+    node: GameNode;
+    round: number;
+    scores: Record<string, number>;
+    usedImages: Record<string, number[]>; // folder → used indices
+    slots: Slot[];
+    winnerKey?: string;
+}
+
+function buildSlots(node: GameNode, used: Record<string, number[]>): Slot[] {
+    const cats: Cat[] = node.type === "binary" ? [node.left, node.right] : [...node.styles];
+
+    // Shuffle positions so categories don't always appear on the same side
+    for (let i = cats.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cats[i], cats[j]] = [cats[j], cats[i]];
+    }
+
+    return cats.map((cat) => ({
+        cat,
+        imgIndex: pickUnused(cat.count, used[cat.folder] ?? []),
+    }));
+}
+
+function initState(): GameState {
+    const node = ROOT_NODE;
+    const used: Record<string, number[]> = {};
     return {
-        naturaImg: pickUnused(NATURA_IMAGES, usedNatura),
-        technoImg: pickUnused(TECHNO_IMAGES, usedTechno),
-        naturaOnLeft: Math.random() < 0.5,
+        phase: "playing",
+        node,
+        round: 1,
+        scores: {},
+        usedImages: used,
+        slots: buildSlots(node, used),
     };
 }
 
-const WINNER_LABEL: Record<Category | "tie", string> = {
-    natura: "Тебе ближе природа",
-    techno: "Тебе ближе техно",
-    tie: "Ничья!",
-};
+// ─── Component ─────────────────────────────────────────────────────────────
 
 const Test: React.FC = () => {
-    const [phase, setPhase] = useState<"test" | "results">("test");
-    const [round, setRound] = useState(1);
-    const [scores, setScores] = useState<Record<Category, number>>({ natura: 0, techno: 0 });
-    const [log, setLog] = useState<RoundLog[]>([]);
-    const [usedNatura, setUsedNatura] = useState<string[]>([]);
-    const [usedTechno, setUsedTechno] = useState<string[]>([]);
-    const [pair, setPair] = useState<Pair>(() => generatePair([], []));
+    const [state, setState] = useState<GameState>(initState);
 
-    const handleChoice = useCallback(
-        (chosen: Category) => {
-            const newScores = { ...scores, [chosen]: scores[chosen] + 1 };
-            setScores(newScores);
-            setLog((prev) => [...prev, { round, chosen }]);
+    const handleChoice = useCallback((chosenKey: string) => {
+        setState((prev) => {
+            if (prev.phase === "results") return prev;
 
-            if (round >= TOTAL_ROUNDS) {
-                setPhase("results");
-                return;
+            // Update scores
+            const newScores: Record<string, number> = {
+                ...prev.scores,
+                [chosenKey]: (prev.scores[chosenKey] ?? 0) + 1,
+            };
+
+            // Mark current images as used
+            const newUsed = { ...prev.usedImages };
+            for (const slot of prev.slots) {
+                const arr = newUsed[slot.cat.folder] ? [...newUsed[slot.cat.folder]] : [];
+                if (!arr.includes(slot.imgIndex)) arr.push(slot.imgIndex);
+                newUsed[slot.cat.folder] = arr;
             }
 
-            const newUsedNatura = [...usedNatura, pair.naturaImg];
-            const newUsedTechno = [...usedTechno, pair.technoImg];
-            setUsedNatura(newUsedNatura);
-            setUsedTechno(newUsedTechno);
-            setPair(generatePair(newUsedNatura, newUsedTechno));
-            setRound((r) => r + 1);
-        },
-        [round, scores, pair, usedNatura, usedTechno],
-    );
+            if (prev.node.type === "binary") {
+                const { left, right, next } = prev.node;
+                const ls = newScores[left.key] ?? 0;
+                const rs = newScores[right.key] ?? 0;
+                const done = ls >= BINARY_WIN || rs >= BINARY_WIN || prev.round >= BINARY_ROUNDS;
 
-    const restart = () => {
-        setPhase("test");
-        setRound(1);
-        setScores({ natura: 0, techno: 0 });
-        setLog([]);
-        setUsedNatura([]);
-        setUsedTechno([]);
-        setPair(generatePair([], []));
-    };
+                if (done) {
+                    // Advance to next node
+                    const winnerKey = ls >= rs ? left.key : right.key;
+                    const nextNode = next(winnerKey);
+                    return {
+                        phase: "playing",
+                        node: nextNode,
+                        round: 1,
+                        scores: {},
+                        usedImages: newUsed,
+                        slots: buildSlots(nextNode, newUsed),
+                    };
+                }
 
-    const winner: Category | "tie" =
-        scores.natura > scores.techno
-            ? "natura"
-            : scores.techno > scores.natura
-              ? "techno"
-              : "tie";
+                return {
+                    ...prev,
+                    round: prev.round + 1,
+                    scores: newScores,
+                    usedImages: newUsed,
+                    slots: buildSlots(prev.node, newUsed),
+                };
+            }
 
-    const leftCategory: Category = pair.naturaOnLeft ? "natura" : "techno";
-    const rightCategory: Category = pair.naturaOnLeft ? "techno" : "natura";
-    const leftImg = pair.naturaOnLeft ? pair.naturaImg : pair.technoImg;
-    const rightImg = pair.naturaOnLeft ? pair.technoImg : pair.naturaImg;
+            // Leaf (3-way)
+            if (prev.round >= LEAF_ROUNDS) {
+                const winner = prev.node.styles.reduce((best, s) =>
+                    (newScores[s.key] ?? 0) > (newScores[best.key] ?? 0) ? s : best,
+                );
+                return {
+                    ...prev,
+                    phase: "results",
+                    scores: newScores,
+                    usedImages: newUsed,
+                    winnerKey: winner.key,
+                };
+            }
+
+            return {
+                ...prev,
+                round: prev.round + 1,
+                scores: newScores,
+                usedImages: newUsed,
+                slots: buildSlots(prev.node, newUsed),
+            };
+        });
+    }, []);
+
+    const restart = useCallback(() => setState(initState), []);
+
+    // Results screen
+    if (state.phase === "results" && state.node.type === "leaf") {
+        const winner = state.node.styles.find((s) => s.key === state.winnerKey);
+        return (
+            <div className={styles.test}>
+                <Navigation />
+                <main className={styles.main}>
+                    <div className={styles.container}>
+                        <div className={styles.results}>
+                            <h1 className={styles.title}>Твой стиль: {winner?.label}</h1>
+                            <button className={styles.restartButton} onClick={restart}>
+                                Пройти ещё раз
+                            </button>
+                        </div>
+                    </div>
+                </main>
+                <Footer />
+            </div>
+        );
+    }
+
+    const isLeaf = state.node.type === "leaf";
+    const totalRounds = isLeaf ? LEAF_ROUNDS : BINARY_ROUNDS;
+
+    const battleLabel =
+        state.node.type === "binary"
+            ? `${state.node.left.label} vs ${state.node.right.label}`
+            : state.node.styles.map((s) => s.label).join(" / ");
 
     return (
         <div className={styles.test}>
             <Navigation />
             <main className={styles.main}>
                 <div className={styles.container}>
-                    {phase === "test" ? (
-                        <>
-                            <h1 className={styles.title}>Выбери понравившееся изображение</h1>
-                            <p className={styles.progress}>
-                                {round} <span>/ {TOTAL_ROUNDS}</span>
-                            </p>
-                            <div className={styles.imageBlock}>
-                                <button
-                                    className={styles.imgButton}
-                                    onClick={() => handleChoice(leftCategory)}
-                                >
-                                    <Image src={leftImg} alt="Изображение слева" fill style={{ objectFit: "cover" }} unoptimized />
-                                </button>
-                                <button
-                                    className={styles.imgButton}
-                                    onClick={() => handleChoice(rightCategory)}
-                                >
-                                    <Image src={rightImg} alt="Изображение справа" fill style={{ objectFit: "cover" }} unoptimized />
-                                </button>
-                            </div>
-                        </>
-                    ) : (
-                        <div className={styles.results}>
-                            <h1 className={styles.title}>{WINNER_LABEL[winner]}</h1>
-                            <div className={styles.scores}>
-                                <div className={styles.scoreItem}>
-                                    <span className={styles.scoreLabel}>Природа</span>
-                                    <span className={styles.scoreValue}>{scores.natura}</span>
-                                </div>
-                                <div className={styles.scoreItem}>
-                                    <span className={styles.scoreLabel}>Техно</span>
-                                    <span className={styles.scoreValue}>{scores.techno}</span>
-                                </div>
-                            </div>
-
-                            <details className={styles.debugLog}>
-                                <summary>Детальный лог (debug)</summary>
-                                <ol>
-                                    {log.map((entry) => (
-                                        <li key={entry.round}>
-                                            Раунд {entry.round}:{" "}
-                                            <strong>
-                                                {entry.chosen === "natura" ? "Природа" : "Техно"}
-                                            </strong>
-                                        </li>
-                                    ))}
-                                </ol>
-                            </details>
-
-                            <button className={styles.restartButton} onClick={restart}>
-                                Пройти ещё раз
+                    <h1 className={styles.title}>Выбери понравившееся изображение</h1>
+                    <p className={styles.battle}>{battleLabel}</p>
+                    <p className={styles.progress}>
+                        {state.round} <span>/ {totalRounds}</span>
+                    </p>
+                    <div className={`${styles.imageBlock} ${isLeaf ? styles.threeWay : ""}`}>
+                        {state.slots.map((slot) => (
+                            <button
+                                key={slot.cat.key}
+                                className={styles.imgButton}
+                                onClick={() => handleChoice(slot.cat.key)}
+                            >
+                                <Image
+                                    src={imgPath(slot.cat, slot.imgIndex)}
+                                    alt={slot.cat.label}
+                                    fill
+                                    style={{ objectFit: "cover" }}
+                                    unoptimized
+                                />
                             </button>
-                        </div>
-                    )}
+                        ))}
+                    </div>
                 </div>
             </main>
             <Footer />

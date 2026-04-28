@@ -1,0 +1,15 @@
+{
+    email {$LETSENCRYPT_EMAIL}
+}
+
+{$SITE_ADDRESS} {
+    encode zstd gzip
+
+    handle /api* {
+        reverse_proxy nest:3001
+    }
+
+    handle {
+        reverse_proxy next:3000
+    }
+}

@@ -1,7 +1,9 @@
 import React, { useState } from "react";
+import Link from "next/link";
 import styles from "./index.module.scss";
 import AuthModal from "../AuthModal";
 import { useAuth } from "../../../contexts/AuthContext";
+import { isAuthEnabled } from "@/shared/config/runtime";
 
 const Navigation: React.FC = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -40,18 +42,18 @@ const Navigation: React.FC = () => {
 
                 {/* Меню для десктопа и планшета */}
                 <div className={styles["nav-menu"]}>
-                    <a href="/" className={styles["nav-link"]}>
+                    <Link href="/" className={styles["nav-link"]}>
                         Главная
-                    </a>
-                    <a href="#" className={styles["nav-link"]}>
+                    </Link>
+                    <Link href="/#about" className={styles["nav-link"]}>
                         О нас
-                    </a>
-                    <a href="#" className={styles["nav-link"]}>
+                    </Link>
+                    <Link href="/#contacts" className={styles["nav-link"]}>
                         Контакты
-                    </a>
-                    <a href="/test" className={styles["nav-link"]}>
+                    </Link>
+                    <Link href="/test" className={styles["nav-link"]}>
                         Тест
-                    </a>
+                    </Link>
 
                     {isAuthenticated ? (
                         <div className={styles["user-menu"]}>
@@ -60,10 +62,12 @@ const Navigation: React.FC = () => {
                                 Выйти
                             </button>
                         </div>
-                    ) : (
+                    ) : isAuthEnabled ? (
                         <button className={styles["nav-register-btn"]} onClick={openAuthModal}>
                             Регистрация
                         </button>
+                    ) : (
+                        <span className={styles["user-name"]}>Демо-режим</span>
                     )}
                 </div>
 
@@ -96,25 +100,32 @@ const Navigation: React.FC = () => {
                         </button>
                     )}
 
-                    <a
-                        href="#"
+                    <Link
+                        href="/#about"
                         className={styles["mobile-nav-link"]}
                         onClick={() => setIsMenuOpen(false)}
                     >
                         О нас
-                    </a>
-                    <a
+                    </Link>
+                    <Link
+                        href="/#contacts"
+                        className={styles["mobile-nav-link"]}
+                        onClick={() => setIsMenuOpen(false)}
+                    >
+                        Контакты
+                    </Link>
+                    <Link
                         href="/test"
                         className={styles["mobile-nav-link"]}
                         onClick={() => setIsMenuOpen(false)}
                     >
                         Тест
-                    </a>
+                    </Link>
                 </div>
             </div>
 
             {/* Модальное окно авторизации */}
-            <AuthModal isOpen={isAuthModalOpen} onClose={closeAuthModal} />
+            {isAuthEnabled && <AuthModal isOpen={isAuthModalOpen} onClose={closeAuthModal} />}
         </nav>
     );
 };

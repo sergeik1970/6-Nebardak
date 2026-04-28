@@ -1,8 +1,17 @@
 import { AuthResponse, RegisterData, LoginData, User } from "../types/auth";
+import { AUTH_API_URL, isAuthEnabled } from "@/shared/config/runtime";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+const AUTH_DISABLED_MESSAGE =
+    "Авторизация временно недоступна: сайт запущен без подключенного API.";
 
 class AuthService {
+    private getApiUrl() {
+        if (!AUTH_API_URL) {
+            throw new Error(AUTH_DISABLED_MESSAGE);
+        }
+        return AUTH_API_URL;
+    }
+
     private getAuthHeaders() {
         const token = localStorage.getItem("token");
         return {
@@ -12,7 +21,7 @@ class AuthService {
     }
 
     async register(data: RegisterData): Promise<AuthResponse> {
-        const response = await fetch(`${API_BASE_URL}/auth/register`, {
+        const response = await fetch(`${this.getApiUrl()}/auth/register`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -35,7 +44,7 @@ class AuthService {
     }
 
     async login(data: LoginData): Promise<AuthResponse> {
-        const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        const response = await fetch(`${this.getApiUrl()}/auth/login`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -58,7 +67,7 @@ class AuthService {
     }
 
     async getProfile(): Promise<{ user: User }> {
-        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        const response = await fetch(`${this.getApiUrl()}/auth/me`, {
             method: "GET",
             headers: this.getAuthHeaders(),
         });
@@ -92,6 +101,10 @@ class AuthService {
 
     isAuthenticated(): boolean {
         return !!this.getToken();
+    }
+
+    isAvailable(): boolean {
+        return isAuthEnabled;
     }
 }
 

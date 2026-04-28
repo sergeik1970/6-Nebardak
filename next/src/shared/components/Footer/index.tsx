@@ -1,9 +1,10 @@
 import React from "react";
+import Link from "next/link";
 import styles from "./index.module.scss";
 
 const Footer: React.FC = () => {
     return (
-        <footer className={styles.footer}>
+        <footer id="contacts" className={styles.footer}>
             <div className={styles["footer-container"]}>
                 <div className={styles["footer-content"]}>
                     {/* Левая колонка - основная информация */}
@@ -38,15 +39,15 @@ const Footer: React.FC = () => {
                     {/* Правая колонка - навигация (показывается только на планшетах и больше) */}
                     <div className={styles["footer-navigation"]}>
                         <nav className={styles["footer-nav"]}>
-                            <a href="/" className={styles["footer-nav-link"]}>
+                            <Link href="/" className={styles["footer-nav-link"]}>
                                 Главная
-                            </a>
-                            <a href="/about" className={styles["footer-nav-link"]}>
+                            </Link>
+                            <Link href="/#about" className={styles["footer-nav-link"]}>
                                 О нас
-                            </a>
-                            <a href="/test" className={styles["footer-nav-link"]}>
+                            </Link>
+                            <Link href="/test" className={styles["footer-nav-link"]}>
                                 Тест
-                            </a>
+                            </Link>
                         </nav>
                     </div>
                 </div>

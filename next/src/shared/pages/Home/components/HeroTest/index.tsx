@@ -1,17 +1,7 @@
 import React from "react";
+import Link from "next/link";
 import styles from "./index.module.scss";
-
 const HeroTest: React.FC = () => {
-    const handleTestClick = () => {
-        // Здесь будет логика перехода к тесту
-        console.log("Переход к тесту");
-    };
-
-    const handleResultsClick = () => {
-        // Здесь будет логика перехода к результатам
-        console.log("Переход к результатам");
-    };
-
     return (
         <section className={styles["hero-test"]}>
             <div className={styles["hero-test-content"]}>
@@ -35,16 +25,18 @@ const HeroTest: React.FC = () => {
                     <div className={styles["hero-test-buttons-group"]}>
                         <button
                             className={`${styles["hero-test-btn"]} ${styles["hero-test-btn-results"]}`}
-                            onClick={handleResultsClick}
+                            type="button"
+                            disabled
+                            aria-disabled="true"
                         >
-                            Результаты
+                            Результаты позже
                         </button>
-                        <button
+                        <Link
+                            href="/test"
                             className={`${styles["hero-test-btn"]} ${styles["hero-test-btn-test"]}`}
-                            onClick={handleTestClick}
                         >
-                            Тест
-                        </button>
+                            Пройти тест
+                        </Link>
                     </div>
                 </div>
             </div>

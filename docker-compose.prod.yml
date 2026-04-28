@@ -1,13 +1,10 @@
-version: '3'
-
 services:
     nest:
         build:
             context: ./nest
         tty: true
-        working_dir: /opt/nest
         environment:
-            NODE_ENV: prod
+            NODE_ENV: production
             DB_HOST: db
             DB_PORT: 5432
             DB_USERNAME: ${DB_USERNAME}
@@ -15,10 +12,17 @@ services:
             DB_NAME: ${DB_NAME}
             JWT_SECRET: ${JWT_SECRET}
         expose:
-            - '3001'
+            - "3001"
         depends_on:
-            - db
-        restart: always
+            db:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health || exit 1"]
+            interval: 30s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        restart: unless-stopped
 
     next:
         build:
@@ -26,13 +30,15 @@ services:
             args:
                 NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
         tty: true
-        working_dir: /opt/next
+        environment:
+            NODE_ENV: production
+            NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
         expose:
-            - '3000'
+            - "3000"
         depends_on:
-            - db
-            - nest
-        restart: always
+            nest:
+                condition: service_healthy
+        restart: unless-stopped
 
     db:
         image: postgres:16
@@ -43,21 +49,35 @@ services:
         volumes:
             - database:/var/lib/postgresql/data:delegated
         expose:
-            - '5432'
-        restart: always
+            - "5432"
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
 
-    nginx:
-        container_name: proxy_nginx
+    caddy:
+        image: caddy:2.11-alpine
         depends_on:
-            - nest
-            - next
-        image: nginx:latest
+            next:
+                condition: service_started
+            nest:
+                condition: service_healthy
         ports:
-            - '80:80'
+            - "80:80"
+            - "443:443"
+            - "443:443/udp"
+        environment:
+            SITE_ADDRESS: ${SITE_ADDRESS}
+            LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
         volumes:
-            - ./nginx:/etc/nginx/conf.d
-            - ./static:/var/www/static
-        restart: always
+            - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy_data:/data
+            - caddy_config:/config
+        restart: unless-stopped
 
 volumes:
     database:
+    caddy_data:
+    caddy_config:

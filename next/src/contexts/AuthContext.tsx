@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User, RegisterData, LoginData } from "../types/auth";
 import { authService } from "../services/authService";
+import { isAuthEnabled } from "@/shared/config/runtime";
 
 interface AuthContextType {
     user: User | null;
@@ -22,6 +23,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        if (!isAuthEnabled) {
+            setIsLoading(false);
+            return;
+        }
+
         // Проверяем, есть ли сохраненный токен при загрузке
         const initAuth = async () => {
             try {
@@ -42,6 +48,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }, []);
 
     const login = async (data: LoginData) => {
+        if (!isAuthEnabled) {
+            throw new Error("Авторизация недоступна в демо-режиме");
+        }
+
         try {
             const response = await authService.login(data);
             setUser(response.user);
@@ -51,6 +61,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     const register = async (data: RegisterData) => {
+        if (!isAuthEnabled) {
+            throw new Error("Регистрация недоступна в демо-режиме");
+        }
+
         try {
             const response = await authService.register(data);
             setUser(response.user);
