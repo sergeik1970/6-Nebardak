@@ -1,90 +1,87 @@
-# Production Deploy
+# Docker Compose Dev/Prod
 
-Рекомендуемая схема для VPS: Docker Compose + Caddy + PostgreSQL.
+В проекте используются:
 
-## Структура env
+- `docker-compose.dev.yml` — локальная dev-конфигурация.
+- `docker-compose.prod.yml` — production-конфигурация.
+- `docker-compose.yml` — такой же production compose по умолчанию, чтобы на сервере можно было писать просто `docker compose ...`.
 
-- Корневой `.env` — единственный env для сервера и `docker compose`.
-- `nest/.env` — только для локальной разработки Nest.
-- `next/.env.local` — только для локальной разработки Next.
+## Env-файлы
 
-### Локальная разработка
+- `nest/.env` — env для `nest` и `db`.
+- `next/.env` — env для `next`.
+- `nest/.env.example` и `next/.env.example` — шаблоны.
+
+## Локальная разработка
 
 ```bash
 cp nest/.env.example nest/.env
-cp next/.env.example next/.env.local
+cp next/.env.example next/.env
+docker compose -p nebardak-dev -f docker-compose.dev.yml up -d
 ```
 
-### Сервер
+`docker-compose.dev.yml` поднимает локальный PostgreSQL.
+
+## Сервер
+
+Скопировать env-файлы:
 
 ```bash
-cp .env.example .env
+cp nest/.env.example nest/.env
+cp next/.env.example next/.env
 ```
 
-## Что нужно на сервере
-
-- Ubuntu 24.04 LTS.
-- Docker и Docker Compose plugin.
-- Открытые порты `80` и `443`.
-- DNS `A`-запись домена на публичный IP сервера.
-
-## Настройка сервера
-
-1. Скопировать `.env.example` в `.env`.
-2. Заменить `SITE_ADDRESS`, `NEXT_PUBLIC_API_URL`, `LETSENCRYPT_EMAIL`, `DB_PASSWORD`, `JWT_SECRET`.
-3. Для запуска по IP указать:
+Заполнить `nest/.env`:
 
 ```env
-SITE_ADDRESS=http://SERVER_IP
-NEXT_PUBLIC_API_URL=http://SERVER_IP/api
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_USERNAME=nebardak
+DB_PASSWORD=your_strong_password
+DB_NAME=nebardak
+JWT_SECRET=your_random_jwt_secret_min_32_chars
+NODE_ENV=dev
+
+POSTGRES_DB=nebardak
+POSTGRES_USER=nebardak
+POSTGRES_PASSWORD=your_strong_password
 ```
 
-4. Для запуска с доменом указать:
+Заполнить `next/.env`:
 
 ```env
-SITE_ADDRESS=example.com
-NEXT_PUBLIC_API_URL=https://example.com/api
+NEXT_PUBLIC_API_URL=http://SERVER_IP:3001/api
 ```
 
-5. Если используется домен, убедиться, что DNS уже указывает на IP сервера.
-6. Собрать сервисы:
+Сборка и запуск:
 
 ```bash
-docker compose -p nebardak -f docker-compose.prod.yml --env-file .env build next nest
+docker compose build next
+docker compose build nest
+docker compose up -d --no-build
 ```
 
-7. Поднять стек без повторной сборки:
-
-```bash
-docker compose -p nebardak -f docker-compose.prod.yml --env-file .env up -d --no-build
-```
-
-Если `SITE_ADDRESS` указан как домен, Caddy автоматически выпустит и будет обновлять HTTPS-сертификат.
-
-## Обновление после git pull
+Обновление после `git pull`:
 
 ```bash
 git pull
-docker compose -p nebardak -f docker-compose.prod.yml --env-file .env build next nest
-docker compose -p nebardak -f docker-compose.prod.yml --env-file .env up -d --no-build
+docker compose build next
+docker compose build nest
+docker compose up -d --no-build
 ```
 
-## Короткие команды через Makefile
+Проверка:
 
 ```bash
-make prod-build
-make prod-up
-make prod-ps
-make prod-logs
+docker compose ps
+docker compose logs -f next
+docker compose logs -f nest
+curl http://SERVER_IP:3001/api/health
 ```
 
-`make prod-rebuild` выполнит сборку и затем `up -d --no-build`.
+## Что открывается снаружи
 
-## Проверка
+- сайт: `http://SERVER_IP`
+- API: `http://SERVER_IP:3001/api`
 
-```bash
-docker compose -p nebardak -f docker-compose.prod.yml --env-file .env ps
-docker compose -p nebardak -f docker-compose.prod.yml --env-file .env logs -f caddy
-```
-
-После запуска сайт должен открываться по адресу из `SITE_ADDRESS`, API healthcheck — по `${NEXT_PUBLIC_API_URL}/health`.
+В этой схеме `Caddy` не используется и автоматического HTTPS нет.
