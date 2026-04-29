@@ -32,13 +32,13 @@ const Navigation: React.FC = () => {
         <nav className={styles.navigation}>
             <div className={styles["nav-container"]}>
                 {/* Логотип */}
-                <div className={styles["nav-logo"]}>
+                <Link href="/" className={styles["nav-logo"]} aria-label="Перейти на главную">
                     <img
                         src="/images/Home/logo.jpg"
                         alt="Логотип"
                         className={styles["logo-image"]}
                     />
-                </div>
+                </Link>
 
                 {/* Меню для десктопа и планшета */}
                 <div className={styles["nav-menu"]}>
@@ -84,7 +84,13 @@ const Navigation: React.FC = () => {
 
                 {/* Мобильное меню */}
                 <div className={`${styles["mobile-menu"]} ${isMenuOpen ? styles.active : ""}`}>
-                    <h2 className={styles["mobile-menu-title"]}>StyleFinder</h2>
+                    <Link
+                        href="/"
+                        className={styles["mobile-menu-title"]}
+                        onClick={() => setIsMenuOpen(false)}
+                    >
+                        StyleFinder
+                    </Link>
                     <div className={styles["mobile-menu-divider"]}></div>
 
                     {isAuthenticated ? (

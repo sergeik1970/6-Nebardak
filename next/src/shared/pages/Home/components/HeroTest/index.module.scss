@@ -9,16 +9,16 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 2rem 1rem;
-    margin-top: -2rem;
+    padding: 2rem 1rem 1rem;
+    margin-top: -1.5rem;
     overflow: hidden;
 }
 
 .hero-test-content {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    text-align: left;
+    align-items: center;
+    text-align: center;
     max-width: 100%;
     width: 100%;
 }
@@ -29,7 +29,7 @@
     color: #2c2c2c;
     margin: 0 0 1rem 0;
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
-    text-align: left;
+    text-align: center;
     letter-spacing: 1px;
 }
 
@@ -46,7 +46,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-bottom: 3rem;
+    margin-bottom: 2rem;
     width: 100%;
     align-self: center;
 }
@@ -71,15 +71,25 @@
 
 .hero-test-buttons {
     display: flex;
-    gap: 1.5rem;
+    flex-direction: column;
+    gap: 0.8rem;
     justify-content: center;
     align-items: center;
     width: 100%;
-    max-width: 400px;
+    max-width: 22rem;
     align-self: center;
     position: relative;
-    padding: 0rem 1rem;
+    padding: 0.75rem 1rem 0;
     border-radius: 15px;
+    margin: 0 auto;
+}
+
+.hero-test-buttons-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    align-items: center;
+    width: 100%;
 }
 
 .hero-test-buttons::before,
@@ -94,25 +104,37 @@
 }
 
 .hero-test-buttons::before {
-    top: -1.5rem;
+    top: -1rem;
 }
 
 .hero-test-buttons::after {
-    bottom: -1.5rem;
+    display: none;
 }
 
 .hero-test-btn {
     font-family: var(--font-primary);
-    padding: 1rem 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: min(100%, 19rem);
+    padding: 0.85rem 1.35rem;
     border: none;
-    border-radius: 10px;
-    font-size: 0.9rem;
-    font-weight: 500;
+    border-radius: 18px;
+    font-size: 0.85rem;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
-    min-width: 100px;
+    min-width: 0;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    text-decoration: none;
+    text-align: center;
+    line-height: 1.1;
+}
+
+.hero-test-title-desktop {
+    text-align: center;
+    margin-left: 0;
 }
 
 .hero-test-btn-results {
@@ -134,8 +156,9 @@
 .hero-test-btn-test {
     background: #ffb340;
     color: white;
-    padding: 0.5rem 2rem;
-    min-width: 10px;
+    padding: 0.9rem 1.35rem;
+    min-width: 0;
+    text-decoration: none;
 }
 
 .hero-test-btn-test:hover {
@@ -147,13 +170,13 @@
 
 @media (min-width: 360px) {
     .hero-test-btn {
-        font-size: 1.1rem;
+        font-size: 0.95rem;
     }
 }
 
 @media (min-width: 400px) {
     .hero-test-btn {
-        font-size: 1.2rem;
+        font-size: 1rem;
     }
 }
 
@@ -169,15 +192,9 @@
         /* margin-bottom: 2.5rem; */
     }
 
-    .hero-test-buttons {
-        gap: 2rem;
-    }
-
     .hero-test-btn {
-        font-size: 1.3rem;
-    }
-
-    .hero-test-btn-test {
+        font-size: 1.05rem;
+        width: min(100%, 20rem);
     }
 }
 
@@ -185,8 +202,8 @@
 @media (min-width: 768px) {
     .hero-test {
         /* min-height: 80vh; */
-        padding: 0;
-        margin-top: -3rem;
+    padding: 1rem 1.5rem 1rem;
+        margin-top: -0.5rem;
         /* padding: 3rem 2rem; */
     }
 
@@ -194,16 +211,94 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        max-width: 1400px;
+        max-width: 56rem;
         text-align: center;
+        margin: 0 auto;
     }
 
     .hero-test-title-mobile {
-        display: none;
+        display: block;
     }
 
     .hero-test-title {
-        margin: 0;
+        margin: 0 0 1rem 0;
+    }
+
+    .hero-test-title-desktop {
+        display: none;
+    }
+
+    .hero-test-visual {
+        margin-bottom: 1.5rem;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+        width: 100%;
+    }
+
+    .hero-test-arrow {
+        display: none;
+    }
+
+    .hero-test-capsule {
+        width: min(100%, 24rem);
+        height: auto;
+        aspect-ratio: 4 / 5;
+        z-index: 2;
+        position: relative;
+        margin: 0 auto;
+    }
+
+    .hero-test-buttons {
+        flex-direction: column;
+        gap: 1rem;
+        width: min(100%, 24rem);
+        max-width: 24rem;
+        padding: 1.25rem 0 0;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        background-color: transparent;
+        border-radius: 0px;
+        z-index: 3;
+    }
+
+    .hero-test-buttons-group {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        align-items: center;
+        width: 100%;
+        margin-right: 0;
+    }
+
+    .hero-test-buttons::before {
+        top: -0.75rem;
+    }
+
+    .hero-test-btn {
+        font-size: 1rem;
+        width: 100%;
+    }
+
+    .hero-test-btn-results {
+        padding: 1rem 1.5rem;
+        background-color: #ffdfb0;
+        color: black;
+    }
+
+    .hero-test-btn-test {
+        padding: 1rem 1.5rem;
+    }
+
+}
+
+@media (min-width: 1024px) {
+    .hero-test-title-mobile {
+        display: none;
     }
 
     .hero-test-title-desktop {
@@ -215,12 +310,8 @@
     }
 
     .hero-test-visual {
-        margin-bottom: 2rem;
-        position: relative;
-        display: flex;
+        margin-bottom: 0;
         flex-direction: row;
-        align-items: center;
-        justify-content: center;
         gap: 2rem;
     }
 
@@ -252,20 +343,19 @@
     .hero-test-buttons {
         flex-direction: row;
         gap: 2rem;
+        width: 100%;
         max-width: 1400px;
         padding: 2.5rem 1.5rem;
         align-items: center;
         justify-content: space-between;
-        position: relative;
         background-color: #ebebeb;
-        border-radius: 0px;
-        z-index: 3;
     }
 
     .hero-test-buttons-group {
-        display: flex;
+        flex-direction: row;
         gap: 1rem;
         align-items: center;
+        width: auto;
         margin-right: 4rem;
     }
 
@@ -281,34 +371,16 @@
         z-index: -1;
     }
 
-    .hero-test-btn {
-        /* min-width: 100px; */
-        font-size: 1rem;
-    }
-
-    .hero-test-btn-results {
-        padding: 1rem 1.5rem;
-        background-color: #ffdfb0;
-        color: black;
-    }
-
-    .hero-test-btn-test {
-        padding: 1rem 1.5rem;
-        /* padding: 1rem 2rem; */
-        /* min-width: 120px; */
-    }
-
     .hero-test-buttons::after {
         display: none;
     }
 
-    .hero-test-visual {
-        margin-bottom: 0;
-        gap: 0;
+    .hero-test-btn {
+        width: auto;
     }
 }
 
-@media (min-width: 900px) {
+@media (min-width: 1100px) {
     .hero-test-arrow {
         left: 35%;
         width: 550px;
@@ -320,7 +392,7 @@
 }
 
 /* Десктопы маленькие (1024px+) */
-@media (min-width: 1024px) {
+@media (min-width: 1200px) {
     .hero-test {
         min-height: 90vh;
         /* padding: 4rem 3rem; */
@@ -373,19 +445,8 @@
     }
 }
 
-@media (min-width: 1100px) {
-    .hero-test-arrow {
-        top: 60%;
-        left: 35%;
-        width: 700px;
-    }
-    .hero-test-capsule {
-        margin-right: 9%;
-    }
-}
-
 /* Десктопы большие (1200px+) */
-@media (min-width: 1200px) {
+@media (min-width: 1300px) {
     .hero-test-content {
         max-width: 1400px;
     }
@@ -416,7 +477,7 @@
     }
 }
 
-@media (min-width: 1300px) {
+@media (min-width: 1400px) {
     .hero-test-arrow {
         width: 850px;
         left: 35%;
@@ -427,7 +488,7 @@
 }
 
 /* Десктопы очень большие (1400px+) */
-@media (min-width: 1400px) {
+@media (min-width: 1500px) {
     .hero-test {
         max-width: 1600px;
         margin: 0 auto;
