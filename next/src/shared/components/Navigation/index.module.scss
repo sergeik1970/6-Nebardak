@@ -177,14 +177,15 @@
 }
 
 .mobile-menu-title {
-  font-family: var(--font-primary);
+  font-family: var(--font-brand);
   font-size: 28px;
   font-weight: 700;
-  color: #333;
+  color: var(--color-brand);
   margin: 0 0 10px 0;
   text-align: left;
   padding-bottom: 10px;
   border-bottom: 1px solid #e5e5e5;
+  text-transform: none;
 }
 
 .mobile-menu-divider {
@@ -196,7 +197,7 @@
 
 .mobile-user-info {
   font-family: var(--font-primary);
-  color: #ffb340;
+  color: var(--color-brand);
   font-size: 18px;
   font-weight: 600;
   padding: 15px 0;
@@ -230,7 +231,7 @@
   }
 
   &:hover {
-    color: #e67e22;
+    color: var(--color-brand);
   }
 }
 

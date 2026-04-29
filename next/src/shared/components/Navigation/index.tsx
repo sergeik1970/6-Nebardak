@@ -84,7 +84,7 @@ const Navigation: React.FC = () => {
 
                 {/* Мобильное меню */}
                 <div className={`${styles["mobile-menu"]} ${isMenuOpen ? styles.active : ""}`}>
-                    <h2 className={styles["mobile-menu-title"]}>НЕБАРДАК</h2>
+                    <h2 className={styles["mobile-menu-title"]}>StyleFinder</h2>
                     <div className={styles["mobile-menu-divider"]}></div>
 
                     {isAuthenticated ? (

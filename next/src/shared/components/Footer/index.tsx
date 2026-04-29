@@ -9,7 +9,7 @@ const Footer: React.FC = () => {
                 <div className={styles["footer-content"]}>
                     {/* Левая колонка - основная информация */}
                     <div className={styles["footer-main"]}>
-                        <h2 className={styles["footer-title"]}>НЕБАРДАК</h2>
+                        <h2 className={styles["footer-title"]}>StyleFinder</h2>
 
                         <div className={styles["footer-contacts"]}>
                             <div className={styles["contact-item"]}>

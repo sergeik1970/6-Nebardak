@@ -43,14 +43,14 @@
 }
 
 .header-title {
-  font-family: var(--font-display);
-  font-weight: normal;
+  font-family: var(--font-brand);
+  font-weight: 700;
   letter-spacing: 0.05em;
   margin: 0;
-  text-transform: uppercase;
-  color: #2c2c2c;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+  color: var(--color-brand);
+  text-shadow: 2px 2px 8px rgba(255, 255, 255, 0.55);
   line-height: 1;
+  text-transform: none;
 }
 
 .header-subtitle {
@@ -59,8 +59,8 @@
   font-weight: 500;
   letter-spacing: 0.1em;
   margin: 0.5rem 0 0 0;
-  color: #d4851f;
-  text-transform: lowercase;
+  color: var(--color-brand);
+  text-transform: none;
 }
 
 @media (min-width: 360px) {
