@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import styles from "./index.module.scss";
 import AuthModal from "../AuthModal";
 import { useAuth } from "../../../contexts/AuthContext";
@@ -33,9 +34,13 @@ const Navigation: React.FC = () => {
             <div className={styles["nav-container"]}>
                 {/* Логотип */}
                 <Link href="/" className={styles["nav-logo"]} aria-label="Перейти на главную">
-                    <img
+                    <Image
                         src="/images/Home/logo.jpg"
                         alt="Логотип"
+                        width={50}
+                        height={50}
+                        priority
+                        quality={80}
                         className={styles["logo-image"]}
                     />
                 </Link>

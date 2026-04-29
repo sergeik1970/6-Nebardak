@@ -1,5 +1,6 @@
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import styles from "./index.module.scss";
 const HeroTest: React.FC = () => {
     return (
@@ -12,7 +13,14 @@ const HeroTest: React.FC = () => {
                 <div className={styles["hero-test-visual"]}>
                     <div className={styles["hero-test-arrow"]}></div>
                     <div className={styles["hero-test-capsule"]}>
-                        <img src="/images/Home/capsule.jpg" alt="Капсула с людьми за тестом" />
+                        <Image
+                            src="/images/Home/capsule.jpg"
+                            alt="Капсула с людьми за тестом"
+                            fill
+                            sizes="(max-width: 768px) 80vw, (max-width: 1200px) 24rem, 500px"
+                            quality={75}
+                            style={{ objectFit: "cover" }}
+                        />
                     </div>
                 </div>
 

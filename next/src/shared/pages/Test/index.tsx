@@ -51,6 +51,14 @@ function pickUnused(count: number, used: number[]): number {
     return pool[Math.floor(Math.random() * pool.length)];
 }
 
+function pickNextUnused(count: number, blocked: number[]): number | null {
+    for (let i = 1; i <= count; i++) {
+        if (!blocked.includes(i)) return i;
+    }
+
+    return null;
+}
+
 // ─── Game tree (defined bottom-up) ─────────────────────────────────────────
 
 // Leaf nodes
@@ -220,6 +228,26 @@ function buildSlots(node: GameNode, used: Record<string, number[]>): Slot[] {
     }));
 }
 
+function buildPrefetchSlots(
+    node: GameNode,
+    used: Record<string, number[]>,
+    currentSlots: Slot[],
+): Slot[] {
+    const cats: Cat[] = node.type === "binary" ? [node.left, node.right] : [...node.styles];
+
+    return cats.flatMap((cat) => {
+        const currentIndexes = currentSlots
+            .filter((slot) => slot.cat.folder === cat.folder)
+            .map((slot) => slot.imgIndex);
+        const nextIndex = pickNextUnused(cat.count, [
+            ...(used[cat.folder] ?? []),
+            ...currentIndexes,
+        ]);
+
+        return nextIndex ? [{ cat, imgIndex: nextIndex }] : [];
+    });
+}
+
 function initState(): GameState {
     const node = ROOT_NODE;
     const used: Record<string, number[]> = {};
@@ -334,6 +362,7 @@ const Test: React.FC = () => {
 
     const isLeaf = state.node.type === "leaf";
     const totalRounds = isLeaf ? LEAF_ROUNDS : BINARY_ROUNDS;
+    const prefetchSlots = buildPrefetchSlots(state.node, state.usedImages, state.slots);
 
     const battleLabel =
         state.node.type === "binary"
@@ -362,11 +391,29 @@ const Test: React.FC = () => {
                                     alt={slot.cat.label}
                                     fill
                                     sizes={imageSizes(isLeaf)}
-                                    quality={75}
+                                    quality={70}
                                     priority
                                     style={{ objectFit: "cover" }}
                                 />
                             </button>
+                        ))}
+                    </div>
+                    <div className={styles.prefetchStrip} aria-hidden="true">
+                        {prefetchSlots.map((slot) => (
+                            <div
+                                key={`${slot.cat.key}-${slot.imgIndex}`}
+                                className={styles.prefetchImage}
+                            >
+                                <Image
+                                    src={imgPath(slot.cat, slot.imgIndex)}
+                                    alt=""
+                                    width={24}
+                                    height={18}
+                                    sizes={imageSizes(isLeaf)}
+                                    quality={65}
+                                    loading="eager"
+                                />
+                            </div>
                         ))}
                     </div>
                 </div>

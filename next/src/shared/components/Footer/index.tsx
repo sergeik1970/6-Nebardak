@@ -1,5 +1,6 @@
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import styles from "./index.module.scss";
 
 const Footer: React.FC = () => {
@@ -16,9 +17,12 @@ const Footer: React.FC = () => {
                         <div className={styles["footer-contacts"]}>
                             <div className={styles["contact-item"]}>
                                 <div className={styles["contact-icon"]}>
-                                    <img
+                                    <Image
                                         src="/images/Home/tg-logo.jpg"
                                         alt="Telegram"
+                                        width={40}
+                                        height={40}
+                                        quality={75}
                                         className={styles["contact-icon-img"]}
                                     />
                                 </div>
@@ -27,9 +31,12 @@ const Footer: React.FC = () => {
 
                             <div className={styles["contact-item"]}>
                                 <div className={styles["contact-icon"]}>
-                                    <img
+                                    <Image
                                         src="/images/Home/phone-logo.jpg"
                                         alt="Phone"
+                                        width={40}
+                                        height={40}
+                                        quality={75}
                                         className={styles["contact-icon-img"]}
                                     />
                                 </div>
