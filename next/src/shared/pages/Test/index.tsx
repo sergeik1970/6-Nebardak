@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Navigation from "@/shared/components/Navigation";
 import Footer from "@/shared/components/Footer";
@@ -49,14 +49,6 @@ function pickUnused(count: number, used: number[]): number {
     const available = all.filter((n) => !used.includes(n));
     const pool = available.length > 0 ? available : all;
     return pool[Math.floor(Math.random() * pool.length)];
-}
-
-function pickNextUnused(count: number, blocked: number[]): number | null {
-    for (let i = 1; i <= count; i++) {
-        if (!blocked.includes(i)) return i;
-    }
-
-    return null;
 }
 
 // ─── Game tree (defined bottom-up) ─────────────────────────────────────────
@@ -213,6 +205,17 @@ interface GameState {
     winnerKey?: string;
 }
 
+interface PreparedAdvance {
+    node: GameNode;
+    slots: Slot[];
+}
+
+interface PreparedRound {
+    usedAfterRound: Record<string, number[]>;
+    continueSlots?: Slot[];
+    advanceByWinner?: Record<string, PreparedAdvance>;
+}
+
 function buildSlots(node: GameNode, used: Record<string, number[]>): Slot[] {
     const cats: Cat[] = node.type === "binary" ? [node.left, node.right] : [...node.styles];
 
@@ -228,24 +231,50 @@ function buildSlots(node: GameNode, used: Record<string, number[]>): Slot[] {
     }));
 }
 
-function buildPrefetchSlots(
+function markSlotsAsUsed(used: Record<string, number[]>, slots: Slot[]): Record<string, number[]> {
+    const nextUsed = { ...used };
+
+    for (const slot of slots) {
+        const arr = nextUsed[slot.cat.folder] ? [...nextUsed[slot.cat.folder]] : [];
+        if (!arr.includes(slot.imgIndex)) arr.push(slot.imgIndex);
+        nextUsed[slot.cat.folder] = arr;
+    }
+
+    return nextUsed;
+}
+
+function prepareRound(
     node: GameNode,
     used: Record<string, number[]>,
-    currentSlots: Slot[],
-): Slot[] {
-    const cats: Cat[] = node.type === "binary" ? [node.left, node.right] : [...node.styles];
+    slots: Slot[],
+): PreparedRound {
+    const usedAfterRound = markSlotsAsUsed(used, slots);
 
-    return cats.flatMap((cat) => {
-        const currentIndexes = currentSlots
-            .filter((slot) => slot.cat.folder === cat.folder)
-            .map((slot) => slot.imgIndex);
-        const nextIndex = pickNextUnused(cat.count, [
-            ...(used[cat.folder] ?? []),
-            ...currentIndexes,
-        ]);
+    if (node.type === "binary") {
+        const continueSlots = buildSlots(node, usedAfterRound);
+        const leftAdvanceNode = node.next(node.left.key);
+        const rightAdvanceNode = node.next(node.right.key);
 
-        return nextIndex ? [{ cat, imgIndex: nextIndex }] : [];
-    });
+        return {
+            usedAfterRound,
+            continueSlots,
+            advanceByWinner: {
+                [node.left.key]: {
+                    node: leftAdvanceNode,
+                    slots: buildSlots(leftAdvanceNode, usedAfterRound),
+                },
+                [node.right.key]: {
+                    node: rightAdvanceNode,
+                    slots: buildSlots(rightAdvanceNode, usedAfterRound),
+                },
+            },
+        };
+    }
+
+    return {
+        usedAfterRound,
+        continueSlots: buildSlots(node, usedAfterRound),
+    };
 }
 
 function initState(): GameState {
@@ -265,24 +294,56 @@ function initState(): GameState {
 
 const Test: React.FC = () => {
     const [state, setState] = useState<GameState>(initState);
+    const preloadedUrlsRef = useRef<Set<string>>(new Set());
+
+    const preparedRound =
+        state.phase === "playing" ? prepareRound(state.node, state.usedImages, state.slots) : null;
+
+    useEffect(() => {
+        if (!preparedRound) return;
+
+        const urls = new Set<string>();
+
+        for (const slot of state.slots) {
+            urls.add(imgPath(slot.cat, slot.imgIndex));
+        }
+
+        if (preparedRound.continueSlots) {
+            for (const slot of preparedRound.continueSlots) {
+                urls.add(imgPath(slot.cat, slot.imgIndex));
+            }
+        }
+
+        if (preparedRound.advanceByWinner) {
+            for (const advance of Object.values(preparedRound.advanceByWinner)) {
+                for (const slot of advance.slots) {
+                    urls.add(imgPath(slot.cat, slot.imgIndex));
+                }
+            }
+        }
+
+        urls.forEach((url) => {
+            if (preloadedUrlsRef.current.has(url)) return;
+
+            const image = new window.Image();
+            image.decoding = "async";
+            image.src = url;
+            preloadedUrlsRef.current.add(url);
+        });
+    }, [preparedRound, state.slots]);
 
     const handleChoice = useCallback((chosenKey: string) => {
         setState((prev) => {
             if (prev.phase === "results") return prev;
+
+            const prepared = prepareRound(prev.node, prev.usedImages, prev.slots);
 
             // Update scores
             const newScores: Record<string, number> = {
                 ...prev.scores,
                 [chosenKey]: (prev.scores[chosenKey] ?? 0) + 1,
             };
-
-            // Mark current images as used
-            const newUsed = { ...prev.usedImages };
-            for (const slot of prev.slots) {
-                const arr = newUsed[slot.cat.folder] ? [...newUsed[slot.cat.folder]] : [];
-                if (!arr.includes(slot.imgIndex)) arr.push(slot.imgIndex);
-                newUsed[slot.cat.folder] = arr;
-            }
+            const newUsed = prepared.usedAfterRound;
 
             if (prev.node.type === "binary") {
                 const { left, right, next } = prev.node;
@@ -293,14 +354,15 @@ const Test: React.FC = () => {
                 if (done) {
                     // Advance to next node
                     const winnerKey = ls >= rs ? left.key : right.key;
-                    const nextNode = next(winnerKey);
+                    const preparedAdvance = prepared.advanceByWinner?.[winnerKey];
+                    const nextNode = preparedAdvance?.node ?? next(winnerKey);
                     return {
                         phase: "playing",
                         node: nextNode,
                         round: 1,
                         scores: {},
                         usedImages: newUsed,
-                        slots: buildSlots(nextNode, newUsed),
+                        slots: preparedAdvance?.slots ?? buildSlots(nextNode, newUsed),
                     };
                 }
 
@@ -309,7 +371,7 @@ const Test: React.FC = () => {
                     round: prev.round + 1,
                     scores: newScores,
                     usedImages: newUsed,
-                    slots: buildSlots(prev.node, newUsed),
+                    slots: prepared.continueSlots ?? buildSlots(prev.node, newUsed),
                 };
             }
 
@@ -332,7 +394,7 @@ const Test: React.FC = () => {
                 round: prev.round + 1,
                 scores: newScores,
                 usedImages: newUsed,
-                slots: buildSlots(prev.node, newUsed),
+                slots: prepared.continueSlots ?? buildSlots(prev.node, newUsed),
             };
         });
     }, []);
@@ -362,7 +424,6 @@ const Test: React.FC = () => {
 
     const isLeaf = state.node.type === "leaf";
     const totalRounds = isLeaf ? LEAF_ROUNDS : BINARY_ROUNDS;
-    const prefetchSlots = buildPrefetchSlots(state.node, state.usedImages, state.slots);
 
     const battleLabel =
         state.node.type === "binary"
@@ -390,30 +451,13 @@ const Test: React.FC = () => {
                                     src={imgPath(slot.cat, slot.imgIndex)}
                                     alt={slot.cat.label}
                                     fill
+                                    unoptimized
                                     sizes={imageSizes(isLeaf)}
                                     quality={70}
                                     priority
                                     style={{ objectFit: "cover" }}
                                 />
                             </button>
-                        ))}
-                    </div>
-                    <div className={styles.prefetchStrip} aria-hidden="true">
-                        {prefetchSlots.map((slot) => (
-                            <div
-                                key={`${slot.cat.key}-${slot.imgIndex}`}
-                                className={styles.prefetchImage}
-                            >
-                                <Image
-                                    src={imgPath(slot.cat, slot.imgIndex)}
-                                    alt=""
-                                    width={24}
-                                    height={18}
-                                    sizes={imageSizes(isLeaf)}
-                                    quality={65}
-                                    loading="eager"
-                                />
-                            </div>
                         ))}
                     </div>
                 </div>
