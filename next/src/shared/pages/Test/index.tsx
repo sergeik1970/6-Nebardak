@@ -41,6 +41,9 @@ const c = (key: string, folder: string, name: string, count: number, label: stri
 const imgPath = (cat: Cat, n: number) =>
     `/images/Home/test-images/${cat.folder}/${cat.name} ${n}.png`;
 
+const imageSizes = (isLeaf: boolean) =>
+    isLeaf ? "(max-width: 768px) 100vw, 30vw" : "(max-width: 768px) 100vw, 40vw";
+
 function pickUnused(count: number, used: number[]): number {
     const all = Array.from({ length: count }, (_, i) => i + 1);
     const available = all.filter((n) => !used.includes(n));
@@ -358,8 +361,10 @@ const Test: React.FC = () => {
                                     src={imgPath(slot.cat, slot.imgIndex)}
                                     alt={slot.cat.label}
                                     fill
+                                    sizes={imageSizes(isLeaf)}
+                                    quality={75}
+                                    priority
                                     style={{ objectFit: "cover" }}
-                                    unoptimized
                                 />
                             </button>
                         ))}
