@@ -39,7 +39,7 @@ const c = (key: string, folder: string, name: string, count: number, label: stri
 });
 
 const imgPath = (cat: Cat, n: number) =>
-    `/images/Home/test-images/${cat.folder}/${cat.name} ${n}.png`;
+    `/images/Home/test-images/${cat.folder}/${cat.name} ${n}.webp`;
 
 const imageSizes = (isLeaf: boolean) =>
     isLeaf ? "(max-width: 768px) 100vw, 30vw" : "(max-width: 768px) 100vw, 40vw";
