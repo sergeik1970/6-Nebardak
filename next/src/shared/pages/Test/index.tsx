@@ -41,8 +41,8 @@ const c = (key: string, folder: string, name: string, count: number, label: stri
 const imgPath = (cat: Cat, n: number) =>
     `/images/Home/test-images/${cat.folder}/${cat.name} ${n}.webp`;
 
-const imageSizes = (isLeaf: boolean) =>
-    isLeaf ? "(max-width: 768px) 100vw, 30vw" : "(max-width: 768px) 100vw, 40vw";
+const imageSizes = (slotCount: number) =>
+    slotCount === 3 ? "(max-width: 768px) 100vw, 30vw" : "(max-width: 768px) 100vw, 40vw";
 
 function pickUnused(count: number, used: number[]): number {
     const all = Array.from({ length: count }, (_, i) => i + 1);
@@ -187,6 +187,13 @@ const ROOT_NODE: BinaryNode = {
 const BINARY_ROUNDS = 5;
 const BINARY_WIN = 3;
 const LEAF_ROUNDS = 5;
+const LEAF_PAIR_SEQUENCE: Array<[number, number]> = [
+    [0, 1],
+    [0, 2],
+    [1, 2],
+    [0, 1],
+    [1, 2],
+];
 
 // ─── Slot / State ──────────────────────────────────────────────────────────
 
@@ -216,8 +223,15 @@ interface PreparedRound {
     advanceByWinner?: Record<string, PreparedAdvance>;
 }
 
-function buildSlots(node: GameNode, used: Record<string, number[]>): Slot[] {
-    const cats: Cat[] = node.type === "binary" ? [node.left, node.right] : [...node.styles];
+function getRoundCats(node: GameNode, round: number): Cat[] {
+    if (node.type === "binary") return [node.left, node.right];
+
+    const pair = LEAF_PAIR_SEQUENCE[Math.min(round - 1, LEAF_PAIR_SEQUENCE.length - 1)];
+    return [node.styles[pair[0]], node.styles[pair[1]]];
+}
+
+function buildSlots(node: GameNode, used: Record<string, number[]>, round: number): Slot[] {
+    const cats: Cat[] = getRoundCats(node, round);
 
     // Shuffle positions so categories don't always appear on the same side
     for (let i = cats.length - 1; i > 0; i--) {
@@ -247,11 +261,12 @@ function prepareRound(
     node: GameNode,
     used: Record<string, number[]>,
     slots: Slot[],
+    round: number,
 ): PreparedRound {
     const usedAfterRound = markSlotsAsUsed(used, slots);
 
     if (node.type === "binary") {
-        const continueSlots = buildSlots(node, usedAfterRound);
+        const continueSlots = buildSlots(node, usedAfterRound, round + 1);
         const leftAdvanceNode = node.next(node.left.key);
         const rightAdvanceNode = node.next(node.right.key);
 
@@ -261,11 +276,11 @@ function prepareRound(
             advanceByWinner: {
                 [node.left.key]: {
                     node: leftAdvanceNode,
-                    slots: buildSlots(leftAdvanceNode, usedAfterRound),
+                    slots: buildSlots(leftAdvanceNode, usedAfterRound, 1),
                 },
                 [node.right.key]: {
                     node: rightAdvanceNode,
-                    slots: buildSlots(rightAdvanceNode, usedAfterRound),
+                    slots: buildSlots(rightAdvanceNode, usedAfterRound, 1),
                 },
             },
         };
@@ -273,7 +288,7 @@ function prepareRound(
 
     return {
         usedAfterRound,
-        continueSlots: buildSlots(node, usedAfterRound),
+        continueSlots: buildSlots(node, usedAfterRound, round + 1),
     };
 }
 
@@ -286,7 +301,7 @@ function initState(): GameState {
         round: 1,
         scores: {},
         usedImages: used,
-        slots: buildSlots(node, used),
+        slots: buildSlots(node, used, 1),
     };
 }
 
@@ -297,7 +312,9 @@ const Test: React.FC = () => {
     const preloadedUrlsRef = useRef<Set<string>>(new Set());
 
     const preparedRound =
-        state.phase === "playing" ? prepareRound(state.node, state.usedImages, state.slots) : null;
+        state.phase === "playing"
+            ? prepareRound(state.node, state.usedImages, state.slots, state.round)
+            : null;
 
     useEffect(() => {
         if (!preparedRound) return;
@@ -336,7 +353,7 @@ const Test: React.FC = () => {
         setState((prev) => {
             if (prev.phase === "results") return prev;
 
-            const prepared = prepareRound(prev.node, prev.usedImages, prev.slots);
+            const prepared = prepareRound(prev.node, prev.usedImages, prev.slots, prev.round);
 
             // Update scores
             const newScores: Record<string, number> = {
@@ -362,7 +379,7 @@ const Test: React.FC = () => {
                         round: 1,
                         scores: {},
                         usedImages: newUsed,
-                        slots: preparedAdvance?.slots ?? buildSlots(nextNode, newUsed),
+                        slots: preparedAdvance?.slots ?? buildSlots(nextNode, newUsed, 1),
                     };
                 }
 
@@ -371,7 +388,7 @@ const Test: React.FC = () => {
                     round: prev.round + 1,
                     scores: newScores,
                     usedImages: newUsed,
-                    slots: prepared.continueSlots ?? buildSlots(prev.node, newUsed),
+                    slots: prepared.continueSlots ?? buildSlots(prev.node, newUsed, prev.round + 1),
                 };
             }
 
@@ -394,7 +411,7 @@ const Test: React.FC = () => {
                 round: prev.round + 1,
                 scores: newScores,
                 usedImages: newUsed,
-                slots: prepared.continueSlots ?? buildSlots(prev.node, newUsed),
+                slots: prepared.continueSlots ?? buildSlots(prev.node, newUsed, prev.round + 1),
             };
         });
     }, []);
@@ -425,10 +442,7 @@ const Test: React.FC = () => {
     const isLeaf = state.node.type === "leaf";
     const totalRounds = isLeaf ? LEAF_ROUNDS : BINARY_ROUNDS;
 
-    const battleLabel =
-        state.node.type === "binary"
-            ? `${state.node.left.label} vs ${state.node.right.label}`
-            : state.node.styles.map((s) => s.label).join(" / ");
+    const battleLabel = state.slots.map((slot) => slot.cat.label).join(" vs ");
 
     return (
         <div className={styles.test}>
@@ -440,7 +454,11 @@ const Test: React.FC = () => {
                     <p className={styles.progress}>
                         {state.round} <span>/ {totalRounds}</span>
                     </p>
-                    <div className={`${styles.imageBlock} ${isLeaf ? styles.threeWay : ""}`}>
+                    <div
+                        className={`${styles.imageBlock} ${
+                            state.slots.length === 3 ? styles.threeWay : ""
+                        }`}
+                    >
                         {state.slots.map((slot) => (
                             <button
                                 key={slot.cat.key}
@@ -452,7 +470,7 @@ const Test: React.FC = () => {
                                     alt={slot.cat.label}
                                     fill
                                     unoptimized
-                                    sizes={imageSizes(isLeaf)}
+                                    sizes={imageSizes(state.slots.length)}
                                     quality={70}
                                     priority
                                     style={{ objectFit: "cover" }}

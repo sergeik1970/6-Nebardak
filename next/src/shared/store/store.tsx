@@ -1,4 +1,4 @@
-import { Action, combineReducers } from "redux";
+import { Action } from "redux";
 import { ThunkAction, configureStore } from "@reduxjs/toolkit";
 import { createWrapper } from "next-redux-wrapper";
 import {
@@ -6,11 +6,7 @@ import {
     useDispatch as useAppDispatch,
     useSelector as useAppSelector,
 } from "react-redux";
-import deals from "./slices/deals";
-
-const rootReducer = combineReducers({
-    deals,
-});
+const rootReducer = (state = {}) => state;
 
 export const makeStore = () => {
     return configureStore({
