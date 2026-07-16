@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import Navigation from "@/shared/components/Navigation";
 import Footer from "@/shared/components/Footer";
 import styles from "./index.module.scss";
@@ -182,6 +183,32 @@ const ROOT_NODE: BinaryNode = {
     next: (w) => (w === "techno" ? LEVEL1_TECHNO : LEVEL1_NATURE),
 };
 
+function collectCats(node: GameNode, seen = new Set<string>()): Cat[] {
+    if (node.type === "leaf") {
+        return node.styles.filter((cat) => {
+            if (seen.has(cat.key)) return false;
+            seen.add(cat.key);
+            return true;
+        });
+    }
+
+    const cats = [node.left, node.right].filter((cat) => {
+        if (seen.has(cat.key)) return false;
+        seen.add(cat.key);
+        return true;
+    });
+
+    return [
+        ...cats,
+        ...collectCats(node.next(node.left.key), seen),
+        ...collectCats(node.next(node.right.key), seen),
+    ];
+}
+
+const ALL_TEST_IMAGE_URLS = collectCats(ROOT_NODE).flatMap((cat) =>
+    Array.from({ length: cat.count }, (_, index) => imgPath(cat, index + 1)),
+);
+
 // ─── Game config ───────────────────────────────────────────────────────────
 
 const BINARY_ROUNDS = 5;
@@ -311,10 +338,22 @@ const Test: React.FC = () => {
     const [state, setState] = useState<GameState>(initState);
     const preloadedUrlsRef = useRef<Set<string>>(new Set());
 
-    const preparedRound =
-        state.phase === "playing"
-            ? prepareRound(state.node, state.usedImages, state.slots, state.round)
-            : null;
+    const preloadUrl = useCallback((url: string) => {
+        if (preloadedUrlsRef.current.has(url)) return;
+
+        const image = new window.Image();
+        image.decoding = "async";
+        image.src = url;
+        preloadedUrlsRef.current.add(url);
+    }, []);
+
+    const preparedRound = useMemo(
+        () =>
+            state.phase === "playing"
+                ? prepareRound(state.node, state.usedImages, state.slots, state.round)
+                : null,
+        [state],
+    );
 
     useEffect(() => {
         if (!preparedRound) return;
@@ -340,46 +379,91 @@ const Test: React.FC = () => {
         }
 
         urls.forEach((url) => {
-            if (preloadedUrlsRef.current.has(url)) return;
-
-            const image = new window.Image();
-            image.decoding = "async";
-            image.src = url;
-            preloadedUrlsRef.current.add(url);
+            preloadUrl(url);
         });
-    }, [preparedRound, state.slots]);
+    }, [preparedRound, preloadUrl, state.slots]);
 
-    const handleChoice = useCallback((chosenKey: string) => {
-        setState((prev) => {
-            if (prev.phase === "results") return prev;
+    useEffect(() => {
+        let index = 0;
+        let cancelled = false;
 
-            const prepared = prepareRound(prev.node, prev.usedImages, prev.slots, prev.round);
+        const preloadBatch = () => {
+            if (cancelled) return;
 
-            // Update scores
-            const newScores: Record<string, number> = {
-                ...prev.scores,
-                [chosenKey]: (prev.scores[chosenKey] ?? 0) + 1,
-            };
-            const newUsed = prepared.usedAfterRound;
+            for (let i = 0; i < 2 && index < ALL_TEST_IMAGE_URLS.length; i++) {
+                preloadUrl(ALL_TEST_IMAGE_URLS[index]);
+                index += 1;
+            }
 
-            if (prev.node.type === "binary") {
-                const { left, right, next } = prev.node;
-                const ls = newScores[left.key] ?? 0;
-                const rs = newScores[right.key] ?? 0;
-                const done = ls >= BINARY_WIN || rs >= BINARY_WIN || prev.round >= BINARY_ROUNDS;
+            if (index < ALL_TEST_IMAGE_URLS.length) {
+                window.setTimeout(preloadBatch, 120);
+            }
+        };
 
-                if (done) {
-                    // Advance to next node
-                    const winnerKey = ls >= rs ? left.key : right.key;
-                    const preparedAdvance = prepared.advanceByWinner?.[winnerKey];
-                    const nextNode = preparedAdvance?.node ?? next(winnerKey);
+        window.setTimeout(preloadBatch, 600);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [preloadUrl]);
+
+    const handleChoice = useCallback(
+        (chosenKey: string) => {
+            if (!preparedRound) return;
+
+            setState((prev) => {
+                if (prev.phase === "results") return prev;
+                // Update scores
+                const newScores: Record<string, number> = {
+                    ...prev.scores,
+                    [chosenKey]: (prev.scores[chosenKey] ?? 0) + 1,
+                };
+                const newUsed = preparedRound.usedAfterRound;
+
+                if (prev.node.type === "binary") {
+                    const { left, right, next } = prev.node;
+                    const ls = newScores[left.key] ?? 0;
+                    const rs = newScores[right.key] ?? 0;
+                    const done =
+                        ls >= BINARY_WIN || rs >= BINARY_WIN || prev.round >= BINARY_ROUNDS;
+
+                    if (done) {
+                        // Advance to next node
+                        const winnerKey = ls >= rs ? left.key : right.key;
+                        const preparedAdvance = preparedRound.advanceByWinner?.[winnerKey];
+                        const nextNode = preparedAdvance?.node ?? next(winnerKey);
+                        return {
+                            phase: "playing",
+                            node: nextNode,
+                            round: 1,
+                            scores: {},
+                            usedImages: newUsed,
+                            slots: preparedAdvance?.slots ?? buildSlots(nextNode, newUsed, 1),
+                        };
+                    }
+
                     return {
-                        phase: "playing",
-                        node: nextNode,
-                        round: 1,
-                        scores: {},
+                        ...prev,
+                        round: prev.round + 1,
+                        scores: newScores,
                         usedImages: newUsed,
-                        slots: preparedAdvance?.slots ?? buildSlots(nextNode, newUsed, 1),
+                        slots:
+                            preparedRound.continueSlots ??
+                            buildSlots(prev.node, newUsed, prev.round + 1),
+                    };
+                }
+
+                // Leaf (3-way)
+                if (prev.round >= LEAF_ROUNDS) {
+                    const winner = prev.node.styles.reduce((best, s) =>
+                        (newScores[s.key] ?? 0) > (newScores[best.key] ?? 0) ? s : best,
+                    );
+                    return {
+                        ...prev,
+                        phase: "results",
+                        scores: newScores,
+                        usedImages: newUsed,
+                        winnerKey: winner.key,
                     };
                 }
 
@@ -388,33 +472,14 @@ const Test: React.FC = () => {
                     round: prev.round + 1,
                     scores: newScores,
                     usedImages: newUsed,
-                    slots: prepared.continueSlots ?? buildSlots(prev.node, newUsed, prev.round + 1),
+                    slots:
+                        preparedRound.continueSlots ??
+                        buildSlots(prev.node, newUsed, prev.round + 1),
                 };
-            }
-
-            // Leaf (3-way)
-            if (prev.round >= LEAF_ROUNDS) {
-                const winner = prev.node.styles.reduce((best, s) =>
-                    (newScores[s.key] ?? 0) > (newScores[best.key] ?? 0) ? s : best,
-                );
-                return {
-                    ...prev,
-                    phase: "results",
-                    scores: newScores,
-                    usedImages: newUsed,
-                    winnerKey: winner.key,
-                };
-            }
-
-            return {
-                ...prev,
-                round: prev.round + 1,
-                scores: newScores,
-                usedImages: newUsed,
-                slots: prepared.continueSlots ?? buildSlots(prev.node, newUsed, prev.round + 1),
-            };
-        });
-    }, []);
+            });
+        },
+        [preparedRound],
+    );
 
     const restart = useCallback(() => setState(initState), []);
 
@@ -428,7 +493,26 @@ const Test: React.FC = () => {
                     <div className={styles.container}>
                         <div className={styles.results}>
                             <h1 className={styles.title}>Твой стиль: {winner?.label}</h1>
-                            <button className={styles.restartButton} onClick={restart}>
+                            <p className={styles.resultIntro}>
+                                Стиль найден. Теперь короткая анкета определит, какая мебель нужна
+                                именно вашей комнате.
+                            </p>
+                            {winner && (
+                                <Link
+                                    className={styles.furnitureCta}
+                                    href={{
+                                        pathname: "/questionnaire",
+                                        query: { style: winner.key, styleLabel: winner.label },
+                                    }}
+                                >
+                                    Подобрать мебель для комнаты
+                                </Link>
+                            )}
+                            <button
+                                type="button"
+                                className={styles.restartButton}
+                                onClick={restart}
+                            >
                                 Пройти ещё раз
                             </button>
                         </div>

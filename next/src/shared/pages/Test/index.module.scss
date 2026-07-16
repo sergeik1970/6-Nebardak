@@ -72,7 +72,9 @@
     padding: 0;
     border-radius: 8px;
     overflow: hidden;
-    transition: border-color 0.2s, transform 0.2s;
+    transition:
+        border-color 0.2s,
+        transform 0.2s;
 
     &:hover {
         border-color: #ffb340;
@@ -122,22 +124,64 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2rem;
+    gap: 1.25rem;
     padding: 2rem 0;
 }
 
-
-.restartButton {
-    padding: 0.75rem 2rem;
-    background: #ffb340;
-    color: white;
-    border: none;
-    border-radius: 8px;
+.resultIntro {
+    max-width: 590px;
+    color: #605b53;
     font-size: 1rem;
-    cursor: pointer;
-    transition: background 0.2s;
+    line-height: 1.55;
+    text-align: center;
+}
+
+.furnitureCta {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    border: 1px solid #9b5100;
+    color: white;
+    background: #b85f00;
+    font-weight: 700;
+    text-align: center;
+    text-decoration: none;
+    transition:
+        background 0.2s,
+        transform 0.2s;
 
     &:hover {
-        background: #e6a030;
+        background: #8f4800;
+        transform: translateY(-1px);
+    }
+
+    &:focus-visible {
+        outline: 3px solid rgba(255, 179, 64, 0.45);
+        outline-offset: 3px;
+    }
+}
+
+.restartButton {
+    min-height: 44px;
+    padding: 0.75rem 2rem;
+    background: transparent;
+    color: #6a6258;
+    border: 1px solid #b8aa97;
+    font-size: 1rem;
+    cursor: pointer;
+    transition:
+        border-color 0.2s,
+        color 0.2s;
+
+    &:hover {
+        border-color: #ffb340;
+        color: #9b5100;
+    }
+
+    &:focus-visible {
+        outline: 3px solid rgba(255, 179, 64, 0.4);
+        outline-offset: 3px;
     }
 }
