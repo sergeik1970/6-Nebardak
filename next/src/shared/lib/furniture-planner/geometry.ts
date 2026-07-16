@@ -143,33 +143,35 @@ export const rectInsideRoom = (rect: Rect, room: Room): boolean =>
     rect.y + rect.depth <= room.depth;
 
 export const getDoorObstacle = (door: DoorOpening, room: Room): Rect => {
+    const clearanceDepth = Math.max(door.width, door.clearanceDepth);
+
     switch (door.wall) {
         case "top":
             return {
                 x: door.offset,
                 y: 0,
                 width: door.width,
-                depth: door.clearanceDepth,
+                depth: clearanceDepth,
             };
         case "right":
             return {
-                x: room.width - door.clearanceDepth,
+                x: room.width - clearanceDepth,
                 y: door.offset,
-                width: door.clearanceDepth,
+                width: clearanceDepth,
                 depth: door.width,
             };
         case "bottom":
             return {
                 x: door.offset,
-                y: room.depth - door.clearanceDepth,
+                y: room.depth - clearanceDepth,
                 width: door.width,
-                depth: door.clearanceDepth,
+                depth: clearanceDepth,
             };
         case "left":
             return {
                 x: 0,
                 y: door.offset,
-                width: door.clearanceDepth,
+                width: clearanceDepth,
                 depth: door.width,
             };
     }
@@ -278,6 +280,7 @@ export const validateRoomGeometry = (room: Room): string | null => {
             door.offset + door.width > wallLength(room, door.wall) ||
             door.clearanceDepth <= 0 ||
             door.clearanceDepth > perpendicularRoomLength(room, door.wall) ||
+            door.width > perpendicularRoomLength(room, door.wall) ||
             (door.hinge !== undefined && door.hinge !== "start" && door.hinge !== "end"),
     );
 

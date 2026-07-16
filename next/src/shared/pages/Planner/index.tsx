@@ -200,6 +200,117 @@ const clamp = (value: number, minimum: number, maximum: number) =>
     Math.min(Math.max(value, minimum), maximum);
 const normalizeRotation = (value: number) => ((value % 360) + 360) % 360;
 
+interface DraftNumberInputProps
+    extends Omit<
+        React.InputHTMLAttributes<HTMLInputElement>,
+        "type" | "value" | "min" | "max" | "step" | "inputMode" | "onChange" | "onBlur"
+    > {
+    value: number;
+    min: number;
+    max: number;
+    step: number;
+    onCommit: (value: number) => void;
+}
+
+const NUMBER_DRAFT_PATTERN = /^\d*(?:[.,]\d*)?$/;
+const formatDraftNumber = (value: number) => String(Number(value.toFixed(6))).replace(".", ",");
+const parseDraftNumber = (value: string) => Number(value.replace(",", "."));
+const getDecimalPlaces = (value: number) => {
+    const [, decimals = ""] = String(value).split(".");
+    return decimals.length;
+};
+const normalizeDraftNumber = (value: number, minimum: number, maximum: number, step: number) => {
+    const bounded = clamp(value, minimum, maximum);
+    const snapped = minimum + Math.round((bounded - minimum) / step) * step;
+    const precision = Math.min(6, Math.max(getDecimalPlaces(minimum), getDecimalPlaces(step)));
+    return clamp(Number(snapped.toFixed(precision)), minimum, maximum);
+};
+
+const DraftNumberInput: React.FC<DraftNumberInputProps> = ({
+    value,
+    min,
+    max,
+    step,
+    onCommit,
+    onFocus,
+    onKeyDown,
+    ...inputProps
+}) => {
+    const [draft, setDraft] = useState(() => formatDraftNumber(value));
+    const [isEditing, setIsEditing] = useState(false);
+    const cancelOnBlur = useRef(false);
+
+    useEffect(() => {
+        if (!isEditing) setDraft(formatDraftNumber(value));
+    }, [isEditing, value]);
+
+    useEffect(() => {
+        if (!isEditing || draft === "") return;
+        const parsed = parseDraftNumber(draft);
+        if (Number.isFinite(parsed) && parsed > max) {
+            setDraft(formatDraftNumber(max));
+        }
+    }, [draft, isEditing, max]);
+
+    const commit = () => {
+        setIsEditing(false);
+
+        if (cancelOnBlur.current) {
+            cancelOnBlur.current = false;
+            setDraft(formatDraftNumber(value));
+            return;
+        }
+
+        const parsed = parseDraftNumber(draft);
+        if (draft.trim() === "" || !Number.isFinite(parsed)) {
+            setDraft(formatDraftNumber(value));
+            return;
+        }
+
+        const normalized = normalizeDraftNumber(parsed, min, max, step);
+        setDraft(formatDraftNumber(normalized));
+        onCommit(normalized);
+    };
+
+    return (
+        <input
+            {...inputProps}
+            type="text"
+            inputMode="decimal"
+            value={draft}
+            onFocus={(event) => {
+                setIsEditing(true);
+                setDraft(formatDraftNumber(value));
+                onFocus?.(event);
+            }}
+            onChange={(event) => {
+                const nextDraft = event.target.value;
+                if (!NUMBER_DRAFT_PATTERN.test(nextDraft)) return;
+
+                const parsed = parseDraftNumber(nextDraft);
+                if (nextDraft !== "" && Number.isFinite(parsed) && parsed > max) return;
+                setDraft(nextDraft);
+            }}
+            onBlur={commit}
+            onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                } else if (event.key === "Escape") {
+                    event.preventDefault();
+                    cancelOnBlur.current = true;
+                    setDraft(formatDraftNumber(value));
+                    event.currentTarget.blur();
+                }
+                onKeyDown?.(event);
+            }}
+            data-min={min}
+            data-max={max}
+            data-step={step}
+        />
+    );
+};
+
 const clientPointToRoomMm = (
     element: HTMLDivElement,
     room: Room,
@@ -217,6 +328,8 @@ const clientPointToRoomMm = (
 };
 const wallLength = (room: Room, wall: Wall) =>
     wall === "top" || wall === "bottom" ? room.width : room.depth;
+const perpendicularWallLength = (room: Room, wall: Wall) =>
+    wall === "top" || wall === "bottom" ? room.depth : room.width;
 const clampWallItem = <T extends { wall: Wall; offset: number; width: number }>(
     item: T,
     room: Room,
@@ -231,6 +344,25 @@ const clampWallItem = <T extends { wall: Wall; offset: number; width: number }>(
     };
 };
 
+const clampDoorOpening = (door: DoorOpening, room: Room): DoorOpening => {
+    const maximumWidth = Math.min(
+        wallLength(room, door.wall),
+        perpendicularWallLength(room, door.wall),
+    );
+    const width = clamp(snapToGrid(door.width), 600, maximumWidth);
+
+    return {
+        ...door,
+        width,
+        offset: clamp(snapToGrid(door.offset), 0, Math.max(0, wallLength(room, door.wall) - width)),
+        clearanceDepth: clamp(
+            snapToGrid(door.clearanceDepth),
+            GRID_MM,
+            perpendicularWallLength(room, door.wall),
+        ),
+    };
+};
+
 const resizeRoom = (room: Room, width: number, depth: number): Room => {
     const nextRoom: Room = {
         ...room,
@@ -240,7 +372,7 @@ const resizeRoom = (room: Room, width: number, depth: number): Room => {
 
     return {
         ...nextRoom,
-        doors: nextRoom.doors.map((door) => clampWallItem(door, nextRoom, 600)),
+        doors: nextRoom.doors.map((door) => clampDoorOpening(door, nextRoom)),
         windows: nextRoom.windows.map((window) => clampWallItem(window, nextRoom, 500)),
         radiators: (nextRoom.radiators ?? []).map((radiator) =>
             clampWallItem(radiator, nextRoom, 300),
@@ -618,6 +750,10 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
                 {room.doors.map((door) => {
                     const obstacle = getDoorObstacle(door, room);
+                    const swingObstacle = getDoorObstacle(
+                        { ...door, clearanceDepth: door.width },
+                        room,
+                    );
                     const horizontal = door.wall === "top" || door.wall === "bottom";
                     const lineStyle: React.CSSProperties = horizontal
                         ? {
@@ -652,10 +788,10 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
                                 data-wall={door.wall}
                                 data-hinge={door.hinge ?? "start"}
                                 style={{
-                                    left: `${(obstacle.x / room.width) * 100}%`,
-                                    top: `${(obstacle.y / room.depth) * 100}%`,
-                                    width: `${(obstacle.width / room.width) * 100}%`,
-                                    height: `${(obstacle.depth / room.depth) * 100}%`,
+                                    left: `${(swingObstacle.x / room.width) * 100}%`,
+                                    top: `${(swingObstacle.y / room.depth) * 100}%`,
+                                    width: `${(swingObstacle.width / room.width) * 100}%`,
+                                    height: `${(swingObstacle.depth / room.depth) * 100}%`,
                                 }}
                                 aria-hidden="true"
                             />
@@ -893,7 +1029,7 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
                 {phase !== "solving" && placements.length === 0 && !failure && (
                     <div className={styles.canvasOverlay}>
                         <strong>Комната готова к работе</strong>
-                        <span>Выберите мебель слева и нажмите «Расставить».</span>
+                        <span>Выберите мебель слева и нажмите «Получить 3 варианта».</span>
                     </div>
                 )}
             </div>
@@ -1032,7 +1168,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
         setRoom((current) => ({
             ...current,
             doors: current.doors.map((door, index) =>
-                index === 0 ? clampWallItem({ ...door, ...patch }, current, 600) : door,
+                index === 0 ? clampDoorOpening({ ...door, ...patch }, current) : door,
             ),
         }));
         setResultNotice("");
@@ -1709,16 +1845,16 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                             <label>
                                 <span>Ширина</span>
                                 <span className={styles.inputWithUnit}>
-                                    <input
-                                        type="number"
+                                    <DraftNumberInput
+                                        name="room-width"
                                         min={2.4}
                                         max={10}
                                         step={0.05}
                                         value={room.width / 1000}
-                                        onChange={(event) =>
+                                        onCommit={(value) =>
                                             updateRoomDimension(
                                                 "width",
-                                                millimetersFromMeters(Number(event.target.value)),
+                                                millimetersFromMeters(value),
                                             )
                                         }
                                         aria-describedby="room-range"
@@ -1729,16 +1865,16 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                             <label>
                                 <span>Глубина</span>
                                 <span className={styles.inputWithUnit}>
-                                    <input
-                                        type="number"
+                                    <DraftNumberInput
+                                        name="room-depth"
                                         min={2.4}
                                         max={10}
                                         step={0.05}
                                         value={room.depth / 1000}
-                                        onChange={(event) =>
+                                        onCommit={(value) =>
                                             updateRoomDimension(
                                                 "depth",
-                                                millimetersFromMeters(Number(event.target.value)),
+                                                millimetersFromMeters(value),
                                             )
                                         }
                                         aria-describedby="room-range"
@@ -1791,6 +1927,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                             <label>
                                                 <span>Стена</span>
                                                 <select
+                                                    name="door-wall"
                                                     value={mainDoor.wall}
                                                     onChange={(event) =>
                                                         updateDoor({
@@ -1808,16 +1945,24 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                             <label>
                                                 <span>Ширина</span>
                                                 <span className={styles.compactInput}>
-                                                    <input
-                                                        type="number"
+                                                    <DraftNumberInput
+                                                        name="door-width"
                                                         min={60}
-                                                        max={wallLength(room, mainDoor.wall) / 10}
+                                                        max={
+                                                            Math.min(
+                                                                wallLength(room, mainDoor.wall),
+                                                                perpendicularWallLength(
+                                                                    room,
+                                                                    mainDoor.wall,
+                                                                ),
+                                                            ) / 10
+                                                        }
                                                         step={5}
                                                         value={mainDoor.width / 10}
-                                                        onChange={(event) =>
+                                                        onCommit={(value) =>
                                                             updateDoor({
                                                                 width: millimetersFromCentimeters(
-                                                                    Number(event.target.value),
+                                                                    value,
                                                                 ),
                                                             })
                                                         }
@@ -1828,8 +1973,8 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                             <label>
                                                 <span>От начала стены</span>
                                                 <span className={styles.compactInput}>
-                                                    <input
-                                                        type="number"
+                                                    <DraftNumberInput
+                                                        name="door-offset"
                                                         min={0}
                                                         max={
                                                             (wallLength(room, mainDoor.wall) -
@@ -1838,10 +1983,10 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                                         }
                                                         step={5}
                                                         value={mainDoor.offset / 10}
-                                                        onChange={(event) =>
+                                                        onCommit={(value) =>
                                                             updateDoor({
                                                                 offset: millimetersFromCentimeters(
-                                                                    Number(event.target.value),
+                                                                    value,
                                                                 ),
                                                             })
                                                         }
@@ -1852,6 +1997,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                             <label>
                                                 <span>Петли</span>
                                                 <select
+                                                    name="door-hinge"
                                                     value={mainDoor.hinge ?? "start"}
                                                     onChange={(event) =>
                                                         updateDoor({
@@ -1899,6 +2045,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                                 <label>
                                                     <span>Стена</span>
                                                     <select
+                                                        name={`window-${window.id}-wall`}
                                                         value={window.wall}
                                                         onChange={(event) =>
                                                             updateWindow(window.id, {
@@ -1916,16 +2063,16 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                                 <label>
                                                     <span>Ширина</span>
                                                     <span className={styles.compactInput}>
-                                                        <input
-                                                            type="number"
+                                                        <DraftNumberInput
+                                                            name={`window-${window.id}-width`}
                                                             min={50}
                                                             max={wallLength(room, window.wall) / 10}
                                                             step={5}
                                                             value={window.width / 10}
-                                                            onChange={(event) =>
+                                                            onCommit={(value) =>
                                                                 updateWindow(window.id, {
                                                                     width: millimetersFromCentimeters(
-                                                                        Number(event.target.value),
+                                                                        value,
                                                                     ),
                                                                 })
                                                             }
@@ -1936,8 +2083,8 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                                 <label className={styles.fullField}>
                                                     <span>От начала стены</span>
                                                     <span className={styles.compactInput}>
-                                                        <input
-                                                            type="number"
+                                                        <DraftNumberInput
+                                                            name={`window-${window.id}-offset`}
                                                             min={0}
                                                             max={
                                                                 (wallLength(room, window.wall) -
@@ -1946,10 +2093,10 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                                             }
                                                             step={5}
                                                             value={window.offset / 10}
-                                                            onChange={(event) =>
+                                                            onCommit={(value) =>
                                                                 updateWindow(window.id, {
                                                                     offset: millimetersFromCentimeters(
-                                                                        Number(event.target.value),
+                                                                        value,
                                                                     ),
                                                                 })
                                                             }
@@ -1994,6 +2141,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                                 <label>
                                                     <span>Стена</span>
                                                     <select
+                                                        name={`radiator-${radiator.id}-wall`}
                                                         value={radiator.wall}
                                                         onChange={(event) =>
                                                             updateRadiator(radiator.id, {
@@ -2011,18 +2159,18 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                                 <label>
                                                     <span>Ширина</span>
                                                     <span className={styles.compactInput}>
-                                                        <input
-                                                            type="number"
+                                                        <DraftNumberInput
+                                                            name={`radiator-${radiator.id}-width`}
                                                             min={30}
                                                             max={
                                                                 wallLength(room, radiator.wall) / 10
                                                             }
                                                             step={5}
                                                             value={radiator.width / 10}
-                                                            onChange={(event) =>
+                                                            onCommit={(value) =>
                                                                 updateRadiator(radiator.id, {
                                                                     width: millimetersFromCentimeters(
-                                                                        Number(event.target.value),
+                                                                        value,
                                                                     ),
                                                                 })
                                                             }
@@ -2033,8 +2181,8 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                                 <label>
                                                     <span>От начала стены</span>
                                                     <span className={styles.compactInput}>
-                                                        <input
-                                                            type="number"
+                                                        <DraftNumberInput
+                                                            name={`radiator-${radiator.id}-offset`}
                                                             min={0}
                                                             max={
                                                                 (wallLength(room, radiator.wall) -
@@ -2043,10 +2191,10 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                                             }
                                                             step={5}
                                                             value={radiator.offset / 10}
-                                                            onChange={(event) =>
+                                                            onCommit={(value) =>
                                                                 updateRadiator(radiator.id, {
                                                                     offset: millimetersFromCentimeters(
-                                                                        Number(event.target.value),
+                                                                        value,
                                                                     ),
                                                                 })
                                                             }
@@ -2057,19 +2205,17 @@ const Planner: React.FC<PlannerProps> = ({ handoffId }) => {
                                                 <label>
                                                     <span>Свободная зона</span>
                                                     <span className={styles.compactInput}>
-                                                        <input
-                                                            type="number"
+                                                        <DraftNumberInput
+                                                            name={`radiator-${radiator.id}-clearance`}
                                                             min={0}
                                                             max={200}
                                                             step={5}
                                                             value={radiator.clearanceDepth / 10}
-                                                            onChange={(event) =>
+                                                            onCommit={(value) =>
                                                                 updateRadiator(radiator.id, {
                                                                     clearanceDepth:
                                                                         millimetersFromCentimeters(
-                                                                            Number(
-                                                                                event.target.value,
-                                                                            ),
+                                                                            value,
                                                                         ),
                                                                 })
                                                             }

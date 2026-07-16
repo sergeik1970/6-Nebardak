@@ -1116,18 +1116,15 @@
 }
 
 .doorSwing[data-wall="bottom"] {
-    border-radius: 0 100% 0 0;
     transform: scaleY(-1);
 }
 
 .doorSwing[data-wall="right"] {
-    border-radius: 100% 0 0;
     transform: rotate(90deg);
 }
 
 .doorSwing[data-wall="left"] {
-    border-radius: 0 0 0 100%;
-    transform: rotate(-90deg);
+    transform: rotate(-90deg) scaleX(-1);
 }
 
 .doorSwing[data-wall="top"][data-hinge="end"],
@@ -1144,7 +1141,7 @@
 }
 
 .doorSwing[data-wall="left"][data-hinge="end"] {
-    transform: rotate(-90deg) scaleX(-1);
+    transform: rotate(-90deg);
 }
 
 .radiator {
