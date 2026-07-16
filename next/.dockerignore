@@ -4,5 +4,6 @@ out
 npm-debug.log
 .env*
 !.env
+public/images/Home/test-images/**/*.png
 ._*
 .__*
