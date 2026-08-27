@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import Navigation from "@/shared/components/Navigation";
 import Footer from "@/shared/components/Footer";
+import { getStyleResultContent, type StyleResultContent } from "@/shared/lib/style-results";
 import styles from "./index.module.scss";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -44,6 +45,149 @@ const imgPath = (cat: Cat, n: number) =>
 
 const imageSizes = (slotCount: number) =>
     slotCount === 3 ? "(max-width: 768px) 100vw, 30vw" : "(max-width: 768px) 100vw, 40vw";
+
+const RESULT_GALLERY_SWIPE_THRESHOLD = 48;
+
+interface ResultStyleGalleryProps {
+    content: StyleResultContent;
+    styleLabel: string;
+}
+
+const ResultStyleGallery: React.FC<ResultStyleGalleryProps> = ({ content, styleLabel }) => {
+    const [activeRoomIndex, setActiveRoomIndex] = useState(0);
+    const touchStartX = useRef<number | null>(null);
+    const activeRoom = content.rooms[activeRoomIndex];
+
+    const selectRoom = useCallback(
+        (index: number) => {
+            const roomCount = content.rooms.length;
+            setActiveRoomIndex((index + roomCount) % roomCount);
+        },
+        [content.rooms.length],
+    );
+
+    const showPreviousRoom = useCallback(() => {
+        setActiveRoomIndex((index) => (index + content.rooms.length - 1) % content.rooms.length);
+    }, [content.rooms.length]);
+
+    const showNextRoom = useCallback(() => {
+        setActiveRoomIndex((index) => (index + 1) % content.rooms.length);
+    }, [content.rooms.length]);
+
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+        if (
+            event.altKey ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.target !== event.currentTarget
+        ) {
+            return;
+        }
+
+        if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            showPreviousRoom();
+        } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            showNextRoom();
+        }
+    };
+
+    const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+        touchStartX.current = event.touches[0]?.clientX ?? null;
+    };
+
+    const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+        const startX = touchStartX.current;
+        const endX = event.changedTouches[0]?.clientX;
+        touchStartX.current = null;
+
+        if (startX === null || endX === undefined) return;
+        const distance = endX - startX;
+
+        if (Math.abs(distance) < RESULT_GALLERY_SWIPE_THRESHOLD) return;
+        if (distance > 0) showPreviousRoom();
+        else showNextRoom();
+    };
+
+    return (
+        <section
+            className={styles.styleGallery}
+            aria-label={`Визуализации стиля «${styleLabel}»`}
+            aria-roledescription="карусель"
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+        >
+            <div className={styles.galleryHeading}>
+                <div>
+                    <p className={styles.galleryEyebrow}>ВАШ СТИЛЬ В ИНТЕРЬЕРЕ</p>
+                    <h3>Как это направление живёт в разных комнатах</h3>
+                </div>
+                <p className={styles.galleryCount} aria-live="polite" aria-atomic="true">
+                    <strong>{String(activeRoomIndex + 1).padStart(2, "0")}</strong>
+                    <span aria-hidden="true"> / </span>
+                    <span>03</span>
+                </p>
+            </div>
+
+            <div className={styles.galleryStage}>
+                <button
+                    type="button"
+                    className={styles.galleryArrow}
+                    onClick={showPreviousRoom}
+                    aria-label="Показать предыдущую визуализацию"
+                >
+                    <span aria-hidden="true">←</span>
+                </button>
+                <div
+                    id="style-result-visual"
+                    className={styles.galleryViewport}
+                    onTouchStart={handleTouchStart}
+                    onTouchEnd={handleTouchEnd}
+                >
+                    <figure>
+                        <Image
+                            key={activeRoom.imagePath}
+                            src={activeRoom.imagePath}
+                            alt={`${styleLabel}: ${activeRoom.label.toLowerCase()} в выбранном стиле`}
+                            fill
+                            unoptimized
+                            sizes="(max-width: 767px) calc(100vw - 3.5rem), (max-width: 1200px) calc(100vw - 12rem), 960px"
+                        />
+                        <figcaption>
+                            <span>{String(activeRoomIndex + 1).padStart(2, "0")} / 03</span>
+                            <strong>{activeRoom.label}</strong>
+                        </figcaption>
+                    </figure>
+                </div>
+                <button
+                    type="button"
+                    className={styles.galleryArrow}
+                    onClick={showNextRoom}
+                    aria-label="Показать следующую визуализацию"
+                >
+                    <span aria-hidden="true">→</span>
+                </button>
+            </div>
+
+            <ol className={styles.galleryPagination} aria-label="Выбор комнаты">
+                {content.rooms.map((room, index) => (
+                    <li key={room.key}>
+                        <button
+                            type="button"
+                            onClick={() => selectRoom(index)}
+                            aria-controls="style-result-visual"
+                            aria-pressed={index === activeRoomIndex}
+                        >
+                            <span>{String(index + 1).padStart(2, "0")}</span>
+                            <strong>{room.label}</strong>
+                        </button>
+                    </li>
+                ))}
+            </ol>
+        </section>
+    );
+};
 
 function pickUnused(count: number, used: number[]): number {
     const all = Array.from({ length: count }, (_, i) => i + 1);
@@ -486,6 +630,7 @@ const Test: React.FC = () => {
     // Results screen
     if (state.phase === "results" && state.node.type === "leaf") {
         const winner = state.node.styles.find((s) => s.key === state.winnerKey);
+        const styleContent = winner ? getStyleResultContent(winner.key) : undefined;
         return (
             <div className={styles.test}>
                 <Navigation />
@@ -497,6 +642,24 @@ const Test: React.FC = () => {
                                 Стиль найден. Теперь короткая анкета определит, какая мебель нужна
                                 именно вашей комнате.
                             </p>
+                            {winner && styleContent && (
+                                <section
+                                    className={styles.styleStory}
+                                    aria-labelledby="style-description-title"
+                                >
+                                    <p className={styles.styleOverline}>ОПИСАНИЕ СТИЛЯ</p>
+                                    <h2 id="style-description-title">{winner.label}</h2>
+                                    <div className={styles.styleDescription}>
+                                        {styleContent.description.map((paragraph) => (
+                                            <p key={paragraph}>{paragraph}</p>
+                                        ))}
+                                    </div>
+                                    <ResultStyleGallery
+                                        content={styleContent}
+                                        styleLabel={winner.label}
+                                    />
+                                </section>
+                            )}
                             {winner && (
                                 <Link
                                     className={styles.furnitureCta}
