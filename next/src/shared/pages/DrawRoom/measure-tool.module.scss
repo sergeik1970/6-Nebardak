@@ -1,0 +1,28 @@
+.hint {
+    position: absolute;
+    z-index: 6;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100% - 24px);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: #fffdfa;
+    border: 1px solid #156aa1;
+    border-radius: 6px;
+    color: #215570;
+    font-size: 12px;
+    box-shadow: 0 3px 14px #26343220;
+    button {
+        flex-shrink: 0;
+        width: 30px;
+        height: 30px;
+        cursor: pointer;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font-size: 24px;
+    }
+}
