@@ -2132,6 +2132,9 @@
 .room[data-room-editing="true"] .window,
 .room[data-room-editing="true"] .door,
 .room[data-room-editing="true"] .radiator {
+    /* Above the wall resize strips (z-index 6): an opening on that wall must
+     * stay draggable; the strip still works along the rest of the wall. */
+    z-index: 7;
     pointer-events: auto;
     cursor: grab;
 }
@@ -2206,8 +2209,8 @@
 .roomNotchHandle {
     position: absolute;
     z-index: 7;
-    width: 44px;
-    height: 44px;
+    width: calc(44px * var(--editor-control-scale, 1));
+    height: calc(44px * var(--editor-control-scale, 1));
     border: 2px solid var(--brand);
     border-radius: 50%;
     padding: 0;
@@ -2221,7 +2224,7 @@
 .roomNotchHandle::after {
     content: "";
     position: absolute;
-    inset: 13px;
+    inset: calc(13px * var(--editor-control-scale, 1));
     border-radius: 50%;
     background: var(--brand);
 }
@@ -2262,8 +2265,8 @@
 .roomSegmentHandle {
     position: absolute;
     z-index: 9;
-    width: 44px;
-    height: 44px;
+    width: calc(44px * var(--editor-control-scale, 1));
+    height: calc(44px * var(--editor-control-scale, 1));
     margin: 0;
     padding: 0;
     touch-action: none;
@@ -2284,7 +2287,7 @@
 .roomVertexHandle::after {
     content: "";
     position: absolute;
-    inset: 12px;
+    inset: calc(12px * var(--editor-control-scale, 1));
     border-radius: 50%;
     background: var(--brand);
 }
@@ -4860,6 +4863,19 @@
         /* Reserve real lanes for the 44px handles and per-wall dimensions.
          * These values intentionally match PLAN_FIT_EDITOR_FRAME_*_PX. */
         padding: 68px 68px 118px 64px;
+    }
+
+    /* A mouse does not need 44px touch targets. Smaller handles and lanes
+     * leave the room itself readable on laptop-height screens; the lanes
+     * match PLAN_FIT_POINTER_EDITOR_FRAME_*_PX in the planner. */
+    @media (pointer: fine) {
+        .planPanViewport[data-room-editing="true"] {
+            --editor-control-scale: 0.64;
+        }
+
+        .planPanViewport[data-room-editing="true"][data-contour-drawing="false"] .planZoomSurface {
+            padding: 44px 44px 80px 41px;
+        }
     }
 
     .canvasLegend {

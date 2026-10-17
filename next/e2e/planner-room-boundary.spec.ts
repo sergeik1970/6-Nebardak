@@ -210,8 +210,12 @@ test("occupied wall explains a blocked midpoint without covering its opening", a
     expect(windowBox).not.toBeNull();
     expect(handleBox).not.toBeNull();
     if (!windowBox || !handleBox) throw new Error("Opening controls are not visible");
-    expect(handleBox.width).toBeGreaterThanOrEqual(44);
-    expect(handleBox.height).toBeGreaterThanOrEqual(44);
+    // Touch keeps 44px targets; a mouse gets compact handles above the WCAG 2.5.8 minimum.
+    const minimumTarget = (await page.evaluate(() => matchMedia("(pointer: fine)").matches))
+        ? 24
+        : 44;
+    expect(handleBox.width).toBeGreaterThanOrEqual(minimumTarget);
+    expect(handleBox.height).toBeGreaterThanOrEqual(minimumTarget);
     const overlapsWindow = !(
         handleBox.x + handleBox.width <= windowBox.x ||
         windowBox.x + windowBox.width <= handleBox.x ||

@@ -281,6 +281,10 @@ const PLAN_FIT_FRAME_HORIZONTAL_PX = 70;
 const PLAN_FIT_FRAME_VERTICAL_PX = 64;
 const PLAN_FIT_EDITOR_FRAME_HORIZONTAL_PX = 132;
 const PLAN_FIT_EDITOR_FRAME_VERTICAL_PX = 186;
+// A mouse needs no 44px touch targets: the handles shrink and so do these lanes.
+const PLAN_FIT_POINTER_EDITOR_FRAME_HORIZONTAL_PX = 85;
+const PLAN_FIT_POINTER_EDITOR_FRAME_VERTICAL_PX = 124;
+const POINTER_EDITOR_MEDIA_QUERY = "(min-width: 1060px) and (pointer: fine)";
 const PLAN_FIT_OFFSCREEN_HEIGHT_PX = 280;
 const PLAN_FIT_VIEWPORT_BOTTOM_GAP = 24;
 /** The plan viewport's 1px focus-safe padding on both sides, plus rounding room. */
@@ -2269,26 +2273,26 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
                                 ? {
                                       left: `${(controlLayout.labelPoint.x / room.width) * 100}%`,
                                       top: `${(controlLayout.labelPoint.y / room.depth) * 100}%`,
-                                      "--wall-dimension-shift-y": `${
+                                      "--wall-dimension-shift-y": `calc(var(--editor-control-scale, 1) * ${
                                           -segment.inwardNormal.y * (outwardDistance + 18)
-                                      }px`,
+                                      }px)`,
                                   }
                                 : {
                                       left: `${(controlLayout.labelPoint.x / room.width) * 100}%`,
                                       top: `${(controlLayout.labelPoint.y / room.depth) * 100}%`,
-                                      "--wall-dimension-shift-x": `${
+                                      "--wall-dimension-shift-x": `calc(var(--editor-control-scale, 1) * ${
                                           -segment.inwardNormal.x * (outwardDistance + 18)
-                                      }px`,
+                                      }px)`,
                                   };
                             const handleStyle = {
                                 left: `${(controlLayout.point.x / room.width) * 100}%`,
                                 top: `${(controlLayout.point.y / room.depth) * 100}%`,
-                                "--segment-handle-shift-x": `${
+                                "--segment-handle-shift-x": `calc(var(--editor-control-scale, 1) * ${
                                     -segment.inwardNormal.x * outwardDistance
-                                }px`,
-                                "--segment-handle-shift-y": `${
+                                }px)`,
+                                "--segment-handle-shift-y": `calc(var(--editor-control-scale, 1) * ${
                                     -segment.inwardNormal.y * outwardDistance
-                                }px`,
+                                }px)`,
                             } as React.CSSProperties;
                             return (
                                 <React.Fragment key={`${segment.id}-editor`}>
@@ -2950,12 +2954,18 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
             : constrainedViewportHeight > 0
               ? Math.min(browserAvailableHeight, constrainedViewportHeight)
               : browserAvailableHeight;
-        const frameHorizontal = isRoomEditing
-            ? PLAN_FIT_EDITOR_FRAME_HORIZONTAL_PX
-            : PLAN_FIT_FRAME_HORIZONTAL_PX;
-        const frameVertical = isRoomEditing
-            ? PLAN_FIT_EDITOR_FRAME_VERTICAL_PX
-            : PLAN_FIT_FRAME_VERTICAL_PX;
+        const isPointerEditor =
+            isRoomEditing && window.matchMedia(POINTER_EDITOR_MEDIA_QUERY).matches;
+        const frameHorizontal = isPointerEditor
+            ? PLAN_FIT_POINTER_EDITOR_FRAME_HORIZONTAL_PX
+            : isRoomEditing
+              ? PLAN_FIT_EDITOR_FRAME_HORIZONTAL_PX
+              : PLAN_FIT_FRAME_HORIZONTAL_PX;
+        const frameVertical = isPointerEditor
+            ? PLAN_FIT_POINTER_EDITOR_FRAME_VERTICAL_PX
+            : isRoomEditing
+              ? PLAN_FIT_EDITOR_FRAME_VERTICAL_PX
+              : PLAN_FIT_FRAME_VERTICAL_PX;
         const roomWidthForAvailableHeight = Math.max(
             0,
             (availableHeight - PLAN_FIT_VIEWPORT_INSET_PX - frameVertical) * roomAspect,
