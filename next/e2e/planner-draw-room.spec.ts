@@ -4160,3 +4160,35 @@ test("a detached second open contour keeps its CAD dimensions after the first ro
         await expectPrimarySummaryToClearItsChains();
     }
 });
+
+test("a phone frames a freshly closed room and the tool dock reaches past an opening card", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile-chromium", "Phone framing is covered once");
+    await page.addInitScript(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    const viewWidth = () =>
+        page
+            .locator("[data-draw-room-board='true']")
+            .evaluate((svg) => (svg as SVGSVGElement).viewBox.baseVal.width);
+    const sheetWidth = await viewWidth();
+
+    await drawSimpleRect(page);
+    // The whole 16 m sheet keeps a room small on a phone, often too small for
+    // its dimensions; closing the contour frames it so its chains stay readable.
+    await expect.poll(viewWidth).toBeLessThan(sheetWidth);
+    await expect(page.locator("[data-draw-room-dimension-chain='outer']")).toHaveCount(4);
+
+    await openToolGroup(page, "opening");
+    await page.locator("[data-draw-room-door-kind='room']").click();
+    await pointOnBoard(page, 0.5, 0.23);
+    await expect(page.locator("[data-draw-room-opening='door']")).toHaveCount(1);
+    await expect(page.locator("[data-draw-room-notice='true']")).not.toContainText("справа");
+
+    // The door card replaces the sheet; the group button must bring the tools back.
+    const openingGroup = page.locator("[aria-controls='draw-room-opening-tools']");
+    await expect(openingGroup).toHaveAttribute("aria-expanded", "false");
+    await openingGroup.click();
+    await expect(page.locator("[data-draw-room-tool='window']")).toBeVisible();
+    await expect(openingGroup).toHaveAttribute("aria-expanded", "true");
+});

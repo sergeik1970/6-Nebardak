@@ -228,6 +228,8 @@ const DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY = "stylefinder:draw-room-editor:v1";
 // Up to this width a tool group opens as a sheet over the canvas (a tablet
 // flyout or a phone bottom sheet) rather than inside the desktop rail.
 const TOOL_SHEET_MEDIA_QUERY = "(max-width: 900px)";
+/** How long a closing contour keeps reframing while the cards around the canvas resize it. */
+const AUTO_FIT_SETTLE_MS = 400;
 const getSceneWallThickness = (scene: Pick<Scene, "wallThickness">) =>
     scene.wallThickness ?? DRAW_ROOM_WALL_LANE_MM;
 const getSceneSnapMm = (scene: Pick<Scene, "wallThickness">) =>
@@ -3776,6 +3778,7 @@ const DrawRoom: React.FC = () => {
     // away once a tool is picked and its group button toggles it back.
     const [toolSheetCollapsed, setToolSheetCollapsed] = useState(false);
     const [toolSheetOverlaysCanvas, setToolSheetOverlaysCanvas] = useState(false);
+    const autoFitPendingRef = useRef(false);
     const [selectedDoorKind, setSelectedDoorKind] = useState<DoorKind>("room");
     const [slidingMount, setSlidingMount] =
         useState<NonNullable<DoorOpening["slidingMount"]>>("inward");
@@ -5160,7 +5163,10 @@ const DrawRoom: React.FC = () => {
                 return;
             }
             commitScene({ ...snapshot, segments: added.segments });
-            if (!preview && completedRoom) setTool("select");
+            if (!preview && completedRoom) {
+                setTool("select");
+                autoFitPendingRef.current = true;
+            }
             setNotice(
                 !preview && completedRoom
                     ? "Контур замкнут. Режим «Выбрать» включён: нажмите на стену, чтобы открыть три точки перемещения."
@@ -5280,8 +5286,8 @@ const DrawRoom: React.FC = () => {
                 setTool("select");
                 setNotice(
                     partition
-                        ? `${getDoorCatalogItem(selectedDoorKind).label} дверь добавлена в перегородку. Настройте её в карточке справа.`
-                        : `${getDoorCatalogItem(selectedDoorKind).label} дверь добавлена. Уточните ширину и положение в карточке справа.`,
+                        ? `${getDoorCatalogItem(selectedDoorKind).label} дверь добавлена в перегородку. Настройте её в карточке.`
+                        : `${getDoorCatalogItem(selectedDoorKind).label} дверь добавлена. Уточните ширину и положение в карточке.`,
                 );
             } else {
                 const id = `window-${scene.windows.length + 1}`;
@@ -5302,7 +5308,7 @@ const DrawRoom: React.FC = () => {
                 });
                 setSelectedOpening({ kind, id });
                 setTool("select");
-                setNotice("Окно добавлено. Его ширину и отступ можно уточнить в карточке справа.");
+                setNotice("Окно добавлено. Его ширину и отступ можно уточнить в карточке.");
             }
         },
         [
@@ -6125,6 +6131,49 @@ const DrawRoom: React.FC = () => {
         return clamp(right - boardBox.left, 0, boardBox.width / 2);
     }, []);
 
+    /** Frames the drawing like "Вместить"; returns false when there is nothing to frame. */
+    const fitDrawingToView = useCallback(() => {
+        const leftInset = getSideOverlayInset();
+        const contourFit = preview
+            ? getContourFitViewBox(
+                  previewContourPoints,
+                  renderedWallThickness,
+                  canvasSize,
+                  leftInset,
+              )
+            : getSegmentsFitViewBox(scene.segments, renderedWallThickness, canvasSize, leftInset);
+        const next = contourFit
+            ? clampViewBox(contourFit, fitViewBox)
+            : clampViewBox(fitViewBox, fitViewBox);
+        viewBoxRef.current = next;
+        setViewBox(next);
+        return Boolean(contourFit);
+    }, [
+        canvasSize,
+        fitViewBox,
+        getSideOverlayInset,
+        preview,
+        previewContourPoints,
+        renderedWallThickness,
+        scene.segments,
+    ]);
+
+    // A phone shows the whole 16 m sheet, so a freshly closed room is a small
+    // sketch with its dimensions hidden. Frame it once the cards around the
+    // canvas have settled; the camera stays the person's after that.
+    useEffect(() => {
+        if (!autoFitPendingRef.current || !preview) return;
+        if (!toolSheetOverlaysCanvas) {
+            autoFitPendingRef.current = false;
+            return;
+        }
+        fitDrawingToView();
+        const timer = window.setTimeout(() => {
+            autoFitPendingRef.current = false;
+        }, AUTO_FIT_SETTLE_MS);
+        return () => window.clearTimeout(timer);
+    }, [fitDrawingToView, preview, toolSheetOverlaysCanvas]);
+
     const resetToOriginal = useCallback(() => {
         stopPan();
         stopWallDrawing();
@@ -6420,6 +6469,13 @@ const DrawRoom: React.FC = () => {
             setToolSheetCollapsed(true);
             return;
         }
+        if (toolSheetOverlaysCanvas) {
+            // A selected door or wall card takes the sheet's place on a phone;
+            // asking for tools again means the person is done with that card.
+            setSelectedOpening(null);
+            setSelectedContourWallEdge(null);
+            setSelectedSegmentWallId(null);
+        }
         setActiveToolGroup(group);
         setToolSheetCollapsed(false);
     };
@@ -6521,25 +6577,7 @@ const DrawRoom: React.FC = () => {
                         <button
                             type="button"
                             onClick={() => {
-                                const leftInset = getSideOverlayInset();
-                                const contourFit = preview
-                                    ? getContourFitViewBox(
-                                          previewContourPoints,
-                                          renderedWallThickness,
-                                          canvasSize,
-                                          leftInset,
-                                      )
-                                    : getSegmentsFitViewBox(
-                                          scene.segments,
-                                          renderedWallThickness,
-                                          canvasSize,
-                                          leftInset,
-                                      );
-                                const next = contourFit
-                                    ? clampViewBox(contourFit, fitViewBox)
-                                    : clampViewBox(fitViewBox, fitViewBox);
-                                viewBoxRef.current = next;
-                                setViewBox(next);
+                                const contourFit = fitDrawingToView();
                                 setNotice(
                                     contourFit
                                         ? preview
