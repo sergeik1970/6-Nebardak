@@ -1,51 +1,27 @@
 services:
-    # nest:
-    #     build:
-    #         context: ./nest
-    #     tty: true
-    #     working_dir: /opt/nest
-    #     expose:
-    #         - '3001'
-    #     depends_on:
-    #         - db
-
-    # next:
-    #     build:
-    #         context: ./next
-    #     tty: true
-    #     working_dir: /opt/next
-    #     expose:
-    #         - '3000'
-    #     depends_on:
-    #         - db
-    #         - nest
-
     db:
-        image: postgres:16
+        image: postgres:16.14-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
         environment:
-            POSTGRES_DB: "postgres"
-            POSTGRES_USER: "postgres"
-            POSTGRES_PASSWORD: "postgres"
+            POSTGRES_DB: stylefinder
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
         volumes:
-            - database2:/var/lib/postgresql/data:delegated
-        expose:
-            - '5432'
+            - database_dev:/var/lib/postgresql/data
         ports:
-            - "5432:5432"
-        restart: always
-
-    # nginx:
-    #     container_name: proxy_nginx
-    #     depends_on:
-    #         # - nest
-    #         - db
-    #     image: nginx:latest
-    #     ports:
-    #         - '80:80'
-    #     volumes:
-    #         - ./nginx:/etc/nginx/conf.d
-    #         - ./static:/var/www/static
-    #     restart: always
+            - "127.0.0.1:5432:5432"
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U postgres -d stylefinder"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+        security_opt:
+            - no-new-privileges:true
+        restart: unless-stopped
+        logging:
+            driver: json-file
+            options:
+                max-size: "10m"
+                max-file: "3"
 
 volumes:
-    database2:
+    database_dev:

@@ -1,0 +1,38 @@
+services:
+    next:
+        # Caddy is the only public entry point. The Next container remains
+        # reachable to Caddy over Docker's private default network.
+        ports: !reset []
+        expose:
+            - "3000"
+
+    caddy:
+        build:
+            context: ./infra/caddy
+        image: nebardak-caddy:2.10.2-nonroot
+        user: "10001:10001"
+        environment:
+            SITE_ADDRESS: "stylefinder.online, www.stylefinder.online"
+        ports:
+            - "80:80"
+            - "443:443"
+            - "443:443/udp"
+        volumes:
+            - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy_data:/data
+            - caddy_config:/config
+        depends_on:
+            next:
+                condition: service_started
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_BIND_SERVICE
+        pids_limit: 128
+        restart: unless-stopped
+
+volumes:
+    caddy_data:
+    caddy_config:

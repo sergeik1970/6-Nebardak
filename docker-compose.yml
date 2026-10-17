@@ -1,56 +1,200 @@
+x-logging: &default-logging
+    driver: json-file
+    options:
+        max-size: "10m"
+        max-file: "5"
+
+x-node-security: &node-security
+    init: true
+    security_opt:
+        - no-new-privileges:true
+    cap_drop:
+        - ALL
+    pids_limit: 256
+
 services:
+    caddy:
+        build:
+            context: ./infra/caddy
+        image: stylefinder-caddy:2.10.2-nonroot
+        user: "10001:10001"
+        environment:
+            SITE_ADDRESS: "${SITE_ADDRESS:-:80}"
+        ports:
+            - "80:80"
+            - "443:443"
+            - "443:443/udp"
+        volumes:
+            - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy_data:/data
+            - caddy_config:/config
+        depends_on:
+            next:
+                condition: service_healthy
+        networks:
+            - edge
+            - api_internal
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_BIND_SERVICE
+        pids_limit: 128
+        restart: unless-stopped
+        logging: *default-logging
+
     nest:
+        <<: *node-security
         build:
             context: ./nest
-        tty: true
-        env_file:
-            - ./nest/.env
         environment:
             NODE_ENV: production
             DB_HOST: db
             DB_PORT: 5432
-        ports:
-            - "3001:3001"
+            DB_NAME: "${POSTGRES_DB:?Set POSTGRES_DB in .env.server}"
+            DB_USERNAME: "${APP_DB_USER:?Set APP_DB_USER in .env.server}"
+            DB_PASSWORD: "${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env.server}"
+            DB_STATEMENT_TIMEOUT_MS: "${DB_STATEMENT_TIMEOUT_MS:-5000}"
+            DB_QUERY_TIMEOUT_MS: "${DB_QUERY_TIMEOUT_MS:-6000}"
+            DB_CONNECTION_TIMEOUT_MS: "${DB_CONNECTION_TIMEOUT_MS:-5000}"
+            DB_READINESS_TIMEOUT_MS: "${DB_READINESS_TIMEOUT_MS:-3000}"
+            JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET in .env.server}"
+            JWT_ISSUER: "${JWT_ISSUER:-stylefinder-api}"
+            JWT_AUDIENCE: "${JWT_AUDIENCE:-stylefinder-web}"
+            AUTH_ENABLED: "${AUTH_ENABLED:-false}"
+            AUTH_REGISTRATION_ENABLED: "${AUTH_REGISTRATION_ENABLED:-false}"
+            TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-1}"
+            RATE_LIMIT_TTL_MS: "${RATE_LIMIT_TTL_MS:-60000}"
+            RATE_LIMIT_REQUESTS: "${RATE_LIMIT_REQUESTS:-120}"
+        expose:
+            - "3001"
         depends_on:
             db:
                 condition: service_healthy
+        networks:
+            - api_internal
+            - database_internal
+        # Migrations are a controlled deployment step; see DEPLOY.md.
+        command: ["node", "dist/src/main"]
         healthcheck:
-            test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health || exit 1"]
+            test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/api/health/ready >/dev/null || exit 1"]
             interval: 30s
             timeout: 5s
             retries: 5
             start_period: 30s
         restart: unless-stopped
+        stop_grace_period: 20s
+        logging: *default-logging
 
     next:
+        <<: *node-security
         build:
             context: ./next
-        tty: true
-        env_file:
-            - ./next/.env
+            args:
+                NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-/api}"
+                NEXT_PUBLIC_AUTH_ENABLED: "${NEXT_PUBLIC_AUTH_ENABLED:-false}"
+                NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED: "${NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED:-false}"
+                NEXT_PUBLIC_BETA_BADGE_ENABLED: "${NEXT_PUBLIC_BETA_BADGE_ENABLED:-true}"
         environment:
             NODE_ENV: production
-        ports:
-            - "80:3000"
-        depends_on:
-            nest:
-                condition: service_healthy
+        expose:
+            - "3000"
+        networks:
+            - edge
+        healthcheck:
+            test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"]
+            interval: 30s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
         restart: unless-stopped
+        stop_grace_period: 20s
+        logging: *default-logging
 
     db:
-        image: postgres:16
-        env_file:
-            - ./nest/.env
+        image: postgres:16.14-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+        environment:
+            POSTGRES_DB: "${POSTGRES_DB:?Set POSTGRES_DB in .env.server}"
+            POSTGRES_USER: "${POSTGRES_ADMIN_USER:?Set POSTGRES_ADMIN_USER in .env.server}"
+            POSTGRES_PASSWORD: "${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env.server}"
         volumes:
-            - database:/var/lib/postgresql/data:delegated
+            - database:/var/lib/postgresql/data
         expose:
             - "5432"
+        networks:
+            - database_internal
         healthcheck:
             test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
             interval: 10s
             timeout: 5s
             retries: 10
+        security_opt:
+            - no-new-privileges:true
         restart: unless-stopped
+        stop_grace_period: 60s
+        logging: *default-logging
+
+    db-roles:
+        image: postgres:16.14-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+        profiles: ["tools"]
+        user: "999:999"
+        environment:
+            PGHOST: db
+            PGPORT: 5432
+            PGDATABASE: "${POSTGRES_DB:?Set POSTGRES_DB in .env.server}"
+            PGUSER: "${POSTGRES_ADMIN_USER:?Set POSTGRES_ADMIN_USER in .env.server}"
+            PGPASSWORD: "${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env.server}"
+            APP_DB_USER: "${APP_DB_USER:?Set APP_DB_USER in .env.server}"
+            APP_DB_PASSWORD: "${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env.server}"
+            MIGRATOR_DB_USER: "${MIGRATOR_DB_USER:?Set MIGRATOR_DB_USER in .env.server}"
+            MIGRATOR_DB_PASSWORD: "${MIGRATOR_DB_PASSWORD:?Set MIGRATOR_DB_PASSWORD in .env.server}"
+        volumes:
+            - ./infra/postgres/provision-db-roles.sh:/scripts/provision-db-roles.sh:ro
+        entrypoint: ["/bin/sh", "/scripts/provision-db-roles.sh"]
+        depends_on:
+            db:
+                condition: service_healthy
+        networks:
+            - database_internal
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        restart: "no"
+        logging: *default-logging
+
+    migrate:
+        <<: *node-security
+        profiles: ["tools"]
+        build:
+            context: ./nest
+            target: migrator
+        environment:
+            NODE_ENV: production
+            DB_HOST: db
+            DB_PORT: 5432
+            DB_NAME: "${POSTGRES_DB:?Set POSTGRES_DB in .env.server}"
+            DB_USERNAME: "${MIGRATOR_DB_USER:?Set MIGRATOR_DB_USER in .env.server}"
+            DB_PASSWORD: "${MIGRATOR_DB_PASSWORD:?Set MIGRATOR_DB_PASSWORD in .env.server}"
+            DB_STATEMENT_TIMEOUT_MS: "60000"
+        command: ["npm", "run", "deploy:migrate"]
+        depends_on:
+            db:
+                condition: service_healthy
+        networks:
+            - database_internal
+        restart: "no"
+        logging: *default-logging
 
 volumes:
     database:
+    caddy_data:
+    caddy_config:
+
+networks:
+    edge:
+    api_internal:
+        internal: true
+    database_internal:
+        internal: true

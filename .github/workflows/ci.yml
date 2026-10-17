@@ -1,0 +1,215 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: next
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: npm
+          cache-dependency-path: next/package-lock.json
+      - run: npm ci
+      - run: npm run assets:rights:policy-test
+      - run: npm run assets:rights:inventory
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: /api
+          NEXT_PUBLIC_AUTH_ENABLED: "false"
+          NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED: "false"
+          NEXT_PUBLIC_BETA_BADGE_ENABLED: "true"
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          NEXT_PUBLIC_API_URL: /api
+          NEXT_PUBLIC_AUTH_ENABLED: "false"
+          NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED: "false"
+          NEXT_PUBLIC_BETA_BADGE_ENABLED: "true"
+      - name: Preserve Playwright diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-diagnostics
+          path: |
+            next/playwright-report
+            next/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Full dependency audit
+        run: npm audit --audit-level=high
+
+  backend:
+    name: Backend quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: nest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: npm
+          cache-dependency-path: nest/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint:check
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:e2e
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Full dependency audit
+        run: npm audit --audit-level=high
+
+  whitespace:
+    name: Whitespace gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Check pull request diff
+        if: github.event_name == 'pull_request'
+        run: git diff --check "${{ github.event.pull_request.base.sha }}" HEAD
+      - name: Check pushed commit
+        if: github.event_name == 'push'
+        run: git diff --check HEAD^ HEAD
+
+  containers:
+    name: Container and Compose gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      # Ephemeral credentials for this isolated CI network. Production placeholders are rejected.
+      POSTGRES_ADMIN_PASSWORD: ci-admin-${{ github.run_id }}-${{ github.run_attempt }}-not-production
+      APP_DB_PASSWORD: ci-app-${{ github.run_id }}-${{ github.run_attempt }}-not-production
+      MIGRATOR_DB_PASSWORD: ci-migrator-${{ github.run_id }}-${{ github.run_attempt }}-not-production
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: cp .env.server.example .env.server
+      - name: Keep the compatibility production compose file identical
+        run: cmp -s docker-compose.yml docker-compose.prod.yml
+      - run: docker compose --env-file .env.server -f docker-compose.yml config --quiet
+      - run: docker compose --env-file .env.server -f docker-compose.prod.yml config --quiet
+      - run: docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml --profile tools build caddy next nest migrate
+      - name: Verify database role secret preflight
+        run: sh infra/postgres/test-role-preflight.sh
+      - name: Validate Caddy configuration
+        run: docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml run --rm --no-deps --entrypoint caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Rehearse PostgreSQL migrations and least-privilege roles
+        env:
+          STYLEFINDER_ENV_FILE: ${{ github.workspace }}/.env.server
+          STYLEFINDER_DB_CHECK_PROJECT: stylefinder-ci
+          KEEP_STYLEFINDER_DB_CHECK: "1"
+        run: sh infra/postgres/verify-migrations.sh
+      - name: Smoke-test the production topology and headers
+        run: |
+          docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml up -d --no-build --remove-orphans
+          test "$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml exec -T caddy id -u | tr -d '\r')" = "10001"
+          test "$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml exec -T caddy id -g | tr -d '\r')" = "10001"
+          test "$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml exec -T caddy awk '/^CapEff:/ { print $2 }' /proc/1/status | tr -d '\r')" = "0000000000000400"
+          docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml exec -T caddy test -w /data
+          docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml exec -T caddy test -w /config
+          docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml exec -T caddy test -w /data/caddy
+          docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml exec -T caddy test -w /config/caddy
+          curl --fail --silent --show-error --retry 20 --retry-all-errors --retry-delay 2 http://127.0.0.1/ >/dev/null
+          curl --fail --silent --show-error --retry 20 --retry-all-errors --retry-delay 2 http://127.0.0.1/api/health/live >/dev/null
+          curl --fail --silent --show-error --retry 20 --retry-all-errors --retry-delay 2 http://127.0.0.1/api/health/ready >/dev/null
+          curl --fail --silent --show-error --head http://127.0.0.1/ | grep -qi '^x-content-type-options: nosniff'
+          curl --fail --silent --show-error --head http://127.0.0.1/ | grep -qi '^content-security-policy:'
+          curl --fail --silent --show-error --head http://127.0.0.1/ | grep -qi '^cross-origin-resource-policy: same-origin'
+          curl --fail --silent --show-error --head http://127.0.0.1/ | grep -qi '^referrer-policy: strict-origin-when-cross-origin'
+          next_asset="$(curl --fail --silent --show-error http://127.0.0.1/ | grep -oE '/_next/static/[^" ]+\.(js|css)' | head -n 1)"
+          test -n "$next_asset"
+          curl --fail --silent --show-error --head "http://127.0.0.1${next_asset}" | grep -Eqi '^cache-control:.*max-age=31536000.*immutable'
+          planner_headers="$(mktemp)"
+          curl --fail --silent --show-error --head http://127.0.0.1/images/planner/double-bed.20260717-v2.webp >"$planner_headers"
+          grep -Eqi '^cache-control:.*max-age=31536000.*immutable' "$planner_headers"
+          test "$(grep -Eci '^cache-control:' "$planner_headers")" = "1"
+          test_headers="$(mktemp)"
+          curl --fail --silent --show-error --head 'http://127.0.0.1/images/Home/test-images.20260716-v1/1.2%20%D0%9F%D0%BE%D1%80%D1%8F%D0%B4%D0%BE%D0%BA/%D0%9F%D0%BE%D1%80%D1%8F%D0%B4%D0%BE%D0%BA%201.webp' >"$test_headers"
+          grep -Eqi '^cache-control:.*max-age=31536000.*immutable' "$test_headers"
+          test "$(grep -Eci '^cache-control:' "$test_headers")" = "1"
+          home_headers="$(mktemp)"
+          curl --fail --silent --show-error --head http://127.0.0.1/images/Home/logo.b77fadd12f00.jpg >"$home_headers"
+          grep -Eqi '^cache-control:.*max-age=31536000.*immutable' "$home_headers"
+          test "$(grep -Eci '^cache-control:' "$home_headers")" = "1"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data '{"email":"ci@example.test","password":"private-password"}' http://127.0.0.1/api/auth/login)" = "404"
+          next_id="$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml ps -q next)"
+          nest_id="$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml ps -q nest)"
+          db_id="$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml ps -q db)"
+          test "$(docker inspect --format '{{len .HostConfig.PortBindings}}' "$next_id")" = "0"
+          test "$(docker inspect --format '{{len .HostConfig.PortBindings}}' "$nest_id")" = "0"
+          test "$(docker inspect --format '{{len .HostConfig.PortBindings}}' "$db_id")" = "0"
+      - name: Tag images for scanning
+        run: |
+          docker tag "$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml images -q next)" stylefinder-next:ci
+          docker tag "$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml images -q nest)" stylefinder-nest:ci
+          docker tag "$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml images -q caddy)" stylefinder-caddy:ci
+          docker tag "$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml images -q db)" stylefinder-postgres:ci
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: stylefinder-next:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 1
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: stylefinder-nest:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 1
+      - name: Scan reverse-proxy image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: stylefinder-caddy:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 1
+      - name: Scan database image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: stylefinder-postgres:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 1
+      - name: Show container diagnostics on failure
+        if: failure()
+        run: docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml logs --no-color --tail=200
+      - name: Remove CI containers and volumes
+        if: always()
+        run: docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml down --volumes --remove-orphans
