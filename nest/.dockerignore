@@ -1,8 +1,11 @@
 node_modules
 dist
 coverage
+test
 npm-debug.log
+*.log
 .env*
-!.env
+.DS_Store
+**/.DS_Store
 ._*
 .__*
