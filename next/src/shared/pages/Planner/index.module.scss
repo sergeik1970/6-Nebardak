@@ -504,51 +504,6 @@
     line-height: 1.4;
 }
 
-.roomShapeControl .contourDraftControls {
-    display: block;
-    margin-top: 10px;
-    border: 1px solid #c9b18f;
-    border-top: 3px solid var(--brand);
-    padding: 10px;
-    background: #fff8eb;
-}
-
-.contourDraftControls p {
-    margin: 0;
-    color: #5d5142;
-    font-size: 11px;
-    font-weight: 650;
-    line-height: 1.4;
-}
-
-.contourDraftControls > div {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    margin-top: 8px;
-    border: 0;
-}
-
-.contourDraftControls > div button {
-    border: 1px solid var(--line);
-}
-
-.contourDraftControls > div button:last-child {
-    border-color: var(--brand);
-    color: #6f3400;
-    background: #ffe6bd;
-}
-
-.contourDraftControls button:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-}
-
-.contourDraftControls .contourDraftError {
-    margin-top: 8px;
-    color: #8c2f22;
-}
-
 .dimensionField {
     min-width: 0;
 }
@@ -1570,12 +1525,6 @@
     background: #fff5e5;
 }
 
-.contourModeToolbar {
-    min-height: 76px;
-    border-color: #bca88d;
-    background: #fff8ea;
-}
-
 .planPanViewport {
     max-width: 100%;
     overflow: auto;
@@ -1599,14 +1548,14 @@
     transition: width 160ms ease;
 }
 
-.planPanViewport[data-contour-drawing="false"] .planZoomSurface {
+.planPanViewport .planZoomSurface {
     box-sizing: border-box;
     min-width: 0;
     padding: 28px 28px 28px 34px;
 }
 
 @media (max-width: 640px) {
-    .planPanViewport[data-room-editing="true"][data-contour-drawing="false"] .planZoomSurface {
+    .planPanViewport[data-room-editing="true"] .planZoomSurface {
         /*
          * Direct-edit handles sit outside the measured wall. Reserve their
          * lanes in the fit surface rather than forcing a vertical room
@@ -1624,9 +1573,6 @@
 /* Drawing switches from an existing fitted pixel width to the full drafting
  * field. The drawing surface must be immediately stationary: otherwise a
  * point placed on the 50 mm grid can drift while the width transition runs. */
-.planPanViewport[data-contour-drawing="true"] .planZoomSurface {
-    transition: none;
-}
 
 .draftingBoard:fullscreen,
 .draftingBoard[data-fullscreen="true"] {
@@ -1688,80 +1634,6 @@
     box-shadow: none;
 }
 
-.contourDraftingIntro {
-    display: flex;
-    align-items: end;
-    justify-content: space-between;
-    gap: 20px;
-    margin: 0 0 12px;
-    padding: 13px 15px;
-    border: 1px solid #c8b99f;
-    border-left: 4px solid var(--brand);
-    background: #fff9ed;
-}
-
-.contourDraftingIntro > div > span {
-    display: block;
-    margin-bottom: 5px;
-    color: var(--brand-dark);
-    font-size: 10px;
-    font-weight: 850;
-    letter-spacing: 0.11em;
-}
-
-.contourDraftingIntro h3,
-.contourDraftingIntro p {
-    margin: 0;
-}
-
-.contourDraftingIntro h3 {
-    color: var(--ink);
-    font-family: var(--font-brand);
-    font-size: clamp(20px, 2.4vw, 28px);
-    line-height: 1;
-    letter-spacing: -0.025em;
-}
-
-.contourDraftingIntro p {
-    margin-top: 6px;
-    color: #625747;
-    font-size: 12px;
-    font-weight: 650;
-    line-height: 1.4;
-}
-
-.contourDraftingIntro dl {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, max-content));
-    gap: 14px;
-    margin: 0;
-}
-
-.contourDraftingIntro dl div {
-    min-width: 0;
-}
-
-.contourDraftingIntro dt,
-.contourDraftingIntro dd {
-    margin: 0;
-}
-
-.contourDraftingIntro dt {
-    color: var(--muted);
-    font-size: 10px;
-    font-weight: 750;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-}
-
-.contourDraftingIntro dd {
-    margin-top: 3px;
-    color: var(--ink);
-    font-size: 11px;
-    font-weight: 750;
-    white-space: nowrap;
-}
-
 .roomBoundary {
     position: absolute;
     inset: 0;
@@ -1781,157 +1653,6 @@
     stroke: #5a5145;
     stroke-width: 6px;
     vector-effect: non-scaling-stroke;
-}
-
-.contourDraftLayer {
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    width: 100%;
-    height: 100%;
-    overflow: visible;
-    pointer-events: none;
-}
-
-.contourDrawingRoom {
-    overflow: hidden !important;
-    isolation: isolate;
-    border: 1px solid #9d8d78;
-    background-color: #fffdf7;
-    background-image: linear-gradient(to right, rgba(111, 94, 70, 0.055) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(111, 94, 70, 0.055) 1px, transparent 1px),
-        linear-gradient(to right, rgba(111, 94, 70, 0.18) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(111, 94, 70, 0.18) 1px, transparent 1px);
-    background-size:
-        var(--contour-grid-x) var(--contour-grid-y),
-        var(--contour-grid-x) var(--contour-grid-y),
-        var(--contour-grid-major-x) var(--contour-grid-major-y),
-        var(--contour-grid-major-x) var(--contour-grid-major-y);
-    box-shadow:
-        inset 0 0 0 7px rgba(255, 251, 241, 0.82),
-        0 10px 24px rgba(74, 60, 43, 0.14);
-}
-
-.contourBoardMeta {
-    position: absolute;
-    z-index: 6;
-    top: 10px;
-    left: 11px;
-    padding: 4px 7px;
-    border: 1px solid rgba(159, 140, 114, 0.72);
-    color: #716453;
-    background: rgba(255, 252, 245, 0.9);
-    font-size: 10px;
-    font-weight: 750;
-    letter-spacing: 0.02em;
-    pointer-events: none;
-}
-
-.contourCoordinateReadout {
-    position: absolute;
-    z-index: 6;
-    right: 11px;
-    bottom: 10px;
-    display: flex;
-    align-items: baseline;
-    gap: 7px;
-    margin: 0;
-    padding: 5px 7px;
-    border: 1px solid rgba(159, 140, 114, 0.72);
-    color: #554938;
-    background: rgba(255, 252, 245, 0.93);
-    font-size: 10px;
-    line-height: 1.2;
-    pointer-events: none;
-}
-
-.contourCoordinateReadout strong {
-    color: var(--brand-dark);
-    font-size: 10px;
-    font-weight: 850;
-}
-
-.contourCoordinateReadout span {
-    font-weight: 750;
-    white-space: nowrap;
-}
-
-.contourDraftContour {
-    fill: none;
-    stroke: #403b33;
-    stroke-width: 5px;
-    vector-effect: non-scaling-stroke;
-}
-
-.contourPreviewSegment {
-    fill: none;
-    stroke: var(--brand);
-    stroke-width: 3px;
-    stroke-dasharray: 9 7;
-    vector-effect: non-scaling-stroke;
-}
-
-.contourDraftPoint {
-    fill: #fff9ee;
-    stroke: var(--brand);
-    stroke-width: 3px;
-    vector-effect: non-scaling-stroke;
-}
-
-.contourDraftPointNumber {
-    fill: #653400;
-    font-family: var(--font-primary);
-    font-size: 108px;
-    font-weight: 850;
-    pointer-events: none;
-}
-
-.contourDrawSurface {
-    position: absolute;
-    inset: 0;
-    z-index: 5;
-    appearance: none;
-    border: 0;
-    padding: 0;
-    background: transparent;
-    cursor: crosshair;
-    touch-action: none;
-}
-
-.contourDrawSurface:focus-visible {
-    outline: 3px solid rgb(189 89 12 / 0.78);
-    outline-offset: -3px;
-}
-
-.contourEmptyState,
-.contourCanvasError {
-    position: absolute;
-    z-index: 6;
-    right: 50%;
-    bottom: 50%;
-    width: min(310px, calc(100% - 32px));
-    margin: 0;
-    padding: 14px 16px;
-    border: 1px solid #c7b69d;
-    color: #4f473d;
-    background: rgba(255, 252, 245, 0.94);
-    box-shadow: 0 6px 18px rgba(74, 60, 43, 0.1);
-    font-size: 13px;
-    font-weight: 750;
-    line-height: 1.4;
-    text-align: center;
-    pointer-events: none;
-    transform: translate(50%, 50%);
-}
-
-.contourCanvasError {
-    right: 12px;
-    bottom: 12px;
-    width: min(390px, calc(100% - 24px));
-    border-color: #b75e44;
-    color: #7b2f22;
-    background: rgba(255, 245, 239, 0.96);
-    transform: none;
 }
 
 .roomDropTarget {
@@ -2254,11 +1975,18 @@
 }
 
 .wallDimensionHorizontal {
-    transform: translate(-50%, calc(-50% + var(--wall-dimension-shift-y, -18px)));
+    transform: translate(
+        calc(-50% + var(--wall-dimension-shift-x, 0px)),
+        calc(-50% + var(--wall-dimension-shift-y, -18px))
+    );
 }
 
 .wallDimensionVertical {
-    transform: translate(calc(-50% + var(--wall-dimension-shift-x, -22px)), -50%) rotate(-90deg);
+    transform: translate(
+            calc(-50% + var(--wall-dimension-shift-x, -22px)),
+            calc(-50% + var(--wall-dimension-shift-y, 0px))
+        )
+        rotate(-90deg);
 }
 
 .roomVertexHandle,
@@ -2783,12 +2511,6 @@
     background: transparent;
 }
 
-.contourCanvasLegend {
-    padding: 9px 11px;
-    border: 1px solid #c7b69d;
-    background: #fff9ed;
-}
-
 .mobileObjectPicker {
     margin-top: 12px;
     color: var(--muted);
@@ -2845,19 +2567,6 @@
     background: rgb(189 89 12 / 0.11) !important;
 }
 
-.contourPointLegend {
-    width: 12px !important;
-    height: 12px !important;
-    border: 2px solid var(--brand);
-    border-radius: 50%;
-    background: #fff9ee !important;
-}
-
-.contourPreviewLegend {
-    height: 0 !important;
-    border-top: 2px dashed var(--brand);
-}
-
 .primaryActionRow {
     display: flex;
     align-items: center;
@@ -2866,18 +2575,6 @@
     border: 1px solid var(--line);
     border-top: 0;
     background: var(--paper);
-}
-
-.contourSolverPause {
-    margin: 0;
-    padding: 13px 16px;
-    border: 1px solid #c7b69d;
-    border-top: 0;
-    color: #5f513e;
-    background: #fff9ed;
-    font-size: 12px;
-    font-weight: 750;
-    line-height: 1.45;
 }
 
 .primaryAction {
@@ -4167,77 +3864,20 @@
         width: 100%;
     }
 
-    .roomShapeControl > div:not(.contourDraftControls) {
+    .roomShapeControl > div {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .roomShapeControl > div:not(.contourDraftControls) > button {
+    .roomShapeControl > div > button {
         border-bottom: 1px solid var(--line);
     }
 
-    .roomShapeControl > div:not(.contourDraftControls) > button:nth-child(2n) {
+    .roomShapeControl > div > button:nth-child(2n) {
         border-right: 0;
     }
 
-    .roomShapeControl > div:not(.contourDraftControls) > button:nth-last-child(-n + 2) {
+    .roomShapeControl > div > button:nth-last-child(-n + 2) {
         border-bottom: 0;
-    }
-
-    .contourDraftingIntro {
-        align-items: stretch;
-        flex-direction: column;
-        gap: 12px;
-        padding: 12px;
-    }
-
-    .contourDraftingIntro dl {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 7px;
-    }
-
-    .contourDraftingIntro dl div {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 12px;
-    }
-
-    .contourDraftingIntro dd {
-        margin-top: 0;
-    }
-
-    .contourBoardMeta {
-        top: 7px;
-        left: 7px;
-        font-size: 9px;
-    }
-
-    .contourCoordinateReadout {
-        right: auto;
-        bottom: 7px;
-        left: 50%;
-        align-items: flex-end;
-        flex-direction: column;
-        gap: 2px;
-        font-size: 9px;
-        transform: translateX(-50%);
-    }
-
-    .contourCoordinateReadout strong {
-        font-size: 9px;
-    }
-
-    .contourDraftPoint {
-        r: 118px;
-    }
-
-    .contourDraftPointNumber {
-        font-size: 132px;
-    }
-
-    .contourEmptyState,
-    .contourCanvasError {
-        font-size: 12px;
     }
 
     .areaMetric,
@@ -4855,11 +4495,11 @@
         background: #e7edf5;
     }
 
-    .planPanViewport[data-contour-drawing="false"] .planZoomSurface {
+    .planPanViewport .planZoomSurface {
         padding: 26px 28px 24px 34px;
     }
 
-    .planPanViewport[data-room-editing="true"][data-contour-drawing="false"] .planZoomSurface {
+    .planPanViewport[data-room-editing="true"] .planZoomSurface {
         /* Reserve real lanes for the 44px handles and per-wall dimensions.
          * These values intentionally match PLAN_FIT_EDITOR_FRAME_*_PX. */
         padding: 68px 68px 118px 64px;
@@ -4873,7 +4513,7 @@
             --editor-control-scale: 0.64;
         }
 
-        .planPanViewport[data-room-editing="true"][data-contour-drawing="false"] .planZoomSurface {
+        .planPanViewport[data-room-editing="true"] .planZoomSurface {
             padding: 44px 44px 80px 41px;
         }
     }

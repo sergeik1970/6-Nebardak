@@ -48,7 +48,6 @@ import {
     buildFurnitureInstances,
     buildFurnitureInstancesExcludingRemoved,
     buildAutomaticRemovalReason,
-    buildOrthogonalRoomFromDraft,
     buildPrioritizedFurnitureSelection,
     buildPlanSpecification,
     canRedoPlacementHistory,
@@ -270,10 +269,6 @@ const clamp = (value: number, minimum: number, maximum: number) =>
     Math.min(Math.max(value, minimum), maximum);
 const normalizeRotation = (value: number) => ((value % 360) + 360) % 360;
 
-// The persisted room model accepts at most 16 vertices. The closing elbow can add
-// one more vertex to an open drawing, so leave one slot while the user is drawing.
-const MAX_CONTOUR_DRAFT_POINTS = 15;
-
 // The plan needs a small drawing-frame margin for rulers and direct-edit handles.
 // Keep these values in sync with .planZoomSurface so the fitted view never relies
 // on clipping those controls.
@@ -293,22 +288,8 @@ const PLAN_FIT_VIEWPORT_INSET_PX = 4;
 // particular, do not trade the room itself for editor control lanes when the
 // board is temporarily below the browser fold.
 const PLAN_FIT_MINIMUM_ROOM_CONTENT_PX = 120;
-
-const normalizeContourDraftPoint = (
-    point: { x: number; y: number },
-    previous?: Pick<RoomVertex, "x" | "y">,
-) => {
-    const snapped = {
-        x: clamp(snapToGrid(point.x), 0, 10_000),
-        y: clamp(snapToGrid(point.y), 0, 10_000),
-    };
-
-    if (!previous) return snapped;
-
-    return Math.abs(snapped.x - previous.x) >= Math.abs(snapped.y - previous.y)
-        ? { x: snapped.x, y: previous.y }
-        : { x: previous.x, y: snapped.y };
-};
+/** Half the width of a wall length label such as "10.00 м" in the room editor. */
+const WALL_DIMENSION_HALF_LENGTH_PX = 28;
 
 interface DraftNumberInputProps
     extends Omit<
@@ -712,8 +693,6 @@ interface PlanCanvasProps {
     invalidInstanceIds: Set<string>;
     showClearances: boolean;
     isRoomEditing: boolean;
-    contourDraft: Array<Pick<RoomVertex, "x" | "y">> | null;
-    contourDraftError: string;
     phase: PlannerPhase;
     failure: LayoutFailure | null;
     onSelect: (instanceId: string) => void;
@@ -730,7 +709,6 @@ interface PlanCanvasProps {
     onRestoreRoom: (room: Room) => void;
     onMoveRoomVertex: (vertexId: string, point: { x: number; y: number }) => void;
     onSplitRoomSegment: (segmentId: string, point: { x: number; y: number }) => void;
-    onAddContourPoint: (point: { x: number; y: number }) => void;
     onRoomEditGestureChange: (active: boolean) => void;
 }
 
@@ -972,7 +950,8 @@ const openingLinePresentation = (
 
 interface SegmentEditorControlLayout {
     point: { x: number; y: number };
-    labelPoint: { x: number; y: number };
+    /** The length label sits beside the handle, toward the longer part of the wall (+1 = toward its end). */
+    labelSide: 1 | -1;
     /** The controls use an outside lane whenever the wall is occupied or short. */
     outsideLane: number;
     blocked: boolean;
@@ -1050,11 +1029,10 @@ const getSegmentEditorControlLayout = (
             : "Потяните перпендикулярно стене, чтобы добавить уступ.";
     const outsideLane = blockedByOpening || segment.length < 1850 ? 1 + (index % 3) : 0;
     const handleOffset = chooseClearSegmentOffset(segment, intervals, 360);
-    const labelOffset = chooseClearSegmentOffset(segment, intervals, 260);
 
     return {
         point: getSegmentPoint(segment, handleOffset),
-        labelPoint: getSegmentPoint(segment, labelOffset),
+        labelSide: handleOffset <= segment.length / 2 ? 1 : -1,
         outsideLane,
         blocked,
         reason,
@@ -1069,8 +1047,6 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
     invalidInstanceIds,
     showClearances,
     isRoomEditing,
-    contourDraft,
-    contourDraftError,
     phase,
     failure,
     onSelect,
@@ -1087,7 +1063,6 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
     onRestoreRoom,
     onMoveRoomVertex,
     onSplitRoomSegment,
-    onAddContourPoint,
     onRoomEditGestureChange,
 }) => {
     const gridLines = Array.from({ length: 9 }, (_, index) => index + 1);
@@ -1111,11 +1086,6 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const polygonClip = `polygon(${roomVertices
         .map((vertex) => `${(vertex.x / room.width) * 100}% ${(vertex.y / room.depth) * 100}%`)
         .join(", ")})`;
-    const contourDraftPoints = contourDraft?.map((point) => `${point.x},${point.y}`).join(" ");
-    const [contourPointerPreview, setContourPointerPreview] = useState<{
-        x: number;
-        y: number;
-    } | null>(null);
 
     useEffect(() => {
         if (!isRoomEditing || room.geometry?.kind === "orthogonal") {
@@ -1931,170 +1901,6 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
         ],
     );
 
-    const handleContourPoint = useCallback(
-        (event: React.PointerEvent<HTMLButtonElement>) => {
-            if (!contourDraft || !event.isPrimary) return;
-            if (event.pointerType === "mouse" && event.button !== 0) return;
-            const roomElement = roomRef.current;
-            if (!roomElement) return;
-            onAddContourPoint(clientPointToRoomMm(roomElement, room, event.clientX, event.clientY));
-            setContourPointerPreview(null);
-            event.preventDefault();
-            event.stopPropagation();
-        },
-        [contourDraft, onAddContourPoint, room],
-    );
-
-    const updateContourPreview = useCallback(
-        (event: React.PointerEvent<HTMLButtonElement>) => {
-            if (!contourDraft || contourDraft.length === 0) return;
-            const roomElement = roomRef.current;
-            if (!roomElement) return;
-            setContourPointerPreview(
-                normalizeContourDraftPoint(
-                    clientPointToRoomMm(roomElement, room, event.clientX, event.clientY),
-                    contourDraft[contourDraft.length - 1],
-                ),
-            );
-        },
-        [contourDraft, room],
-    );
-
-    const clearContourPreview = useCallback(() => setContourPointerPreview(null), []);
-
-    useEffect(() => {
-        setContourPointerPreview(null);
-    }, [contourDraft]);
-
-    if (contourDraft) {
-        const lastContourPoint = contourDraft[contourDraft.length - 1];
-        const progressText =
-            contourDraft.length === 0
-                ? "Шаг 1: поставьте первую точку контура."
-                : `Точка ${contourDraft.length} поставлена. Укажите следующий угол.`;
-
-        return (
-            <div className={styles.canvasViewport}>
-                <div className={styles.contourDraftingIntro}>
-                    <div>
-                        <span>ЧЕРТЁЖ КОМНАТЫ</span>
-                        <h3>Нарисуйте контур по углам</h3>
-                        <p aria-live="polite">{progressText}</p>
-                    </div>
-                    <dl>
-                        <div>
-                            <dt>Поле</dt>
-                            <dd>
-                                {formatMeters(room.width)} × {formatMeters(room.depth)}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Правило</dt>
-                            <dd>Шаг 50 мм · прямые углы</dd>
-                        </div>
-                    </dl>
-                </div>
-                <div className={styles.dimensionTop} aria-hidden="true">
-                    <span>{formatMeters(room.width)}</span>
-                </div>
-                <div className={styles.dimensionSide} aria-hidden="true">
-                    <span>{formatMeters(room.depth)}</span>
-                </div>
-                <div
-                    ref={roomRef}
-                    className={`${styles.room} ${styles.contourDrawingRoom}`}
-                    style={
-                        {
-                            aspectRatio: `${Math.max(room.width, 1)} / ${Math.max(room.depth, 1)}`,
-                            "--contour-grid-x": `${(GRID_MM / room.width) * 100}%`,
-                            "--contour-grid-y": `${(GRID_MM / room.depth) * 100}%`,
-                            "--contour-grid-major-x": `${((GRID_MM * 10) / room.width) * 100}%`,
-                            "--contour-grid-major-y": `${((GRID_MM * 10) / room.depth) * 100}%`,
-                        } as React.CSSProperties
-                    }
-                    role="group"
-                    aria-label={`План комнаты — поле для чертежа ${room.width} на ${room.depth} миллиметров`}
-                    data-manual-drop-room="true"
-                    data-room-editing="true"
-                    data-room-shape={room.geometry?.kind ?? "rect"}
-                    data-contour-drawing="true"
-                >
-                    <span className={styles.contourBoardMeta} aria-hidden="true">
-                        Сетка 50 мм · только прямые углы
-                    </span>
-                    {lastContourPoint && (
-                        <p className={styles.contourCoordinateReadout} aria-live="polite">
-                            <strong>Точка {contourDraft.length}</strong>
-                            <span>
-                                X {lastContourPoint.x} мм · Y {lastContourPoint.y} мм
-                            </span>
-                        </p>
-                    )}
-                    <svg
-                        className={styles.contourDraftLayer}
-                        viewBox={`0 0 ${room.width} ${room.depth}`}
-                        preserveAspectRatio="none"
-                        aria-hidden="true"
-                    >
-                        {contourDraft.length > 1 && (
-                            <polyline
-                                className={styles.contourDraftContour}
-                                points={contourDraftPoints}
-                            />
-                        )}
-                        {lastContourPoint && contourPointerPreview && (
-                            <line
-                                className={styles.contourPreviewSegment}
-                                x1={lastContourPoint.x}
-                                y1={lastContourPoint.y}
-                                x2={contourPointerPreview.x}
-                                y2={contourPointerPreview.y}
-                            />
-                        )}
-                        {contourDraft.map((point, index) => (
-                            <g key={`${point.x}-${point.y}-${index}`}>
-                                <circle
-                                    className={styles.contourDraftPoint}
-                                    cx={point.x}
-                                    cy={point.y}
-                                    r={82}
-                                />
-                                <text
-                                    className={styles.contourDraftPointNumber}
-                                    x={point.x}
-                                    y={point.y}
-                                    textAnchor="middle"
-                                    dominantBaseline="central"
-                                >
-                                    {index + 1}
-                                </text>
-                            </g>
-                        ))}
-                    </svg>
-                    <button
-                        type="button"
-                        className={styles.contourDrawSurface}
-                        aria-label={`Добавить вершину контура. Сейчас точек: ${contourDraft.length} из ${MAX_CONTOUR_DRAFT_POINTS}`}
-                        onPointerDown={handleContourPoint}
-                        onPointerMove={updateContourPreview}
-                        onPointerLeave={clearContourPreview}
-                        onPointerCancel={clearContourPreview}
-                    />
-                    {contourDraft.length === 0 && (
-                        <p className={styles.contourEmptyState} aria-hidden="true">
-                            Начните с первого угла
-                        </p>
-                    )}
-                    {contourDraftError && (
-                        <p className={styles.contourCanvasError} role="alert">
-                            {contourDraftError}
-                        </p>
-                    )}
-                </div>
-            </div>
-        );
-    }
-
     const rectangleEditorBounds =
         isRoomEditing && room.geometry?.kind !== "orthogonal"
             ? rectangleEditBounds ?? getRectangleEditBounds(room)
@@ -2133,12 +1939,18 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
                     : undefined
             }
         >
-            <div className={styles.dimensionTop} aria-hidden="true">
-                <span>{formatMeters(room.width)}</span>
-            </div>
-            <div className={styles.dimensionSide} aria-hidden="true">
-                <span>{formatMeters(room.depth)}</span>
-            </div>
+            {/* While editing, every wall carries its own length beside its handle;
+                the overall rulers would only sit underneath those controls. */}
+            {!isRoomEditing && (
+                <>
+                    <div className={styles.dimensionTop} aria-hidden="true">
+                        <span>{formatMeters(room.width)}</span>
+                    </div>
+                    <div className={styles.dimensionSide} aria-hidden="true">
+                        <span>{formatMeters(room.depth)}</span>
+                    </div>
+                </>
+            )}
             <div
                 ref={roomRef}
                 className={`${styles.room} ${
@@ -2150,7 +1962,6 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
                 data-manual-drop-room="true"
                 data-room-editing={isRoomEditing ? "true" : "false"}
                 data-room-shape={room.geometry?.kind ?? "rect"}
-                data-contour-drawing={contourDraft ? "true" : "false"}
                 onDragOver={handleUnplacedDragOver}
                 onDragLeave={handleUnplacedDragLeave}
                 onDrop={handleUnplacedDrop}
@@ -2229,7 +2040,7 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
                     />
                 ))}
 
-                {isRoomEditing && !contourDraft && (
+                {isRoomEditing && (
                     <>
                         <button
                             type="button"
@@ -2258,7 +2069,7 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
                     </>
                 )}
 
-                {isRoomEditing && !contourDraft && (
+                {isRoomEditing && (
                     <>
                         {boundarySegments.map((segment, index) => {
                             const horizontal = segment.orientation === "horizontal";
@@ -2269,20 +2080,34 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
                                 boundarySegments.length,
                             );
                             const outwardDistance = 34 + controlLayout.outsideLane * 18;
+                            // The label shares the handle's lane and sits beside it along the
+                            // wall: half the handle, half a label and a small gap away.
+                            const alongSign =
+                                controlLayout.labelSide *
+                                Math.sign(
+                                    horizontal
+                                        ? segment.end.x - segment.start.x
+                                        : segment.end.y - segment.start.y,
+                                );
+                            const alongShift = `calc(${alongSign} * (var(--editor-control-scale, 1) * 22px + ${WALL_DIMENSION_HALF_LENGTH_PX + 6}px))`;
+                            const outwardShift = (normal: number) =>
+                                `calc(var(--editor-control-scale, 1) * ${-normal * outwardDistance}px)`;
                             const dimensionStyle = horizontal
                                 ? {
-                                      left: `${(controlLayout.labelPoint.x / room.width) * 100}%`,
-                                      top: `${(controlLayout.labelPoint.y / room.depth) * 100}%`,
-                                      "--wall-dimension-shift-y": `calc(var(--editor-control-scale, 1) * ${
-                                          -segment.inwardNormal.y * (outwardDistance + 18)
-                                      }px)`,
+                                      left: `${(controlLayout.point.x / room.width) * 100}%`,
+                                      top: `${(controlLayout.point.y / room.depth) * 100}%`,
+                                      "--wall-dimension-shift-x": alongShift,
+                                      "--wall-dimension-shift-y": outwardShift(
+                                          segment.inwardNormal.y,
+                                      ),
                                   }
                                 : {
-                                      left: `${(controlLayout.labelPoint.x / room.width) * 100}%`,
-                                      top: `${(controlLayout.labelPoint.y / room.depth) * 100}%`,
-                                      "--wall-dimension-shift-x": `calc(var(--editor-control-scale, 1) * ${
-                                          -segment.inwardNormal.x * (outwardDistance + 18)
-                                      }px)`,
+                                      left: `${(controlLayout.point.x / room.width) * 100}%`,
+                                      top: `${(controlLayout.point.y / room.depth) * 100}%`,
+                                      "--wall-dimension-shift-x": outwardShift(
+                                          segment.inwardNormal.x,
+                                      ),
+                                      "--wall-dimension-shift-y": alongShift,
                                   };
                             const handleStyle = {
                                 left: `${(controlLayout.point.x / room.width) * 100}%`,
@@ -2792,10 +2617,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
     );
     const [showClearances, setShowClearances] = useState(false);
     const [isRoomEditing, setIsRoomEditing] = useState(false);
-    const [contourDraft, setContourDraft] = useState<Array<Pick<RoomVertex, "x" | "y">> | null>(
-        null,
-    );
-    const [contourDraftError, setContourDraftError] = useState("");
     const [isRoomEditGestureActive, setIsRoomEditGestureActive] = useState(false);
     const [generatedSignature, setGeneratedSignature] = useState<string | null>(
         selectionSignature(DEFAULT_ROOM, DEFAULT_SELECTION, DEFAULT_PRIORITIES, {}),
@@ -2861,48 +2682,14 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
     const latestManualPlacementsRef = useRef<Placement[]>(placements);
 
     useEffect(() => {
-        if (!contourDraft || contourDraft.length <= MAX_CONTOUR_DRAFT_POINTS) return;
-
-        setContourDraft([]);
-        setContourDraftError(
-            `Предыдущий чертёж содержал ${contourDraft.length} точек. Поле очищено: поддерживается не более ${MAX_CONTOUR_DRAFT_POINTS} точек до замыкания.`,
-        );
-    }, [contourDraft]);
-
-    useEffect(() => {
         if (!isRoomEditing || room.geometry?.kind === "orthogonal") {
             rectangleEditFitReferenceRef.current = null;
         }
     }, [isRoomEditing, room.geometry?.kind]);
 
-    useEffect(() => {
-        if (
-            !contourDraft ||
-            contourDraft.length !== 0 ||
-            typeof window === "undefined" ||
-            !window.matchMedia("(max-width: 640px)").matches
-        ) {
-            return;
-        }
-
-        const frame = window.requestAnimationFrame(() => {
-            const board = draftingBoardRef.current;
-            if (!board) return;
-
-            board.scrollIntoView({ behavior: "auto", block: "start" });
-            board
-                .querySelector<HTMLButtonElement>(
-                    '[data-contour-drawing="true"] button[aria-label^="Добавить вершину контура"]',
-                )
-                ?.focus({ preventScroll: true });
-        });
-
-        return () => window.cancelAnimationFrame(frame);
-    }, [contourDraft]);
-
     const updatePlanFit = useCallback(() => {
         const viewport = planPanViewportRef.current;
-        if (!viewport || contourDraft || typeof window === "undefined") return;
+        if (!viewport || typeof window === "undefined") return;
 
         const viewportRect = viewport.getBoundingClientRect();
         // The viewport has a 1px focus-safe inset on both sides. Keeping that
@@ -3016,12 +2803,11 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                 ? current
                 : { width: fittedWidth, maxHeight: availableHeight },
         );
-    }, [contourDraft, isRoomEditing, room]);
+    }, [isRoomEditing, room]);
 
     useEffect(() => {
         if (
             !isRoomEditing ||
-            contourDraft ||
             typeof window === "undefined" ||
             !window.matchMedia("(max-width: 640px)").matches
         ) {
@@ -3056,10 +2842,10 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
             window.cancelAnimationFrame(firstFrame);
             window.cancelAnimationFrame(secondFrame);
         };
-    }, [contourDraft, isRoomEditing, updatePlanFit]);
+    }, [isRoomEditing, updatePlanFit]);
 
     useEffect(() => {
-        if (contourDraft || typeof window === "undefined") return;
+        if (typeof window === "undefined") return;
 
         let animationFrame = 0;
         const schedulePlanFit = () => {
@@ -3083,12 +2869,12 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
             window.removeEventListener("scroll", schedulePlanFit);
             window.visualViewport?.removeEventListener("resize", schedulePlanFit);
         };
-    }, [contourDraft, updatePlanFit]);
+    }, [updatePlanFit]);
 
     useEffect(() => {
-        if (contourDraft || planZoom !== 1) return;
+        if (planZoom !== 1) return;
         planPanViewportRef.current?.scrollTo({ left: 0, top: 0, behavior: "auto" });
-    }, [contourDraft, planFit.width, planZoom]);
+    }, [planFit.width, planZoom]);
 
     const requiredDefinitionIds = useMemo(
         () => deriveRequiredDefinitionIds(selection, priorities),
@@ -3138,13 +2924,13 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
     const hasBed = BED_IDS.some((id) => (selection[id] ?? 0) > 0);
     const hasSofa = SOFA_IDS.some((id) => (selection[id] ?? 0) > 0);
     const blockedRoomEditorSegments = useMemo(() => {
-        if (!isRoomEditing || contourDraft) return [];
+        if (!isRoomEditing) return [];
         const segments = getRoomBoundarySegments(room);
         return segments.filter(
             (segment, index) =>
                 getSegmentEditorControlLayout(room, segment, index, segments.length).blocked,
         );
-    }, [contourDraft, isRoomEditing, room]);
+    }, [isRoomEditing, room]);
     const tvTargetMissing = hasTv && !hasBed && !hasSofa;
     const tvTargetChoiceRequired = hasTv && hasBed && hasSofa && !tvTargetCategory;
     const tvGenerationBlocked = tvTargetMissing || tvTargetChoiceRequired;
@@ -3734,8 +3520,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
     );
 
     const updateRoomShape = useCallback((shape: "rect" | "l-left" | "l-right") => {
-        setContourDraft(null);
-        setContourDraftError("");
         setRoom((current) =>
             applyRoomGeometry(
                 current,
@@ -3755,72 +3539,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                 : "Г-образная форма применена. Проверьте сегменты проёмов и пересчитайте план.",
         );
     }, []);
-
-    const startContourDrawing = useCallback(() => {
-        setContourDraft([]);
-        setContourDraftError("");
-        setIsRoomEditing(true);
-        setResultNotice("Открылось чистое поле чертежа. Исходная комната пока не меняется.");
-    }, []);
-
-    const addContourPoint = useCallback((point: { x: number; y: number }) => {
-        setContourDraft((current) => {
-            if (!current) return current;
-            if (current.length >= MAX_CONTOUR_DRAFT_POINTS) {
-                setContourDraftError(
-                    `В чертеже максимум ${MAX_CONTOUR_DRAFT_POINTS} точек: этого достаточно для контура до 16 вершин. Примените, отмените или очистите точки.`,
-                );
-                return current;
-            }
-            const previous = current[current.length - 1];
-            const next = normalizeContourDraftPoint(point, previous);
-            if (previous && previous.x === next.x && previous.y === next.y) {
-                setContourDraftError("Следующая точка должна быть на другой линии сетки.");
-                return current;
-            }
-            if (previous && Math.abs(next.x - previous.x) + Math.abs(next.y - previous.y) < 500) {
-                setContourDraftError("Длина стены должна быть не менее 50 см.");
-                return current;
-            }
-            setContourDraftError("");
-            return [...current, next];
-        });
-    }, []);
-
-    const undoContourPoint = useCallback(() => {
-        setContourDraft((current) => (current ? current.slice(0, -1) : current));
-        setContourDraftError("");
-    }, []);
-
-    const cancelContourDrawing = useCallback(() => {
-        setContourDraft(null);
-        setContourDraftError("");
-        setResultNotice("Рисование контура отменено; текущая форма комнаты сохранена.");
-    }, []);
-
-    const applyContourDrawing = useCallback(() => {
-        if (!contourDraft) return;
-        const result = buildOrthogonalRoomFromDraft(contourDraft);
-        if (result.status === "invalid") {
-            setContourDraftError(result.message);
-            return;
-        }
-        const candidate = applyRoomGeometry(
-            { ...room, width: result.width, depth: result.depth },
-            result.geometry,
-        );
-        const error = validateRoomGeometry(candidate);
-        if (error) {
-            setContourDraftError(
-                `${error} Перенесите проём на более длинный сегмент или скорректируйте контур.`,
-            );
-            return;
-        }
-        setRoom(candidate);
-        setContourDraft(null);
-        setContourDraftError("");
-        setResultNotice("Нарисованный ортогональный контур применён. Пересчитайте план.");
-    }, [contourDraft, room]);
 
     const updateDoor = useCallback((doorId: string, patch: Partial<DoorOpening>) => {
         setRoom((current) => ({
@@ -4378,7 +4096,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
         setHasRequestedLayoutCalculation(false);
         setPhase(imported.length ? "result" : "ready");
         setIsRoomEditing(false);
-        setContourDraft(null);
         setResultNotice(
             imported.length
                 ? "Комната и расстановка мебели перенесены."
@@ -6012,33 +5729,33 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                             <i aria-hidden="true" />
                             {draftNotice || "Черновик в этом браузере"}
                         </span>
-                        {!contourDraft && (
-                            <div
-                                className={styles.appBarHistory}
-                                role="group"
-                                aria-label="История ручных изменений"
+
+                        <div
+                            className={styles.appBarHistory}
+                            role="group"
+                            aria-label="История ручных изменений"
+                        >
+                            <button
+                                ref={undoButtonRef}
+                                type="button"
+                                onClick={undoPlacement}
+                                disabled={isStale || !canUndoPlacementHistory(placementHistory)}
+                                aria-keyshortcuts="Control+Z Meta+Z"
+                                title="Отменить ручное изменение"
                             >
-                                <button
-                                    ref={undoButtonRef}
-                                    type="button"
-                                    onClick={undoPlacement}
-                                    disabled={isStale || !canUndoPlacementHistory(placementHistory)}
-                                    aria-keyshortcuts="Control+Z Meta+Z"
-                                    title="Отменить ручное изменение"
-                                >
-                                    ↶ <span>Отменить</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={redoPlacement}
-                                    disabled={isStale || !canRedoPlacementHistory(placementHistory)}
-                                    aria-keyshortcuts="Control+Y Control+Shift+Z Meta+Shift+Z"
-                                    title="Вернуть отменённое изменение"
-                                >
-                                    ↷ <span>Вернуть</span>
-                                </button>
-                            </div>
-                        )}
+                                ↶ <span>Отменить</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={redoPlacement}
+                                disabled={isStale || !canRedoPlacementHistory(placementHistory)}
+                                aria-keyshortcuts="Control+Y Control+Shift+Z Meta+Shift+Z"
+                                title="Вернуть отменённое изменение"
+                            >
+                                ↷ <span>Вернуть</span>
+                            </button>
+                        </div>
+
                         <button
                             type="button"
                             className={styles.appBarNewProject}
@@ -6205,44 +5922,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                 Откройте большой редактор: он сохраняет совместимый контур и вернёт
                                 вас сюда.
                             </small>
-                            {contourDraft && (
-                                <div className={styles.contourDraftControls}>
-                                    <p aria-live="polite">
-                                        {contourDraft.length === 0
-                                            ? `Шаг 1 из ${MAX_CONTOUR_DRAFT_POINTS}: поставьте первую точку.`
-                                            : `Точек: ${contourDraft.length} из ${MAX_CONTOUR_DRAFT_POINTS}. Минимум 5; контур замкнётся автоматически.`}
-                                    </p>
-                                    <div>
-                                        <button
-                                            type="button"
-                                            onClick={undoContourPoint}
-                                            disabled={contourDraft.length === 0}
-                                        >
-                                            Отменить точку
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setContourDraft([]);
-                                                setContourDraftError("");
-                                            }}
-                                            disabled={contourDraft.length === 0}
-                                        >
-                                            Очистить чертёж
-                                        </button>
-                                        <button type="button" onClick={cancelContourDrawing}>
-                                            Отменить чертёж
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={applyContourDrawing}
-                                            disabled={contourDraft.length < 5}
-                                        >
-                                            Применить контур
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
                         <div className={styles.dimensionFields}>
@@ -7386,57 +7065,46 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                             className={styles.primaryWorktable}
                             data-planner-primary-worktable="true"
                         >
-                            <div
-                                className={`${styles.planToolbar} ${
-                                    contourDraft ? styles.contourModeToolbar : ""
-                                }`}
-                            >
+                            <div className={styles.planToolbar}>
                                 <div>
                                     <span className={styles.toolbarStep}>03</span>
                                     <div>
-                                        <h2 id="plan-heading">
-                                            {contourDraft ? "Чертёж комнаты" : "План комнаты"}
-                                        </h2>
+                                        <h2 id="plan-heading">План комнаты</h2>
                                         <p>
-                                            {contourDraft
-                                                ? "Исходная планировка сохранена до применения контура."
-                                                : `${room.windows.length} окн. · ${room.doors.length} дв. · ${partitionCount} перег. · ${radiatorCount} рад.`}
+                                            {`${room.windows.length} окн. · ${room.doors.length} дв. · ${partitionCount} перег. · ${radiatorCount} рад.`}
                                         </p>
                                     </div>
                                 </div>
-                                {!contourDraft && (
-                                    <div className={styles.toolbarActions}>
-                                        <button
-                                            type="button"
-                                            className={styles.secondaryAction}
-                                            aria-pressed={showClearances}
-                                            onClick={() => setShowClearances((current) => !current)}
-                                        >
-                                            <span className={styles.zoneIcon} aria-hidden="true" />
-                                            {showClearances ? "Скрыть зоны" : "Показать зоны"}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={styles.secondaryAction}
-                                            aria-pressed={isRoomEditing}
-                                            onClick={() => setIsRoomEditing((current) => !current)}
-                                        >
-                                            {isRoomEditing
-                                                ? "Готово с проёмами"
-                                                : "Править комнату"}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={styles.resetAction}
-                                            onClick={confirmResetPlanner}
-                                        >
-                                            Сбросить
-                                        </button>
-                                    </div>
-                                )}
+
+                                <div className={styles.toolbarActions}>
+                                    <button
+                                        type="button"
+                                        className={styles.secondaryAction}
+                                        aria-pressed={showClearances}
+                                        onClick={() => setShowClearances((current) => !current)}
+                                    >
+                                        <span className={styles.zoneIcon} aria-hidden="true" />
+                                        {showClearances ? "Скрыть зоны" : "Показать зоны"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={styles.secondaryAction}
+                                        aria-pressed={isRoomEditing}
+                                        onClick={() => setIsRoomEditing((current) => !current)}
+                                    >
+                                        {isRoomEditing ? "Готово с проёмами" : "Править комнату"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={styles.resetAction}
+                                        onClick={confirmResetPlanner}
+                                    >
+                                        Сбросить
+                                    </button>
+                                </div>
                             </div>
 
-                            {!contourDraft && hasFullVariants && (
+                            {hasFullVariants && (
                                 <div className={styles.variantBar}>
                                     <div
                                         className={styles.variantTabs}
@@ -7497,7 +7165,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                 <div
                                     className={styles.planViewControls}
                                     role="group"
-                                    aria-label={contourDraft ? "Масштаб чертежа" : "Масштаб плана"}
+                                    aria-label="Масштаб плана"
                                 >
                                     <button
                                         type="button"
@@ -7505,9 +7173,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                             setPlanZoom((current) => Math.max(0.75, current - 0.25))
                                         }
                                         disabled={planZoom <= 0.75}
-                                        aria-label={
-                                            contourDraft ? "Уменьшить чертёж" : "Уменьшить план"
-                                        }
+                                        aria-label={"Уменьшить план"}
                                     >
                                         −
                                     </button>
@@ -7521,11 +7187,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                                 behavior: "auto",
                                             });
                                         }}
-                                        aria-label={
-                                            contourDraft
-                                                ? "Вместить чертёж по ширине"
-                                                : "Вместить план по ширине"
-                                        }
+                                        aria-label={"Вместить план по ширине"}
                                     >
                                         По ширине · {Math.round(planZoom * 100)}%
                                     </button>
@@ -7535,9 +7197,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                             setPlanZoom((current) => Math.min(2, current + 0.25))
                                         }
                                         disabled={planZoom >= 2}
-                                        aria-label={
-                                            contourDraft ? "Увеличить чертёж" : "Увеличить план"
-                                        }
+                                        aria-label={"Увеличить план"}
                                     >
                                         +
                                     </button>
@@ -7554,13 +7214,10 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                     className={styles.planPanViewport}
                                     aria-label="Прокручиваемая область плана"
                                     tabIndex={0}
-                                    data-plan-zoom={
-                                        contourDraft || planZoom !== 1 ? "manual" : "fit"
-                                    }
-                                    data-contour-drawing={contourDraft ? "true" : "false"}
+                                    data-plan-zoom={planZoom !== 1 ? "manual" : "fit"}
                                     data-room-editing={isRoomEditing ? "true" : "false"}
                                     style={
-                                        !contourDraft && planFit.maxHeight > 0
+                                        planFit.maxHeight > 0
                                             ? { maxHeight: `${planFit.maxHeight}px` }
                                             : undefined
                                     }
@@ -7568,7 +7225,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                     <div
                                         className={styles.planZoomSurface}
                                         style={
-                                            !contourDraft && planFit.width > 0
+                                            planFit.width > 0
                                                 ? { width: `${planFit.width * planZoom}px` }
                                                 : { width: `${planZoom * 100}%` }
                                         }
@@ -7581,8 +7238,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                             invalidInstanceIds={invalidInstanceIds}
                                             showClearances={showClearances}
                                             isRoomEditing={isRoomEditing}
-                                            contourDraft={contourDraft}
-                                            contourDraftError={contourDraftError}
                                             phase={phase}
                                             failure={failure}
                                             onSelect={setSelectedInstanceId}
@@ -7605,56 +7260,38 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                             onRestoreRoom={restoreRoomDirectly}
                                             onMoveRoomVertex={moveRoomVertexDirectly}
                                             onSplitRoomSegment={splitRoomSegmentDirectly}
-                                            onAddContourPoint={addContourPoint}
                                             onRoomEditGestureChange={setIsRoomEditGestureActive}
                                         />
                                     </div>
                                 </div>
-                                <div
-                                    className={`${styles.canvasLegend} ${
-                                        contourDraft ? styles.contourCanvasLegend : ""
-                                    }`}
-                                >
-                                    {contourDraft ? (
-                                        <>
-                                            <span>
-                                                <i className={styles.contourPointLegend} />{" "}
-                                                поставленная точка
-                                            </span>
-                                            <span>
-                                                <i className={styles.contourPreviewLegend} />{" "}
-                                                следующая стена
-                                            </span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span>
-                                                <i className={styles.windowLegend} /> окно
-                                            </span>
-                                            <span>
-                                                <i className={styles.doorLegend} /> дверь и
-                                                открывание
-                                            </span>
-                                        </>
-                                    )}
-                                    {!contourDraft && radiatorCount > 0 && (
+                                <div className={styles.canvasLegend}>
+                                    <>
+                                        <span>
+                                            <i className={styles.windowLegend} /> окно
+                                        </span>
+                                        <span>
+                                            <i className={styles.doorLegend} /> дверь и открывание
+                                        </span>
+                                    </>
+
+                                    {radiatorCount > 0 && (
                                         <span>
                                             <i className={styles.radiatorLegend} /> радиатор
                                         </span>
                                     )}
-                                    {!contourDraft && showClearances && (
+                                    {showClearances && (
                                         <span>
                                             <i className={styles.zoneLegend} /> зона эксплуатации
                                         </span>
                                     )}
-                                    {!contourDraft && isRoomEditing && (
+                                    {isRoomEditing && (
                                         <span className={styles.roomEditGuidance} role="status">
                                             Режим комнаты: тяните углы, а середину свободной стены —
                                             чтобы добавить уступ. Только прямые углы; Esc отменяет
                                             незавершённое перемещение.
                                         </span>
                                     )}
-                                    {!contourDraft && blockedRoomEditorSegments.length > 0 && (
+                                    {blockedRoomEditorSegments.length > 0 && (
                                         <span
                                             id="room-editor-blocked-summary"
                                             className={styles.roomEditBlockedSummary}
@@ -7664,8 +7301,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                             передвиньте дверь, окно или радиатор.
                                         </span>
                                     )}
-                                    {!contourDraft &&
-                                        displayedPlacements.length === 0 &&
+                                    {displayedPlacements.length === 0 &&
                                         phase !== "solving" &&
                                         (!failure || !hasRequestedLayoutCalculation) && (
                                             <span
@@ -7707,30 +7343,23 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                 )}
                             </div>
 
-                            {contourDraft ? (
-                                <p className={styles.contourSolverPause} role="status">
-                                    Сначала примените или отмените чертёж — расчёт расстановки пока
-                                    недоступен.
+                            <div className={styles.primaryActionRow}>
+                                <button
+                                    type="button"
+                                    className={styles.primaryAction}
+                                    onClick={runSolver}
+                                    disabled={phase === "solving" || tvGenerationBlocked}
+                                >
+                                    {phase === "solving" ? "Умещаем набор…" : "Уместить всё"}
+                                </button>
+                                <p>
+                                    {tvTargetChoiceRequired
+                                        ? "Сначала выберите цель телевизора в списке мебели."
+                                        : tvTargetMissing
+                                          ? "Для телевизора нужна кровать или диван."
+                                          : "Показываем только полные планы с разными сценариями. Если их нет, предложим рабочее ядро."}
                                 </p>
-                            ) : (
-                                <div className={styles.primaryActionRow}>
-                                    <button
-                                        type="button"
-                                        className={styles.primaryAction}
-                                        onClick={runSolver}
-                                        disabled={phase === "solving" || tvGenerationBlocked}
-                                    >
-                                        {phase === "solving" ? "Умещаем набор…" : "Уместить всё"}
-                                    </button>
-                                    <p>
-                                        {tvTargetChoiceRequired
-                                            ? "Сначала выберите цель телевизора в списке мебели."
-                                            : tvTargetMissing
-                                              ? "Для телевизора нужна кровать или диван."
-                                              : "Показываем только полные планы с разными сценариями. Если их нет, предложим рабочее ядро."}
-                                    </p>
-                                </div>
-                            )}
+                            </div>
                         </div>
 
                         <section className={styles.designLab} aria-labelledby="design-lab-heading">
