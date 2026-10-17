@@ -139,7 +139,7 @@
 
 .hero-test-btn-results {
     background: transparent;
-    color: #ff8c00;
+    color: #9a5000;
     border: none;
     font-weight: 500;
     text-decoration: none;
@@ -147,14 +147,14 @@
 
 .hero-test-btn-results:hover {
     background: transparent;
-    color: #e67c00;
+    color: #713a00;
     transform: none;
     box-shadow: none;
     text-decoration: underline;
 }
 
 .hero-test-btn-test {
-    background: #ffb340;
+    background: #a85d00;
     color: white;
     padding: 0.9rem 1.35rem;
     min-width: 0;
@@ -162,8 +162,8 @@
 }
 
 .hero-test-btn-test:hover {
-    background: #e67c00;
-    border-color: #e67c00;
+    background: #804300;
+    border-color: #804300;
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(255, 140, 0, 0.4);
 }
@@ -202,7 +202,7 @@
 @media (min-width: 768px) {
     .hero-test {
         /* min-height: 80vh; */
-    padding: 1rem 1.5rem 1rem;
+        padding: 1rem 1.5rem 1rem;
         margin-top: -0.5rem;
         /* padding: 3rem 2rem; */
     }
@@ -293,7 +293,6 @@
     .hero-test-btn-test {
         padding: 1rem 1.5rem;
     }
-
 }
 
 @media (min-width: 1024px) {

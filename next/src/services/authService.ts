@@ -1,11 +1,18 @@
 import { AuthResponse, RegisterData, LoginData, User } from "../types/auth";
-import { AUTH_API_URL, isAuthEnabled } from "@/shared/config/runtime";
+import { AUTH_API_URL, isAuthEnabled, isAuthRegistrationEnabled } from "@/shared/config/runtime";
 
 const AUTH_DISABLED_MESSAGE =
     "Авторизация временно недоступна: сайт запущен без подключенного API.";
 
 class AuthService {
+    private assertAuthEnabled() {
+        if (!isAuthEnabled) {
+            throw new Error(AUTH_DISABLED_MESSAGE);
+        }
+    }
+
     private getApiUrl() {
+        this.assertAuthEnabled();
         if (!AUTH_API_URL) {
             throw new Error(AUTH_DISABLED_MESSAGE);
         }
@@ -21,6 +28,10 @@ class AuthService {
     }
 
     async register(data: RegisterData): Promise<AuthResponse> {
+        if (!isAuthRegistrationEnabled) {
+            throw new Error("Регистрация сейчас отключена");
+        }
+
         const response = await fetch(`${this.getApiUrl()}/auth/register`, {
             method: "POST",
             headers: {
@@ -80,15 +91,18 @@ class AuthService {
     }
 
     logout(): void {
+        if (typeof window === "undefined") return;
         localStorage.removeItem("token");
         localStorage.removeItem("user");
     }
 
     getToken(): string | null {
+        if (typeof window === "undefined") return null;
         return localStorage.getItem("token");
     }
 
     getUser(): User | null {
+        if (typeof window === "undefined") return null;
         const userStr = localStorage.getItem("user");
         if (!userStr) return null;
         try {
@@ -105,6 +119,10 @@ class AuthService {
 
     isAvailable(): boolean {
         return isAuthEnabled;
+    }
+
+    isRegistrationAvailable(): boolean {
+        return isAuthRegistrationEnabled;
     }
 }
 

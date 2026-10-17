@@ -31,19 +31,17 @@ const HeroTest: React.FC = () => {
                         Попробуй сейчас!
                     </h2>
                     <div className={styles["hero-test-buttons-group"]}>
-                        <button
+                        <Link
                             className={`${styles["hero-test-btn"]} ${styles["hero-test-btn-results"]}`}
-                            type="button"
-                            disabled
-                            aria-disabled="true"
+                            href="/planner"
                         >
-                            Результаты позже
-                        </button>
+                            Спланировать комнату
+                        </Link>
                         <Link
                             href="/test"
                             className={`${styles["hero-test-btn"]} ${styles["hero-test-btn-test"]}`}
                         >
-                            Пройти тест
+                            Определить стиль
                         </Link>
                     </div>
                 </div>

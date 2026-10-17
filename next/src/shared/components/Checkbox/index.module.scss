@@ -1,26 +1,89 @@
 .checkbox {
-    input {
-        display: none;
-    }
+    display: grid;
+    gap: var(--sf-space-1);
+}
 
-    &-test {
-        background-color: red;
-    }
+.control {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sf-space-3);
+    min-height: var(--sf-control-height);
+    padding: 10px 8px;
+    color: var(--sf-color-ink);
+    cursor: pointer;
+}
 
-    label {
-        display: block;
-        margin: 0;
-        width: 15px;
-        height: 15px;
-        border: 2px solid black;
+.input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
 
-        &.checked {
-            background-color: green;
-            border-color: green;
-        }
+.box {
+    display: grid;
+    flex: 0 0 22px;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--sf-color-line-strong);
+    border-radius: var(--sf-radius-sm);
+    background: var(--sf-color-surface);
+}
+
+.input:checked + .box {
+    border-color: var(--sf-color-brand-active);
+    background: var(--sf-color-brand);
+
+    &::after {
+        width: 10px;
+        height: 5px;
+        border-bottom: 2px solid #fff;
+        border-left: 2px solid #fff;
+        content: "";
+        transform: translateY(-1px) rotate(-45deg);
     }
 }
 
-.test {
-    color: red;
+.input:focus-visible + .box {
+    outline: 3px solid var(--sf-color-focus);
+    outline-offset: 3px;
+    box-shadow: var(--sf-focus-ring);
+}
+
+.input:disabled ~ * {
+    color: var(--sf-color-ink-muted);
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+.input[aria-invalid="true"] + .box {
+    border-color: var(--sf-color-error);
+    background: var(--sf-color-error-surface);
+}
+
+.label {
+    padding-top: 1px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.description,
+.error {
+    margin-left: 42px;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.description {
+    color: var(--sf-color-ink-muted);
+}
+
+.error {
+    color: var(--sf-color-error);
+    font-weight: 600;
 }

@@ -1,10 +1,16 @@
-import { solveRoom, solveRoomVariants, solveWithAutomaticRemoval } from "./solver";
+import {
+    solveRoom,
+    solveRoomVariants,
+    solveWithAutomaticRemoval,
+    solveWithPreferredPlacementFallback,
+} from "./solver";
 import {
     AutoRemovalResult,
     FurnitureInstance,
     LayoutPreferences,
     LayoutResult,
     LayoutVariantsResult,
+    PreferredPlacementFallbackResult,
     Room,
 } from "./types";
 
@@ -30,6 +36,13 @@ export type SolverWorkerRequest =
           room: Room;
           instances: FurnitureInstance[];
           preferences?: LayoutPreferences;
+      }
+    | {
+          requestId: number;
+          action: "solve-preferred-fallback";
+          room: Room;
+          instances: FurnitureInstance[];
+          preferences?: LayoutPreferences;
       };
 
 export type SolverWorkerResponse =
@@ -50,6 +63,12 @@ export type SolverWorkerResponse =
           ok: true;
           action: "solve-with-removal";
           result: AutoRemovalResult;
+      }
+    | {
+          requestId: number;
+          ok: true;
+          action: "solve-preferred-fallback";
+          result: PreferredPlacementFallbackResult;
       }
     | {
           requestId: number;
@@ -88,6 +107,20 @@ workerScope.onmessage = (event) => {
                     request.instances,
                     request.preferences,
                     request.limit,
+                ),
+            });
+            return;
+        }
+
+        if (request.action === "solve-preferred-fallback") {
+            workerScope.postMessage({
+                requestId: request.requestId,
+                ok: true,
+                action: request.action,
+                result: solveWithPreferredPlacementFallback(
+                    request.room,
+                    request.instances,
+                    request.preferences,
                 ),
             });
             return;

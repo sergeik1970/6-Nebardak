@@ -14,12 +14,21 @@ const Footer: React.FC = () => {
                             StyleFinder
                         </Link>
 
-                        <div className={styles["footer-contacts"]}>
-                            <div className={styles["contact-item"]}>
+                        <address
+                            aria-label="Контакты StyleFinder"
+                            className={styles["footer-contacts"]}
+                        >
+                            <a
+                                aria-label="Написать StyleFinder в Telegram, откроется в новой вкладке"
+                                className={styles["contact-item"]}
+                                href="https://t.me/Keltiel"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
                                 <div className={styles["contact-icon"]}>
                                     <Image
-                                        src="/images/Home/tg-logo.jpg"
-                                        alt="Telegram"
+                                        src="/images/Home/tg-logo.d425a67811d3.jpg"
+                                        alt=""
                                         width={40}
                                         height={40}
                                         quality={75}
@@ -27,13 +36,17 @@ const Footer: React.FC = () => {
                                     />
                                 </div>
                                 <span className={styles["contact-text"]}>@Keltiel</span>
-                            </div>
+                            </a>
 
-                            <div className={styles["contact-item"]}>
+                            <a
+                                aria-label="Позвонить в StyleFinder по номеру +7 905 150-52-04"
+                                className={styles["contact-item"]}
+                                href="tel:+79051505204"
+                            >
                                 <div className={styles["contact-icon"]}>
                                     <Image
-                                        src="/images/Home/phone-logo.jpg"
-                                        alt="Phone"
+                                        src="/images/Home/phone-logo.a2f42632fbd6.jpg"
+                                        alt=""
                                         width={40}
                                         height={40}
                                         quality={75}
@@ -41,13 +54,13 @@ const Footer: React.FC = () => {
                                     />
                                 </div>
                                 <span className={styles["contact-text"]}>+7 905 150 52 04</span>
-                            </div>
-                        </div>
+                            </a>
+                        </address>
                     </div>
 
                     {/* Правая колонка - навигация (показывается только на планшетах и больше) */}
                     <div className={styles["footer-navigation"]}>
-                        <nav className={styles["footer-nav"]}>
+                        <nav aria-label="Навигация в подвале" className={styles["footer-nav"]}>
                             <Link href="/" className={styles["footer-nav-link"]}>
                                 Главная
                             </Link>

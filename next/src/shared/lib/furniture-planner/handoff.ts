@@ -1,4 +1,7 @@
 import { FURNITURE_BY_ID, FURNITURE_CATALOG, getMaximumFurnitureCount } from "./catalog";
+import type { FurniturePriority } from "./types";
+
+export type { FurniturePriority } from "./types";
 
 export const QUESTIONNAIRE_PLANNER_HANDOFF_VERSION = 1 as const;
 export const QUESTIONNAIRE_PLANNER_HANDOFF_SOURCE = "questionnaire" as const;
@@ -17,6 +20,8 @@ export interface QuestionnairePlannerItemV1 {
     definitionId: string;
     count: number;
     required: boolean;
+    /** Optional for legacy V1 handoffs; normalized readers derive it from `required`. */
+    priority?: FurniturePriority;
 }
 
 export interface QuestionnairePlannerInputV1 {
@@ -60,6 +65,7 @@ export type QuestionnairePlannerHandoffInvalidReason =
     | "duplicate-definition-id"
     | "invalid-count"
     | "invalid-required"
+    | "invalid-priority"
     | "multiple-bed-types"
     | "multiple-sofa-types"
     | "too-many-wardrobes"
@@ -209,11 +215,27 @@ export const normalizeQuestionnairePlannerInput = (
             return invalid("invalid-required");
         }
 
+        const priority =
+            candidate.priority === undefined
+                ? candidate.required
+                    ? "required"
+                    : "preferred"
+                : candidate.priority;
+
+        if (priority !== "required" && priority !== "preferred" && priority !== "optional") {
+            return invalid("invalid-priority");
+        }
+
+        if (candidate.required !== (priority === "required")) {
+            return invalid("invalid-required");
+        }
+
         seenIds.add(definitionId);
         items.push({
             definitionId,
             count: candidate.count as number,
             required: candidate.required,
+            priority,
         });
     }
 
@@ -253,17 +275,6 @@ export const normalizeQuestionnairePlannerInput = (
 
     if (hasTv && !hasBed && !hasSofa) {
         return invalid("tv-requires-bed-or-sofa");
-    }
-
-    for (const item of items) {
-        const shouldBeRequired =
-            BED_IDS.has(item.definitionId) ||
-            item.definitionId === "cradle" ||
-            (!hasBed && SOFA_IDS.has(item.definitionId));
-
-        if (item.required !== shouldBeRequired) {
-            return invalid("invalid-required");
-        }
     }
 
     let preferences: QuestionnairePlannerInputV1["preferences"];

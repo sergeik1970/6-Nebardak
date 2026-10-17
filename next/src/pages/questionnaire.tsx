@@ -10,6 +10,7 @@ const QuestionnairePage: React.FC = () => (
                 name="description"
                 content="Короткая анкета поможет собрать поштучный комплект мебели перед автоматической расстановкой."
             />
+            <meta name="robots" content="noindex,follow" />
         </Head>
         <Questionnaire />
     </>

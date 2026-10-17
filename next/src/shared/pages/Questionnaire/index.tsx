@@ -1,170 +1,266 @@
-import React, { useCallback, useMemo, useState } from "react";
+import FurniturePhoto from "@/shared/components/FurniturePhoto";
+import { getFurniturePhoto } from "@/shared/lib/furniture-planner/furniture-photos";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import Footer from "@/shared/components/Footer";
 import Navigation from "@/shared/components/Navigation";
 import {
     FURNITURE_CATALOG,
-    FurnitureDefinition,
+    FurniturePriority,
+    StyleFinderProjectDraft,
+    createProjectDraft,
     getFurniture,
     getFurnitureAsset,
+    readProjectDraft,
+    resetProjectDraft,
+    saveProjectDraft,
     saveQuestionnairePlannerHandoff,
 } from "@/shared/lib/furniture-planner";
+import RadioChoice from "./RadioChoice";
+import {
+    answersFromDraft,
+    BED_OPTIONS,
+    BedChoice,
+    getDefaultPriority,
+    getPlannerInputsSignature,
+    getQueryString,
+    getWardrobeItems,
+    getWardrobeTotal,
+    INITIAL_ANSWERS,
+    pluralizeFurniture,
+    PRIORITY_OPTIONS,
+    PriorityMap,
+    QuestionnaireAnswers,
+    SelectedFurniture,
+    SOFA_OPTIONS,
+    SofaChoice,
+    WARDROBE_OPTIONS,
+    WardrobeCount,
+    WardrobeId,
+} from "./model";
 import styles from "./index.module.scss";
-
-type BedChoice = "none" | "single-bed" | "double-bed";
-type SofaChoice = "none" | "sofa-two" | "sofa-three" | "sofa-four-left";
-type WardrobeChoice = "none" | "wardrobe-small" | "wardrobe-medium" | "wardrobe-large";
-
-interface QuestionnaireAnswers {
-    bed: BedChoice;
-    sofa: SofaChoice;
-    wardrobe: WardrobeChoice;
-    cradle: boolean;
-    bedsideTableCount: 0 | 1 | 2;
-    coffeeTable: boolean;
-    tv: boolean;
-    tvTargetCategory?: "sleep" | "living";
-    desk: boolean;
-    bookcase: boolean;
-    dresser: boolean;
-}
-
-interface SelectedFurniture {
-    definition: FurnitureDefinition;
-    count: number;
-    required: boolean;
-}
-
-const INITIAL_ANSWERS: QuestionnaireAnswers = {
-    bed: "none",
-    sofa: "none",
-    wardrobe: "none",
-    cradle: false,
-    bedsideTableCount: 0,
-    coffeeTable: false,
-    tv: false,
-    desk: false,
-    bookcase: false,
-    dresser: false,
-};
-
-const BED_OPTIONS: Array<{ value: BedChoice; label: string }> = [
-    { value: "none", label: "Без кровати" },
-    { value: "single-bed", label: "Односпальная" },
-    { value: "double-bed", label: "Двуспальная" },
-];
-
-const SOFA_OPTIONS: Array<{ value: SofaChoice; label: string }> = [
-    { value: "none", label: "Без дивана" },
-    { value: "sofa-two", label: "На двоих" },
-    { value: "sofa-three", label: "На троих" },
-    { value: "sofa-four-left", label: "Угловой, левый" },
-];
-
-const WARDROBE_OPTIONS: Array<{ value: WardrobeChoice; label: string }> = [
-    { value: "none", label: "Без шкафа" },
-    { value: "wardrobe-small", label: "Малый · 700 мм" },
-    { value: "wardrobe-medium", label: "Средний · 1500 мм" },
-    { value: "wardrobe-large", label: "Большой · 2000 мм" },
-];
-
-const getQueryString = (value: string | string[] | undefined, maximumLength: number) => {
-    if (typeof value !== "string") return undefined;
-    const normalized = value.trim();
-    return normalized ? normalized.slice(0, maximumLength) : undefined;
-};
-
-const pluralizeFurniture = (count: number) => {
-    const modulo100 = count % 100;
-    const modulo10 = count % 10;
-    if (modulo100 >= 11 && modulo100 <= 19) return `${count} предметов`;
-    if (modulo10 === 1) return `${count} предмет`;
-    if (modulo10 >= 2 && modulo10 <= 4) return `${count} предмета`;
-    return `${count} предметов`;
-};
-
-const RadioChoice = <T extends string>({
-    id,
-    name,
-    value,
-    checked,
-    label,
-    onChange,
-}: {
-    id: string;
-    name: string;
-    value: T;
-    checked: boolean;
-    label: string;
-    onChange: (value: T) => void;
-}) => (
-    <label className={styles.radioChoice} htmlFor={id}>
-        <input
-            id={id}
-            type="radio"
-            name={name}
-            value={value}
-            checked={checked}
-            onChange={() => onChange(value)}
-        />
-        <span aria-hidden="true" />
-        <strong>{label}</strong>
-    </label>
-);
 
 const Questionnaire: React.FC = () => {
     const router = useRouter();
     const [answers, setAnswers] = useState<QuestionnaireAnswers>(INITIAL_ANSWERS);
+    const [priorities, setPriorities] = useState<PriorityMap>({});
+    const [restoredMeta, setRestoredMeta] = useState<{
+        styleKey?: string;
+        styleLabel?: string;
+    }>({});
+    const [draftPlanner, setDraftPlanner] = useState<NonNullable<
+        StyleFinderProjectDraft["planner"]
+    > | null>(null);
     const [submitError, setSubmitError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [draftReady, setDraftReady] = useState(false);
+    const [draftWritable, setDraftWritable] = useState(false);
+    const [draftCanReset, setDraftCanReset] = useState(false);
+    const [draftWarning, setDraftWarning] = useState("");
+    const draftRead = useRef(false);
+    const restoredPlannerInputsSignature = useRef<string | null>(null);
 
-    const styleKey = router.isReady ? getQueryString(router.query.style, 80) : undefined;
-    const styleLabel = router.isReady ? getQueryString(router.query.styleLabel, 120) : undefined;
+    const queryStyleKey = router.isReady ? getQueryString(router.query.style, 80) : undefined;
+    const queryStyleLabel = router.isReady
+        ? getQueryString(router.query.styleLabel, 120)
+        : undefined;
+    const styleKey = queryStyleKey ?? restoredMeta.styleKey;
+    const styleLabel = queryStyleLabel ?? restoredMeta.styleLabel;
     const hasBed = answers.bed !== "none";
     const hasSofa = answers.sofa !== "none";
     const tvTargetRequired = answers.tv && hasBed && hasSofa;
 
     const selectedFurniture = useMemo<SelectedFurniture[]>(() => {
-        const selection = new Map<string, { count: number; required: boolean }>();
+        const selection = new Map<string, { count: number }>();
 
-        if (hasBed) selection.set(answers.bed, { count: 1, required: true });
-        if (hasSofa) selection.set(answers.sofa, { count: 1, required: !hasBed });
-        if (answers.wardrobe !== "none") {
-            selection.set(answers.wardrobe, { count: 1, required: false });
+        if (hasBed) selection.set(answers.bed, { count: 1 });
+        if (hasSofa) selection.set(answers.sofa, { count: 1 });
+        for (const wardrobe of getWardrobeItems(answers.wardrobes)) {
+            selection.set(wardrobe.definitionId, { count: wardrobe.count });
         }
         if (answers.cradle && answers.bed === "double-bed") {
-            selection.set("cradle", { count: 1, required: true });
+            selection.set("cradle", { count: 1 });
         }
         if (answers.bedsideTableCount > 0 && hasBed) {
             selection.set("bedside-table", {
                 count: answers.bedsideTableCount,
-                required: false,
             });
         }
         if (answers.coffeeTable && hasSofa) {
-            selection.set("coffee-table", { count: 1, required: false });
+            selection.set("coffee-table", { count: 1 });
         }
         if (answers.tv && (hasBed || hasSofa)) {
-            selection.set("tv", { count: 1, required: false });
+            selection.set("tv", { count: 1 });
         }
-        if (answers.desk) selection.set("desk", { count: 1, required: false });
-        if (answers.bookcase) selection.set("bookcase", { count: 1, required: false });
-        if (answers.dresser) selection.set("dresser", { count: 1, required: false });
+        if (answers.desk) selection.set("desk", { count: 1 });
+        if (answers.bookcase) selection.set("bookcase", { count: 1 });
+        if (answers.dresser) selection.set("dresser", { count: 1 });
 
         return FURNITURE_CATALOG.flatMap((definition) => {
             const selected = selection.get(definition.id);
-            return selected ? [{ definition, ...selected }] : [];
+            return selected
+                ? [
+                      {
+                          definition,
+                          ...selected,
+                          priority:
+                              priorities[definition.id] ??
+                              getDefaultPriority(definition.id, answers),
+                      },
+                  ]
+                : [];
         });
-    }, [answers, hasBed, hasSofa]);
+    }, [answers, hasBed, hasSofa, priorities]);
 
     const totalCount = selectedFurniture.reduce((sum, item) => sum + item.count, 0);
+    const wardrobeTotal = getWardrobeTotal(answers.wardrobes);
     const disabledReason =
         totalCount === 0
             ? "Выберите хотя бы один предмет мебели."
             : tvTargetRequired && !answers.tvTargetCategory
               ? "Укажите, напротив чего поставить телевизор."
               : "";
+
+    useEffect(() => {
+        if (!router.isReady || draftRead.current) return;
+        draftRead.current = true;
+
+        const result = readProjectDraft();
+        if (result.status === "success") {
+            const { questionnaire, planner } = result.value;
+            setAnswers(
+                answersFromDraft(questionnaire.items, questionnaire.preferences?.tvTargetCategory),
+            );
+            setPriorities(
+                Object.fromEntries(
+                    questionnaire.items.map((item) => [item.definitionId, item.priority]),
+                ),
+            );
+            setRestoredMeta(questionnaire.meta ?? {});
+            setDraftPlanner(planner ?? null);
+            restoredPlannerInputsSignature.current = planner
+                ? getPlannerInputsSignature(questionnaire.items, questionnaire.preferences)
+                : null;
+            setDraftWritable(true);
+            setDraftReady(true);
+            return;
+        }
+
+        if (result.status === "missing") {
+            setDraftWritable(true);
+        } else if (result.status === "unsupported-version") {
+            setDraftCanReset(true);
+            setDraftWarning("Не удалось открыть предыдущий проект. Начните новый.");
+        } else if (result.status !== "unavailable") {
+            setDraftCanReset(true);
+            setDraftWarning("Не удалось открыть предыдущий проект. Начните новый.");
+        } else {
+            setDraftWarning("");
+        }
+        setDraftReady(true);
+    }, [router.isReady]);
+
+    useEffect(() => {
+        if (!draftReady || !draftWritable) return;
+
+        const items = selectedFurniture.map(({ definition, count, priority }) => ({
+            definitionId: definition.id,
+            count,
+            priority,
+        }));
+        const preferences = answers.tv
+            ? {
+                  tvTargetCategory: answers.tvTargetCategory ?? (hasBed ? "sleep" : "living"),
+              }
+            : undefined;
+        const questionnaire = {
+            items,
+            ...(preferences ? { preferences } : {}),
+            ...(styleKey || styleLabel
+                ? {
+                      meta: {
+                          ...(styleKey ? { styleKey } : {}),
+                          ...(styleLabel ? { styleLabel } : {}),
+                      },
+                  }
+                : {}),
+        };
+        const plannerInputsSignature = getPlannerInputsSignature(items, preferences);
+        const preserveGeneratedPlan =
+            draftPlanner !== null &&
+            restoredPlannerInputsSignature.current === plannerInputsSignature;
+        const planner = draftPlanner
+            ? {
+                  room: draftPlanner.room,
+                  selection: Object.fromEntries(
+                      items.map((item) => [item.definitionId, item.count]),
+                  ),
+                  priorities: Object.fromEntries(
+                      items.map((item) => [item.definitionId, item.priority]),
+                  ),
+                  ...(preferences ? { preferences } : {}),
+                  ...(preserveGeneratedPlan && draftPlanner.layout
+                      ? { layout: draftPlanner.layout }
+                      : {}),
+                  ...(preserveGeneratedPlan && draftPlanner.removedItems
+                      ? { removedItems: draftPlanner.removedItems }
+                      : {}),
+                  ...(preserveGeneratedPlan && draftPlanner.removalArchive
+                      ? { removalArchive: draftPlanner.removalArchive }
+                      : {}),
+              }
+            : undefined;
+        const result = saveProjectDraft(createProjectDraft(questionnaire, planner));
+
+        if (result.status === "unavailable") return;
+    }, [
+        answers.tv,
+        answers.tvTargetCategory,
+        draftReady,
+        draftPlanner,
+        draftWritable,
+        hasBed,
+        selectedFurniture,
+        styleKey,
+        styleLabel,
+    ]);
+
+    const discardBrokenDraft = useCallback(() => {
+        const result = resetProjectDraft();
+        if (result.status === "unavailable") {
+            setDraftWarning("Не удалось начать новый проект. Попробуйте ещё раз.");
+            return;
+        }
+        setDraftWarning("");
+        setDraftCanReset(false);
+        setDraftWritable(true);
+    }, []);
+
+    const startNewProject = useCallback(async () => {
+        if (
+            typeof window !== "undefined" &&
+            !window.confirm("Начать новый проект? Текущие ответы и план комнаты будут удалены.")
+        ) {
+            return;
+        }
+
+        const reset = resetProjectDraft();
+        if (reset.status === "unavailable") {
+            setDraftWarning("Не удалось удалить текущий черновик. Новый проект не начат.");
+            return;
+        }
+
+        setAnswers(INITIAL_ANSWERS);
+        setPriorities({});
+        setRestoredMeta({});
+        setDraftPlanner(null);
+        restoredPlannerInputsSignature.current = null;
+        setDraftWarning("");
+        setDraftCanReset(false);
+        setDraftWritable(true);
+        await router.replace({ pathname: "/questionnaire", query: { new: "1" } });
+    }, [router]);
 
     const updateBed = useCallback((bed: BedChoice) => {
         setSubmitError("");
@@ -197,6 +293,23 @@ const Questionnaire: React.FC = () => {
         });
     }, []);
 
+    const updateWardrobeCount = useCallback((definitionId: WardrobeId, count: WardrobeCount) => {
+        setSubmitError("");
+        setAnswers((current) => {
+            const otherWardrobes =
+                getWardrobeTotal(current.wardrobes) - current.wardrobes[definitionId];
+            if (otherWardrobes + count > 2) return current;
+
+            return {
+                ...current,
+                wardrobes: {
+                    ...current.wardrobes,
+                    [definitionId]: count,
+                },
+            };
+        });
+    }, []);
+
     const toggleTv = useCallback((checked: boolean) => {
         setSubmitError("");
         setAnswers((current) => ({
@@ -216,10 +329,11 @@ const Questionnaire: React.FC = () => {
             version: 1,
             source: "questionnaire",
             createdAt: Date.now(),
-            items: selectedFurniture.map(({ definition, count, required }) => ({
+            items: selectedFurniture.map(({ definition, count, priority }) => ({
                 definitionId: definition.id,
                 count,
-                required,
+                priority,
+                required: priority === "required",
             })),
             preferences: answers.tv
                 ? {
@@ -231,9 +345,7 @@ const Questionnaire: React.FC = () => {
 
         if (result.status !== "success") {
             setSubmitError(
-                result.status === "unavailable"
-                    ? "Браузер не разрешил сохранить комплект. Проверьте настройки хранения и попробуйте ещё раз."
-                    : "Не удалось подготовить комплект. Проверьте ответы и попробуйте ещё раз.",
+                "Не удалось подготовить комплект. Проверьте ответы и попробуйте ещё раз.",
             );
             setIsSubmitting(false);
             return;
@@ -267,7 +379,7 @@ const Questionnaire: React.FC = () => {
     return (
         <div className={styles.page}>
             <Navigation />
-            <main className={styles.main}>
+            <main id="main-content" className={styles.main} tabIndex={-1}>
                 <nav className={styles.progressRail} aria-label="Этапы создания комнаты">
                     <Link href="/test" data-state={styleLabel ? "done" : "available"}>
                         <span>{styleLabel ? "✓" : "1"}</span>
@@ -291,6 +403,23 @@ const Questionnaire: React.FC = () => {
                         </span>
                     </span>
                 </nav>
+
+                <div className={styles.projectBar}>
+                    <button type="button" onClick={startNewProject}>
+                        Новый проект
+                    </button>
+                </div>
+
+                {draftWarning && (
+                    <div className={styles.draftWarning} role="alert">
+                        <span>{draftWarning}</span>
+                        {draftReady && draftCanReset && (
+                            <button type="button" onClick={discardBrokenDraft}>
+                                Удалить несовместимый черновик
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 <header className={styles.header}>
                     <span className={styles.eyebrow}>Спецификация комнаты · шаг 2 из 3</span>
@@ -354,25 +483,55 @@ const Questionnaire: React.FC = () => {
                                 <span>03</span>
                                 <span>
                                     <strong>Хранение одежды</strong>
-                                    <small>Один шкаф подходящего размера</small>
+                                    <small>До двух шкафов — одного или разных размеров</small>
                                 </span>
                             </legend>
-                            <div className={`${styles.choiceGrid} ${styles.fourChoices}`}>
+                            <div className={styles.wardrobeGrid}>
                                 {WARDROBE_OPTIONS.map((option) => (
-                                    <RadioChoice
-                                        key={option.value}
-                                        id={`wardrobe-${option.value}`}
-                                        name="wardrobe"
-                                        value={option.value}
-                                        checked={answers.wardrobe === option.value}
-                                        label={option.label}
-                                        onChange={(wardrobe) => {
-                                            setSubmitError("");
-                                            setAnswers((current) => ({ ...current, wardrobe }));
-                                        }}
-                                    />
+                                    <div className={styles.countChoice} key={option.value}>
+                                        <span>
+                                            <strong>{option.label}</strong>
+                                            <small>
+                                                {answers.wardrobes[option.value] > 0
+                                                    ? `Выбрано: ${answers.wardrobes[option.value]}`
+                                                    : "Не выбран"}
+                                            </small>
+                                        </span>
+                                        <span
+                                            aria-label={`Количество: ${option.label}`}
+                                            className={styles.countButtons}
+                                            role="group"
+                                        >
+                                            {([0, 1, 2] as const).map((count) => {
+                                                const otherWardrobes =
+                                                    wardrobeTotal - answers.wardrobes[option.value];
+                                                const unavailable = otherWardrobes + count > 2;
+                                                return (
+                                                    <button
+                                                        aria-label={`${option.label}: ${count}`}
+                                                        aria-pressed={
+                                                            answers.wardrobes[option.value] ===
+                                                            count
+                                                        }
+                                                        disabled={unavailable}
+                                                        key={count}
+                                                        onClick={() =>
+                                                            updateWardrobeCount(option.value, count)
+                                                        }
+                                                        type="button"
+                                                    >
+                                                        {count}
+                                                    </button>
+                                                );
+                                            })}
+                                        </span>
+                                    </div>
                                 ))}
                             </div>
+                            <p className={styles.wardrobeHint} aria-live="polite">
+                                Шкафов в комплекте: {wardrobeTotal} из 2. Чтобы заменить заполненный
+                                вариант, сначала уменьшите его количество.
+                            </p>
                         </fieldset>
 
                         <fieldset className={`${styles.section} ${styles.additionalSection}`}>
@@ -547,24 +706,47 @@ const Questionnaire: React.FC = () => {
                             )}
                         </fieldset>
 
-                        <div className={styles.mobileSummary}>
-                            <strong>Комплект комнаты</strong>
+                        <div
+                            aria-atomic="true"
+                            aria-live="polite"
+                            className={styles.mobileSummary}
+                            role="status"
+                        >
+                            <strong>Выбрано</strong>
                             <span>{pluralizeFurniture(totalCount)}</span>
                         </div>
 
                         <button
-                            type="button"
+                            aria-busy={isSubmitting}
+                            aria-describedby={
+                                disabledReason
+                                    ? "questionnaire-disabled-reason"
+                                    : submitError
+                                      ? "questionnaire-submit-error"
+                                      : undefined
+                            }
                             className={styles.submitButton}
-                            onClick={submit}
                             disabled={Boolean(disabledReason) || isSubmitting}
+                            onClick={submit}
+                            type="button"
                         >
                             {isSubmitting ? "Открываем планировщик…" : "Перейти к расстановке"}
                         </button>
                         {disabledReason && (
-                            <p className={styles.disabledReason}>{disabledReason}</p>
+                            <p
+                                aria-live="polite"
+                                className={styles.disabledReason}
+                                id="questionnaire-disabled-reason"
+                            >
+                                {disabledReason}
+                            </p>
                         )}
                         {submitError && (
-                            <p className={styles.submitError} role="alert">
+                            <p
+                                className={styles.submitError}
+                                id="questionnaire-submit-error"
+                                role="alert"
+                            >
                                 {submitError}
                             </p>
                         )}
@@ -582,28 +764,63 @@ const Questionnaire: React.FC = () => {
                         )}
                         {selectedFurniture.length > 0 ? (
                             <ol className={styles.selectedList}>
-                                {selectedFurniture.map(({ definition, count, required }) => {
-                                    const asset = getFurnitureAsset(definition.assetKey);
+                                {selectedFurniture.map(({ definition, count, priority }) => {
+                                    const asset = getFurnitureAsset(definition.id);
                                     return (
                                         <li key={definition.id}>
                                             <span className={styles.thumbnail} aria-hidden="true">
-                                                {asset && (
-                                                    // eslint-disable-next-line @next/next/no-img-element
-                                                    <img
-                                                        src={asset.src}
-                                                        alt=""
-                                                        draggable={false}
-                                                        style={{
-                                                            transform: `rotate(${asset.baseRotation}deg)`,
-                                                        }}
+                                                {getFurniturePhoto(definition.id) ? (
+                                                    <FurniturePhoto
+                                                        photo={getFurniturePhoto(definition.id)!}
+                                                        fit
                                                     />
+                                                ) : (
+                                                    asset && (
+                                                        // eslint-disable-next-line @next/next/no-img-element
+                                                        <img
+                                                            src={asset.src}
+                                                            alt=""
+                                                            draggable={false}
+                                                            style={{
+                                                                transform: `rotate(${asset.baseRotation}deg)`,
+                                                            }}
+                                                        />
+                                                    )
                                                 )}
                                             </span>
                                             <span>
                                                 <strong>{definition.shortLabel}</strong>
-                                                <small>
-                                                    {required ? "обязательно" : "желательно"}
-                                                </small>
+                                                <div
+                                                    className={styles.priorityField}
+                                                    role="group"
+                                                    aria-label={`Приоритет: ${definition.label}`}
+                                                >
+                                                    <span>Приоритет</span>
+                                                    <span className={styles.priorityChoices}>
+                                                        {PRIORITY_OPTIONS.map((option) => (
+                                                            <button
+                                                                key={option.value}
+                                                                type="button"
+                                                                aria-pressed={
+                                                                    priority === option.value ||
+                                                                    (priority === "optional" &&
+                                                                        option.value ===
+                                                                            "preferred")
+                                                                }
+                                                                onClick={() => {
+                                                                    setSubmitError("");
+                                                                    setPriorities((current) => ({
+                                                                        ...current,
+                                                                        [definition.id]:
+                                                                            option.value,
+                                                                    }));
+                                                                }}
+                                                            >
+                                                                {option.label}
+                                                            </button>
+                                                        ))}
+                                                    </span>
+                                                </div>
                                             </span>
                                             <output aria-label={`Количество: ${definition.label}`}>
                                                 ×{count}
@@ -620,12 +837,12 @@ const Questionnaire: React.FC = () => {
                             </div>
                         )}
                         <footer>
-                            <span>
-                                <i aria-hidden="true" /> обязательное не удаляется автоматически
-                            </span>
-                            <span>
-                                <i aria-hidden="true" /> желательное можно убрать, если тесно
-                            </span>
+                            {PRIORITY_OPTIONS.map((option) => (
+                                <span key={option.value}>
+                                    <i aria-hidden="true" data-priority={option.value} />
+                                    {option.label}: {option.description}
+                                </span>
+                            ))}
                         </footer>
                     </aside>
                 </div>

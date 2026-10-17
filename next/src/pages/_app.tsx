@@ -1,18 +1,13 @@
 import "@/styles/globals.scss";
 import React, { FC } from "react";
 import type { AppProps } from "next/app";
-import { wrapper } from "@/shared/store/store";
-import { Provider } from "react-redux";
 import { AuthProvider } from "@/contexts/AuthContext";
 
-const App: FC<AppProps> = ({ Component, ...rest }) => {
-    const { store, props } = wrapper.useWrappedStore(rest);
+const App: FC<AppProps> = ({ Component, pageProps }) => {
     return (
-        <Provider store={store}>
-            <AuthProvider>
-                <Component {...props.pageProps} />
-            </AuthProvider>
-        </Provider>
+        <AuthProvider>
+            <Component {...pageProps} />
+        </AuthProvider>
     );
 };
 export default App;

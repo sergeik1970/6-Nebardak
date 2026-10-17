@@ -1,0 +1,515 @@
+[
+    {
+        "id": "wardrobe-large-24bb7b048b7f",
+        "definitionId": "wardrobe-large",
+        "src": "/images/furniture-20260914/wardrobe-large-24bb7b048b7f.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4.png",
+        "sourceSha256": "e3ef6f185946dfccfb6100162c4202b6f6ac20c0fd243005f0a4b01953c8204a",
+        "sha256": "24bb7b048b7f71d70215ec3d3abc6e50d05ca4d036b7fc3ddf8264983ca1a5d5",
+        "encodedBytes": 589758,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 0,
+            "y": 835,
+            "width": 4096,
+            "height": 2426
+        },
+        "rotation": 0,
+        "cutout": true
+    },
+    {
+        "id": "bedside-table-ae4e6fdd7ccb",
+        "definitionId": "bedside-table",
+        "src": "/images/furniture-20260914/bedside-table-ae4e6fdd7ccb.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (1).png",
+        "sourceSha256": "c051ae6b9e0162cfc97bd9f9b9b5e4770b7d3b81f4cb29a081c273bad3f311ae",
+        "sha256": "ae4e6fdd7ccb504d8a10da945a07b35260ba6208446d3c3d08f992706bbfe9c2",
+        "encodedBytes": 246530,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 1093,
+            "y": 1183,
+            "width": 1910,
+            "height": 1745
+        },
+        "rotation": 0,
+        "cutout": true
+    },
+    {
+        "id": "wardrobe-medium-5dad978a1d48",
+        "definitionId": "wardrobe-medium",
+        "src": "/images/furniture-20260914/wardrobe-medium-5dad978a1d48.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (2).png",
+        "sourceSha256": "6bd000d0c56f5b266d2b0f2ff0f168a797cbedcc79edcfbc51e278d5c4b0eada",
+        "sha256": "5dad978a1d48b2bc710e4e348aaeec26e19ba0574f223dd2066d3e1d7dce63ff",
+        "encodedBytes": 457704,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 390,
+            "y": 1081,
+            "width": 3316,
+            "height": 1934
+        },
+        "rotation": 0,
+        "cutout": true
+    },
+    {
+        "id": "sofa-four-left-9974d44148b2",
+        "definitionId": "sofa-four-left",
+        "src": "/images/furniture-20260914/sofa-four-left-9974d44148b2.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (3).png",
+        "sourceSha256": "6c1a98c091c49d97cea9d5f58a68d98d51291b910591238e3b362b5cc28730e8",
+        "sha256": "9974d44148b2de95ec526fe5c974aef27882b5214c52bfafd4580df6ba1ad94f",
+        "encodedBytes": 1054672,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 438,
+            "y": 1037,
+            "width": 3220,
+            "height": 2022
+        },
+        "rotation": 0,
+        "cutout": true
+    },
+    {
+        "id": "single-bed-0d76431207bf",
+        "definitionId": "single-bed",
+        "src": "/images/furniture-20260914/single-bed-0d76431207bf.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (4).png",
+        "sourceSha256": "3eb54b24efe174262708ee9a8afb678fed0c1755bf1851be0c87e7be8d87948b",
+        "sha256": "0d76431207bf0d90173dc7384a67220b470039b510e3e30f515e900141644330",
+        "encodedBytes": 1570996,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 476,
+            "y": 1366,
+            "width": 3330,
+            "height": 2028
+        },
+        "rotation": 270,
+        "cutout": true
+    },
+    {
+        "id": "bookcase-a7b2dfe9123c",
+        "definitionId": "bookcase",
+        "src": "/images/furniture-20260914/bookcase-a7b2dfe9123c.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (5).png",
+        "sourceSha256": "e022ebc580426ac57fe3ca81722b624c0aa8e09d00a3dff181d794084abe2e1a",
+        "sha256": "a7b2dfe9123c905c6319247b7d7b48ff8d3bd9cabaafe444650e0241bd02fd73",
+        "encodedBytes": 195144,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 1048,
+            "y": 971,
+            "width": 2027,
+            "height": 762
+        },
+        "rotation": 0,
+        "cutout": true
+    },
+    {
+        "id": "bookcase-8feaa78d5618",
+        "definitionId": "bookcase",
+        "src": "/images/furniture-20260914/bookcase-8feaa78d5618.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (6).png",
+        "sourceSha256": "c7875ef4bd321f5696150f05a4b3c2205eae880a26278be704feb1a0c7d28a83",
+        "sha256": "8feaa78d5618e7393720a26bd73fc76fb27492f712ba67c7d8679b92eef46dba",
+        "encodedBytes": 203076,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 1045,
+            "y": 969,
+            "width": 2019,
+            "height": 793
+        },
+        "rotation": 0,
+        "cutout": true
+    },
+    {
+        "id": "double-bed-ea7c7d73d59f",
+        "definitionId": "double-bed",
+        "src": "/images/furniture-20260914/double-bed-ea7c7d73d59f.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (7).png",
+        "sourceSha256": "1864b50420e339e21578ceed6bbee64c628a0f4541f427ffccb151a6666ec467",
+        "sha256": "ea7c7d73d59f1ba3e662a57d326e3a2abfe6f020e19fc04b91c122a3f3f04252",
+        "encodedBytes": 865836,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 1320,
+            "y": 692,
+            "width": 2268,
+            "height": 2177
+        },
+        "rotation": 270,
+        "cutout": true
+    },
+    {
+        "id": "dining-square-four-603fcd7f4acf",
+        "definitionId": "dining-square-four",
+        "src": "/images/furniture-20260914/dining-square-four-603fcd7f4acf.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (8).png",
+        "sourceSha256": "8864961b4261b7796bb625612cbd4220a4140183f3248d040100353089cd4149",
+        "sha256": "603fcd7f4acf1c731e7c011377659478f6d957a9b6f7eae23bdf888529361950",
+        "encodedBytes": 816202,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 674,
+            "y": 588,
+            "width": 2982,
+            "height": 3055
+        },
+        "rotation": 0,
+        "cutout": true
+    },
+    {
+        "id": "tv-c86d4300f8f8",
+        "definitionId": "tv",
+        "src": "/images/furniture-20260914/tv-c86d4300f8f8.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (9).png",
+        "sourceSha256": "dac0aa8c95521a00c56d0f5c5b791b2ee2864980c250aac837d43f6e5964e4ae",
+        "sha256": "c86d4300f8f819274cc146432e992f9760c03c8b84f66e95633075703a061ec8",
+        "encodedBytes": 62380,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 375,
+            "y": 1733,
+            "width": 3346,
+            "height": 593
+        },
+        "rotation": 0,
+        "cutout": true
+    },
+    {
+        "id": "dining-oval-six-67fc089c842c",
+        "definitionId": "dining-oval-six",
+        "src": "/images/furniture-20260914/dining-oval-six-67fc089c842c.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (10).png",
+        "sourceSha256": "79830847e09ccca4c1d7846dbe5a7a7a253944dbde8d5a5c923c8edb1f96a602",
+        "sha256": "67fc089c842c0e0d4ce1faa1f555a9b39b64a993df01c3d472fffaed238127b9",
+        "encodedBytes": 681042,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 327,
+            "y": 866,
+            "width": 3436,
+            "height": 2216
+        },
+        "rotation": 0,
+        "cutout": true
+    },
+    {
+        "id": "litter-box-a3e4ee83a2f3",
+        "definitionId": "litter-box",
+        "src": "/images/furniture-20260914/litter-box-a3e4ee83a2f3.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (11).png",
+        "sourceSha256": "6b72ce0238a98e6cf46848d1a26f40a315d886ba797fe968db2f5999bdb0c40e",
+        "sha256": "a3e4ee83a2f36b33c4c1a7053e43f0fe90c9a420b42726e299c65fb719886e93",
+        "encodedBytes": 1507942,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 709,
+            "y": 732,
+            "width": 2836,
+            "height": 2134
+        },
+        "rotation": 0,
+        "cutout": true
+    },
+    {
+        "id": "wardrobe-large-994d7da02c39",
+        "definitionId": "wardrobe-large",
+        "src": "/images/furniture-20260914/wardrobe-large-994d7da02c39.webp",
+        "source": "1.png",
+        "sourceSha256": "5bf8c3e5fc29b12f14ec85c4a9827380e794881cb66bac0a1e019d3bd22c3f50",
+        "sha256": "994d7da02c3966370c23b1897b04346fd7b1b6fbe9630db22142735d9a0e21b0",
+        "encodedBytes": 434616,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 571,
+            "y": 1018,
+            "width": 3008,
+            "height": 1784
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "dining-round-four-b6e563927764",
+        "definitionId": "dining-round-four",
+        "src": "/images/furniture-20260914/dining-round-four-b6e563927764.webp",
+        "source": "2.png",
+        "sourceSha256": "762b4c89d85297f2a2e0b0e837f3915886fee93276ce2b6870bd40c73afed50b",
+        "sha256": "b6e563927764bb742db17740d20621fb81870268d387ddda6d2a83c01f90964f",
+        "encodedBytes": 832598,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 943,
+            "y": 758,
+            "width": 2589,
+            "height": 2617
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "coffee-table-79e00ff372b5",
+        "definitionId": "coffee-table",
+        "src": "/images/furniture-20260914/coffee-table-79e00ff372b5.webp",
+        "source": "3.png",
+        "sourceSha256": "a5e8e26cb0e8393f287a0a77bcec626f24b0fc045306862a107f326d3e7976a2",
+        "sha256": "79e00ff372b50437443dca67036f48415d6a08d099f8d88234bf3d84a9420140",
+        "encodedBytes": 166876,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 960,
+            "y": 460,
+            "width": 2720,
+            "height": 2711
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "tv-console-d306b3b327f8",
+        "definitionId": "tv-console",
+        "src": "/images/furniture-20260914/tv-console-d306b3b327f8.webp",
+        "source": "4.png",
+        "sourceSha256": "f79880e58d9ac18b0b3ee03f6b6a62d1254793193e730f84162237cd3beeb08f",
+        "sha256": "d306b3b327f8ffee9284da68090a392e44f4d821a0386588a53c9d3b9f662a4b",
+        "encodedBytes": 307554,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 742,
+            "y": 1408,
+            "width": 2831,
+            "height": 911
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "aquarium-06e29313f4e6",
+        "definitionId": "aquarium",
+        "src": "/images/furniture-20260914/aquarium-06e29313f4e6.webp",
+        "source": "5.png",
+        "sourceSha256": "e963a44752a8e03c58877f5fb63a5960b2370d8f8609d4eb2c1a67a29db72b97",
+        "sha256": "06e29313f4e65bff09737ca37e64b1b9ccf04213a2daa60a12d99a08b2f36fab",
+        "encodedBytes": 303918,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 838,
+            "y": 1088,
+            "width": 2599,
+            "height": 1598
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "sofa-three-e455ebc717a6",
+        "definitionId": "sofa-three",
+        "src": "/images/furniture-20260914/sofa-three-e455ebc717a6.webp",
+        "source": "6.png",
+        "sourceSha256": "ba7c9278aa1d514390b44134609ac01a700e89563dc2ddbadd81fb51920403a6",
+        "sha256": "e455ebc717a642eb145417b95176563d30a45c4f7dad16f7f98c59efbbdb774d",
+        "encodedBytes": 1020888,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 446,
+            "y": 1193,
+            "width": 3456,
+            "height": 1402
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "bedside-table-f00ef7c618d7",
+        "definitionId": "bedside-table",
+        "src": "/images/furniture-20260914/bedside-table-f00ef7c618d7.webp",
+        "source": "7.png",
+        "sourceSha256": "6173056a350c5d421a710ac019697168b26fa393e2b6b75565fbe16ab0d1c918",
+        "sha256": "f00ef7c618d7015a8bc724bfc140ae482f42daee7e60691bde6c7f2a720ce173",
+        "encodedBytes": 503450,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 1379,
+            "y": 420,
+            "width": 1924,
+            "height": 1362
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "sofa-two-c56763f9e4c1",
+        "definitionId": "sofa-two",
+        "src": "/images/furniture-20260914/sofa-two-c56763f9e4c1.webp",
+        "source": "8.png",
+        "sourceSha256": "2ad37b9c1b315f49f9641eaf37198e07729fd23a450b56a6b123558fe2a15c12",
+        "sha256": "c56763f9e4c124f64909d7785ce9d622a28eaef8fcc8ded7f3ea50067d3856af",
+        "encodedBytes": 1318258,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 452,
+            "y": 729,
+            "width": 3332,
+            "height": 1614
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "desk-e875f94a03a3",
+        "definitionId": "desk",
+        "src": "/images/furniture-20260914/desk-e875f94a03a3.webp",
+        "source": "9.png",
+        "sourceSha256": "95e8cb31d66019746fccacb22d92ab4478b7a4df22adb7b8dbc4fa9a63efeda7",
+        "sha256": "e875f94a03a35d8677e5544a64c105e5381a2c7ab2c8e572e312acd59c0cd8e0",
+        "encodedBytes": 358070,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 714,
+            "y": 437,
+            "width": 2961,
+            "height": 2867
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "coffee-table-rect-bd5c17aa2cc1",
+        "definitionId": "coffee-table-rect",
+        "src": "/images/furniture-20260914/coffee-table-rect-bd5c17aa2cc1.webp",
+        "source": "10.png",
+        "sourceSha256": "91cc685091efc0a1d1d0a3a595ab7c1fffebd870897e92d30ff3ecd6c64a0e26",
+        "sha256": "bd5c17aa2cc1e41f0d9ebfc2b16e2de313bb937e4b82b6b2a4a30fd67b810e04",
+        "encodedBytes": 547106,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 846,
+            "y": 974,
+            "width": 2980,
+            "height": 1636
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "child-bed-03181b0472ad",
+        "definitionId": "child-bed",
+        "src": "/images/furniture-20260914/child-bed-03181b0472ad.webp",
+        "source": "11.png",
+        "sourceSha256": "3c7d78e84aa33f06bbec7d28bf08c6dad2dddbb5b94803953a97e6cb0180f34c",
+        "sha256": "03181b0472adeab5279210ed643d0cf4e8aa26f1588ffbff135327370cec6748",
+        "encodedBytes": 626704,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 667,
+            "y": 960,
+            "width": 3231,
+            "height": 1850
+        },
+        "rotation": 90,
+        "cutout": false
+    },
+    {
+        "id": "pet-bed-2fff1df81a17",
+        "definitionId": "pet-bed",
+        "src": "/images/furniture-20260914/pet-bed-2fff1df81a17.webp",
+        "source": "12.png",
+        "sourceSha256": "dc3f8efa18a8468ae9a288e21ec7840eed83f3434889b9be53d3c06bad3b2a48",
+        "sha256": "2fff1df81a1705f13a0284c7b2a1167b2ba0735f1a0ee6834731efe8260980d8",
+        "encodedBytes": 1674470,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 555,
+            "y": 827,
+            "width": 3261,
+            "height": 2388
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "dining-rect-six-7bc2fbd460ee",
+        "definitionId": "dining-rect-six",
+        "src": "/images/furniture-20260914/dining-rect-six-7bc2fbd460ee.webp",
+        "source": "13.png",
+        "sourceSha256": "108ecd0cb448c0837fa6fa74bcb2fd74e8eb422a8ece40c11fc857a7631e1b88",
+        "sha256": "7bc2fbd460ee35a9aaafb7d06a858552f8f85548ecdf64ad0fb911dcaf521ce1",
+        "encodedBytes": 794922,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 322,
+            "y": 891,
+            "width": 3460,
+            "height": 2172
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "armchair-5b9c4f790026",
+        "definitionId": "armchair",
+        "src": "/images/furniture-20260914/armchair-5b9c4f790026.webp",
+        "source": "14.png",
+        "sourceSha256": "79ac64a89560ab05eb6433c68d5a6240ef4e26f02e6d2c894a833b4a999a7a44",
+        "sha256": "5b9c4f7900268a2230e7881c7f4e8e13809a512a3bc604566cb2b544783487bf",
+        "encodedBytes": 1454262,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 705,
+            "y": 525,
+            "width": 2798,
+            "height": 2514
+        },
+        "rotation": 0,
+        "cutout": false
+    },
+    {
+        "id": "single-bed-cb8bc0804720",
+        "definitionId": "single-bed",
+        "src": "/images/furniture-20260914/single-bed-cb8bc0804720.webp",
+        "source": "1 (1).png",
+        "sourceSha256": "53b2900f931b98cb75de5084dbb437be403a7664e094448c552f4136f9050691",
+        "sha256": "cb8bc0804720bc41eb2da813a4df7a93a856042cd67fe190ea90826d4e226cc0",
+        "encodedBytes": 1403160,
+        "width": 4096,
+        "height": 4096,
+        "bounds": {
+            "x": 703,
+            "y": 781,
+            "width": 3092,
+            "height": 1878
+        },
+        "rotation": 270,
+        "cutout": false
+    }
+]

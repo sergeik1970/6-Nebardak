@@ -1,22 +1,25 @@
-import React, { ButtonHTMLAttributes, ReactElement } from "react";
-import styles from "./index.module.scss";
 import clsx from "clsx";
+import React, { ButtonHTMLAttributes, forwardRef } from "react";
+import styles from "./index.module.scss";
 
-interface IButton extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    types?: "primary";
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+    types?: "primary" | "secondary";
 }
 
-const Button = (props: IButton): ReactElement => {
-    const { children, types = "primary", onClick = () => null } = props;
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+    { children, className, type = "button", types = "primary", ...props },
+    ref,
+) {
     return (
         <button
-            className={clsx(styles["button"], styles[`button-${types}`])}
-            type="button"
-            onClick={onClick}
+            {...props}
+            ref={ref}
+            className={clsx(styles.button, styles[`button-${types}`], className)}
+            type={type}
         >
             {children}
         </button>
     );
-};
+});
 
 export default Button;

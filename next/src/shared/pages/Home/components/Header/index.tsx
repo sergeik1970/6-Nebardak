@@ -22,6 +22,9 @@ const Header: React.FC = () => {
                 <Link href="/" className={styles["header-title"]}>
                     StyleFinder
                 </Link>
+                <h1 className={styles["header-heading"]}>
+                    Подбор стиля, мебели и планировки комнаты
+                </h1>
                 <p className={styles["header-subtitle"]}>Найди свой стиль</p>
             </div>
         </header>

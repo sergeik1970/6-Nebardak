@@ -1,20 +1,24 @@
-import React, { ReactElement, forwardRef } from "react";
-import styles from "./index.module.scss";
 import clsx from "clsx";
+import React, { forwardRef } from "react";
+import styles from "./index.module.scss";
 
-interface IInputText extends React.InputHTMLAttributes<HTMLInputElement> {
-    a?: boolean;
+export interface InputTextProps extends React.InputHTMLAttributes<HTMLInputElement> {
+    invalid?: boolean;
 }
 
-export type Ref = HTMLInputElement;
-
-const InputText = React.forwardRef<Ref, IInputText>((props: IInputText, realRef): ReactElement => {
-    const { className = "", type = "text", ...rest } = props;
+const InputText = forwardRef<HTMLInputElement, InputTextProps>(function InputText(
+    { className, invalid, type = "text", ...props },
+    ref,
+) {
     return (
-        <input {...rest} ref={realRef} className={clsx(styles["input"], className)} type={type} />
+        <input
+            {...props}
+            ref={ref}
+            aria-invalid={invalid || props["aria-invalid"] || undefined}
+            className={clsx(styles.input, invalid && styles.invalid, className)}
+            type={type}
+        />
     );
 });
-
-InputText.displayName = "InputText";
 
 export default InputText;

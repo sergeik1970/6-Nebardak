@@ -1,521 +1,286 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import Navigation from "@/shared/components/Navigation";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Footer from "@/shared/components/Footer";
+import Navigation from "@/shared/components/Navigation";
+import {
+    clearProjectDraftVisualTest,
+    readProjectDraft,
+    updateProjectDraftVisualTest,
+} from "@/shared/lib/furniture-planner/project-draft";
+import {
+    STYLE_PROFILES,
+    VISUAL_TEST_TOTAL_STEPS,
+    answerVisualTest,
+    clearVisualTestSession,
+    createVisualTestSession,
+    getCategoryForSlot,
+    getReachableNextImageUrls,
+    getVisualImagePath,
+    getVisualTestStep,
+    persistVisualTestSession,
+    undoVisualTest,
+    type TestResponse,
+    type VisualTestSession,
+} from "@/shared/lib/visual-preference";
+import {
+    getStyleResultContent,
+    type StyleResultContent,
+} from "@/shared/lib/visual-preference/result-style-content";
+import { restoreVisualTestForTab } from "./storage";
 import styles from "./index.module.scss";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+const RESULT_GALLERY_SWIPE_THRESHOLD = 48;
 
-interface Cat {
-    key: string;
-    folder: string; // relative to /images/Home/test-images/
-    name: string; // image filename prefix (e.g. "Техно" → "Техно 1.png")
-    count: number;
-    label: string;
-}
-
-interface BinaryNode {
-    type: "binary";
-    left: Cat;
-    right: Cat;
-    next: (winner: string) => GameNode;
-}
-
-interface LeafNode {
-    type: "leaf";
-    styles: [Cat, Cat, Cat];
-}
-
-type GameNode = BinaryNode | LeafNode;
-
-// ─── Helpers ───────────────────────────────────────────────────────────────
-
-const c = (key: string, folder: string, name: string, count: number, label: string): Cat => ({
-    key,
-    folder,
-    name,
-    count,
-    label,
-});
-
-const imgPath = (cat: Cat, n: number) =>
-    `/images/Home/test-images/${cat.folder}/${cat.name} ${n}.webp`;
-
-const imageSizes = (slotCount: number) =>
-    slotCount === 3 ? "(max-width: 768px) 100vw, 30vw" : "(max-width: 768px) 100vw, 40vw";
-
-function pickUnused(count: number, used: number[]): number {
-    const all = Array.from({ length: count }, (_, i) => i + 1);
-    const available = all.filter((n) => !used.includes(n));
-    const pool = available.length > 0 ? available : all;
-    return pool[Math.floor(Math.random() * pool.length)];
-}
-
-// ─── Game tree (defined bottom-up) ─────────────────────────────────────────
-
-// Leaf nodes
-
-const LEAF_DIGITAL: LeafNode = {
-    type: "leaf",
-    styles: [
-        c("futorizm", "Футуризм", "Футуризм", 8, "Футуризм"),
-        c("cyberpunk", "Киберпанк", "Киберпанк", 8, "Киберпанк"),
-        c("dopamine", "Дофаминовый", "Дофаминовый", 8, "Дофаминовый"),
-    ],
-};
-
-const LEAF_METAL_STYLE: LeafNode = {
-    type: "leaf",
-    styles: [
-        c("loft", "Лофт", "Лофт", 8, "Лофт"),
-        c("techno_leaf", "Техно", "Техно", 13, "Техно"),
-        c("hightech", "Хайтек", "Хайтек", 8, "Хайтек"),
-    ],
-};
-
-const LEAF_NOSTALGIA: LeafNode = {
-    type: "leaf",
-    styles: [
-        c("retrofuturism", "Ретрофутуризм", "Ретрофутуризм", 8, "Ретрофутуризм"),
-        c("grunge", "Гранж", "Гранж", 8, "Гранж"),
-        c("bauhaus", "Баухаус", "Баухаус", 8, "Баухаус"),
-    ],
-};
-
-const LEAF_ORDER: LeafNode = {
-    type: "leaf",
-    styles: [
-        c("minimalism", "Минимализм", "Минимализм", 8, "Минимализм"),
-        c("eclectic", "Эклектика", "Эклектика", 8, "Эклектика"),
-        c("contemporary", "Контемпорари", "Контемпорари", 8, "Контемпорари"),
-    ],
-};
-
-const LEAF_NORTH: LeafNode = {
-    type: "leaf",
-    styles: [
-        c("russian", "Русский", "Русский", 8, "Русский"),
-        c("scandinavian", "Скандинавский", "Скандинавский", 8, "Скандинавский"),
-        c("country", "Кантри", "Кантри", 8, "Кантри"),
-    ],
-};
-
-const LEAF_SOUTH: LeafNode = {
-    type: "leaf",
-    styles: [
-        c("japanese", "Японский", "Японский", 8, "Японский"),
-        c("provence", "Прованс", "Прованс", 8, "Прованс"),
-        c("mediterranean", "Средиземноморский", "Средиземноморский", 8, "Средиземноморский"),
-    ],
-};
-
-const LEAF_SPIRIT: LeafNode = {
-    type: "leaf",
-    styles: [
-        c("rustic", "Рустик", "Рустик", 8, "Рустик"),
-        c("wabisabi", "Ваби-саби", "Ваби-саби", 8, "Ваби-саби"),
-        c("eco", "Эко", "Эко", 8, "Эко"),
-    ],
-};
-
-const LEAF_BIO: LeafNode = {
-    type: "leaf",
-    styles: [
-        c("biodesign", "Биодизайн", "Биодизайн", 8, "Биодизайн"),
-        c("boho", "Бохо-шик", "Бохо-шик", 8, "Бохо-шик"),
-        c("tropical", "Тропический", "Тропический", 8, "Тропический"),
-    ],
-};
-
-// Level 2 binary nodes
-
-const LEVEL2_MEGAPOLIS: BinaryNode = {
-    type: "binary",
-    left: c("digital", "1.2 Цифровой", "Цифровой", 7, "Цифровой"),
-    right: c("metal", "1.2 Металл", "Металл", 7, "Металл"),
-    next: (w) => (w === "digital" ? LEAF_DIGITAL : LEAF_METAL_STYLE),
-};
-
-const LEVEL2_GORODOK: BinaryNode = {
-    type: "binary",
-    left: c("nostalgia", "1.2 Ностальгия", "Ностальгия", 7, "Ностальгия"),
-    right: c("order", "1.2 Порядок", "Порядок", 7, "Порядок"),
-    next: (w) => (w === "nostalgia" ? LEAF_NOSTALGIA : LEAF_ORDER),
-};
-
-const LEVEL2_ETHNO: BinaryNode = {
-    type: "binary",
-    left: c("north", "2.2 Север", "Север", 7, "Север"),
-    right: c("south", "2.2 Юг", "Юг", 7, "Юг"),
-    next: (w) => (w === "north" ? LEAF_NORTH : LEAF_SOUTH),
-};
-
-const LEVEL2_PLANTS: BinaryNode = {
-    type: "binary",
-    left: c("spirit", "2.2 Дух", "Дух", 7, "Дух"),
-    right: c("biosphere", "2.2 Биосфера", "Биосфера", 7, "Биосфера"),
-    next: (w) => (w === "spirit" ? LEAF_SPIRIT : LEAF_BIO),
-};
-
-// Level 1 binary nodes
-
-const LEVEL1_TECHNO: BinaryNode = {
-    type: "binary",
-    left: c("megapolis", "1.1 Мегаполис", "Мегаполис", 7, "Мегаполис"),
-    right: c("gorodok", "1.1 Городок", "Городок", 7, "Городок"),
-    next: (w) => (w === "megapolis" ? LEVEL2_MEGAPOLIS : LEVEL2_GORODOK),
-};
-
-const LEVEL1_NATURE: BinaryNode = {
-    type: "binary",
-    left: c("ethno", "2.1 Этно", "Этно", 11, "Этно"),
-    right: c("plants", "2.1 Растения", "Растения", 11, "Растения"),
-    next: (w) => (w === "ethno" ? LEVEL2_ETHNO : LEVEL2_PLANTS),
-};
-
-// Root
-
-const ROOT_NODE: BinaryNode = {
-    type: "binary",
-    left: c("techno", "1.0 Техно", "Техно", 13, "Техно"),
-    right: c("natura", "2.0 Природа", "Природа", 13, "Природа"),
-    next: (w) => (w === "techno" ? LEVEL1_TECHNO : LEVEL1_NATURE),
-};
-
-function collectCats(node: GameNode, seen = new Set<string>()): Cat[] {
-    if (node.type === "leaf") {
-        return node.styles.filter((cat) => {
-            if (seen.has(cat.key)) return false;
-            seen.add(cat.key);
-            return true;
-        });
+function createClientSeed(): number {
+    const values = new Uint32Array(1);
+    if (window.crypto?.getRandomValues) {
+        window.crypto.getRandomValues(values);
+        if (values[0] > 0) return values[0];
     }
-
-    const cats = [node.left, node.right].filter((cat) => {
-        if (seen.has(cat.key)) return false;
-        seen.add(cat.key);
-        return true;
-    });
-
-    return [
-        ...cats,
-        ...collectCats(node.next(node.left.key), seen),
-        ...collectCats(node.next(node.right.key), seen),
-    ];
+    return (Date.now() ^ Math.floor(window.performance.now() * 1000)) >>> 0 || 1;
 }
 
-const ALL_TEST_IMAGE_URLS = collectCats(ROOT_NODE).flatMap((cat) =>
-    Array.from({ length: cat.count }, (_, index) => imgPath(cat, index + 1)),
-);
-
-// ─── Game config ───────────────────────────────────────────────────────────
-
-const BINARY_ROUNDS = 5;
-const BINARY_WIN = 3;
-const LEAF_ROUNDS = 5;
-const LEAF_PAIR_SEQUENCE: Array<[number, number]> = [
-    [0, 1],
-    [0, 2],
-    [1, 2],
-    [0, 1],
-    [1, 2],
-];
-
-// ─── Slot / State ──────────────────────────────────────────────────────────
-
-interface Slot {
-    cat: Cat;
-    imgIndex: number;
+interface ResultStyleGalleryProps {
+    content: StyleResultContent;
+    styleLabel: string;
 }
 
-interface GameState {
-    phase: "playing" | "results";
-    node: GameNode;
-    round: number;
-    scores: Record<string, number>;
-    usedImages: Record<string, number[]>; // folder → used indices
-    slots: Slot[];
-    winnerKey?: string;
-}
+const ResultStyleGallery: React.FC<ResultStyleGalleryProps> = ({ content, styleLabel }) => {
+    const [activeRoomIndex, setActiveRoomIndex] = useState(0);
+    const touchStartX = useRef<number | null>(null);
+    const activeRoom = content.rooms[activeRoomIndex];
 
-interface PreparedAdvance {
-    node: GameNode;
-    slots: Slot[];
-}
+    const selectRoom = useCallback(
+        (index: number) => {
+            const roomCount = content.rooms.length;
+            setActiveRoomIndex((index + roomCount) % roomCount);
+        },
+        [content.rooms.length],
+    );
 
-interface PreparedRound {
-    usedAfterRound: Record<string, number[]>;
-    continueSlots?: Slot[];
-    advanceByWinner?: Record<string, PreparedAdvance>;
-}
+    const showPreviousRoom = useCallback(() => {
+        selectRoom(activeRoomIndex - 1);
+    }, [activeRoomIndex, selectRoom]);
 
-function getRoundCats(node: GameNode, round: number): Cat[] {
-    if (node.type === "binary") return [node.left, node.right];
+    const showNextRoom = useCallback(() => {
+        selectRoom(activeRoomIndex + 1);
+    }, [activeRoomIndex, selectRoom]);
 
-    const pair = LEAF_PAIR_SEQUENCE[Math.min(round - 1, LEAF_PAIR_SEQUENCE.length - 1)];
-    return [node.styles[pair[0]], node.styles[pair[1]]];
-}
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+        if (
+            event.altKey ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.target !== event.currentTarget
+        ) {
+            return;
+        }
 
-function buildSlots(node: GameNode, used: Record<string, number[]>, round: number): Slot[] {
-    const cats: Cat[] = getRoundCats(node, round);
-
-    // Shuffle positions so categories don't always appear on the same side
-    for (let i = cats.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [cats[i], cats[j]] = [cats[j], cats[i]];
-    }
-
-    return cats.map((cat) => ({
-        cat,
-        imgIndex: pickUnused(cat.count, used[cat.folder] ?? []),
-    }));
-}
-
-function markSlotsAsUsed(used: Record<string, number[]>, slots: Slot[]): Record<string, number[]> {
-    const nextUsed = { ...used };
-
-    for (const slot of slots) {
-        const arr = nextUsed[slot.cat.folder] ? [...nextUsed[slot.cat.folder]] : [];
-        if (!arr.includes(slot.imgIndex)) arr.push(slot.imgIndex);
-        nextUsed[slot.cat.folder] = arr;
-    }
-
-    return nextUsed;
-}
-
-function prepareRound(
-    node: GameNode,
-    used: Record<string, number[]>,
-    slots: Slot[],
-    round: number,
-): PreparedRound {
-    const usedAfterRound = markSlotsAsUsed(used, slots);
-
-    if (node.type === "binary") {
-        const continueSlots = buildSlots(node, usedAfterRound, round + 1);
-        const leftAdvanceNode = node.next(node.left.key);
-        const rightAdvanceNode = node.next(node.right.key);
-
-        return {
-            usedAfterRound,
-            continueSlots,
-            advanceByWinner: {
-                [node.left.key]: {
-                    node: leftAdvanceNode,
-                    slots: buildSlots(leftAdvanceNode, usedAfterRound, 1),
-                },
-                [node.right.key]: {
-                    node: rightAdvanceNode,
-                    slots: buildSlots(rightAdvanceNode, usedAfterRound, 1),
-                },
-            },
-        };
-    }
-
-    return {
-        usedAfterRound,
-        continueSlots: buildSlots(node, usedAfterRound, round + 1),
+        if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            showPreviousRoom();
+        } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            showNextRoom();
+        }
     };
-}
 
-function initState(): GameState {
-    const node = ROOT_NODE;
-    const used: Record<string, number[]> = {};
-    return {
-        phase: "playing",
-        node,
-        round: 1,
-        scores: {},
-        usedImages: used,
-        slots: buildSlots(node, used, 1),
+    const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+        touchStartX.current = event.touches[0]?.clientX ?? null;
     };
-}
 
-// ─── Component ─────────────────────────────────────────────────────────────
+    const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+        const startX = touchStartX.current;
+        const endX = event.changedTouches[0]?.clientX;
+        touchStartX.current = null;
+
+        if (startX === null || endX === undefined) return;
+        const distance = endX - startX;
+
+        if (Math.abs(distance) < RESULT_GALLERY_SWIPE_THRESHOLD) return;
+        if (distance > 0) showPreviousRoom();
+        else showNextRoom();
+    };
+
+    return (
+        <section
+            className={styles.styleGallery}
+            aria-label={`Визуализации стиля «${styleLabel}»`}
+            aria-roledescription="карусель"
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+        >
+            <div className={styles.galleryHeading}>
+                <div>
+                    <p className={styles.eyebrow}>ВАШ СТИЛЬ В ИНТЕРЬЕРЕ</p>
+                    <h3>Как это направление живёт в разных комнатах</h3>
+                </div>
+                <p className={styles.galleryCount} aria-live="polite" aria-atomic="true">
+                    <strong>{String(activeRoomIndex + 1).padStart(2, "0")}</strong>
+                    <span aria-hidden="true"> / </span>
+                    <span>03</span>
+                </p>
+            </div>
+
+            <div className={styles.galleryStage}>
+                <button
+                    type="button"
+                    className={styles.galleryArrow}
+                    onClick={showPreviousRoom}
+                    aria-label="Показать предыдущую визуализацию"
+                >
+                    <span aria-hidden="true">←</span>
+                </button>
+                <div
+                    id="style-result-visual"
+                    className={styles.galleryViewport}
+                    onTouchStart={handleTouchStart}
+                    onTouchEnd={handleTouchEnd}
+                >
+                    <figure>
+                        <Image
+                            key={activeRoom.imagePath}
+                            src={activeRoom.imagePath}
+                            alt={`${styleLabel}: ${activeRoom.label.toLowerCase()} в выбранном стиле`}
+                            fill
+                            unoptimized
+                            sizes="(max-width: 767px) calc(100vw - 7.5rem), (max-width: 1200px) calc(100vw - 12rem), 960px"
+                        />
+                        <figcaption>
+                            <span>{String(activeRoomIndex + 1).padStart(2, "0")} / 03</span>
+                            <strong>{activeRoom.label}</strong>
+                        </figcaption>
+                    </figure>
+                </div>
+                <button
+                    type="button"
+                    className={styles.galleryArrow}
+                    onClick={showNextRoom}
+                    aria-label="Показать следующую визуализацию"
+                >
+                    <span aria-hidden="true">→</span>
+                </button>
+            </div>
+
+            <ol className={styles.galleryPagination} aria-label="Выбор комнаты">
+                {content.rooms.map((room, index) => (
+                    <li key={room.key}>
+                        <button
+                            type="button"
+                            onClick={() => selectRoom(index)}
+                            aria-controls="style-result-visual"
+                            aria-pressed={index === activeRoomIndex}
+                        >
+                            <span>{String(index + 1).padStart(2, "0")}</span>
+                            <strong>{room.label}</strong>
+                        </button>
+                    </li>
+                ))}
+            </ol>
+        </section>
+    );
+};
 
 const Test: React.FC = () => {
-    const [state, setState] = useState<GameState>(initState);
-    const preloadedUrlsRef = useRef<Set<string>>(new Set());
+    const [session, setSession] = useState<VisualTestSession | null>(null);
+    const preloadedUrls = useRef(new Set<string>());
 
-    const preloadUrl = useCallback((url: string) => {
-        if (preloadedUrlsRef.current.has(url)) return;
+    useEffect(() => {
+        const project = readProjectDraft();
+        const restored = restoreVisualTestForTab({
+            projectSession: project.status === "success" ? project.value.visualTest : undefined,
+            fallbackStorage: window.sessionStorage,
+            saveProjectSession: updateProjectDraftVisualTest,
+        });
 
-        const image = new window.Image();
-        image.decoding = "async";
-        image.src = url;
-        preloadedUrlsRef.current.add(url);
+        setSession(restored ?? createVisualTestSession(createClientSeed()));
     }, []);
 
-    const preparedRound = useMemo(
-        () =>
-            state.phase === "playing"
-                ? prepareRound(state.node, state.usedImages, state.slots, state.round)
-                : null,
-        [state],
+    useEffect(() => {
+        if (!session) return;
+
+        const result = updateProjectDraftVisualTest(session);
+        if (result.status === "success") {
+            clearVisualTestSession(window.sessionStorage);
+        } else {
+            persistVisualTestSession(window.sessionStorage, session);
+        }
+    }, [session]);
+
+    const answer = useCallback((response: TestResponse) => {
+        setSession((current) => (current ? answerVisualTest(current, response) : current));
+    }, []);
+
+    const goBack = useCallback(() => {
+        setSession((current) => (current ? undoVisualTest(current) : current));
+    }, []);
+
+    const restart = useCallback(() => {
+        const confirmed = window.confirm(
+            "Начать тест заново? Текущий прогресс и результат будут удалены.",
+        );
+        if (!confirmed) return;
+
+        clearProjectDraftVisualTest();
+        clearVisualTestSession(window.sessionStorage);
+        preloadedUrls.current.clear();
+        setSession(createVisualTestSession(createClientSeed()));
+    }, []);
+
+    const nextImageUrls = useMemo(
+        () => (session ? getReachableNextImageUrls(session) : []),
+        [session],
     );
 
     useEffect(() => {
-        if (!preparedRound) return;
-
-        const urls = new Set<string>();
-
-        for (const slot of state.slots) {
-            urls.add(imgPath(slot.cat, slot.imgIndex));
+        for (const url of nextImageUrls) {
+            if (preloadedUrls.current.has(url)) continue;
+            const image = new window.Image();
+            image.decoding = "async";
+            image.src = url;
+            preloadedUrls.current.add(url);
         }
-
-        if (preparedRound.continueSlots) {
-            for (const slot of preparedRound.continueSlots) {
-                urls.add(imgPath(slot.cat, slot.imgIndex));
-            }
-        }
-
-        if (preparedRound.advanceByWinner) {
-            for (const advance of Object.values(preparedRound.advanceByWinner)) {
-                for (const slot of advance.slots) {
-                    urls.add(imgPath(slot.cat, slot.imgIndex));
-                }
-            }
-        }
-
-        urls.forEach((url) => {
-            preloadUrl(url);
-        });
-    }, [preparedRound, preloadUrl, state.slots]);
+    }, [nextImageUrls]);
 
     useEffect(() => {
-        let index = 0;
-        let cancelled = false;
+        if (!session || session.phase !== "playing") return;
 
-        const preloadBatch = () => {
-            if (cancelled) return;
+        const handleKeyboard = (event: KeyboardEvent) => {
+            if (event.altKey || event.ctrlKey || event.metaKey) return;
+            const target = event.target as HTMLElement | null;
+            if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
 
-            for (let i = 0; i < 2 && index < ALL_TEST_IMAGE_URLS.length; i++) {
-                preloadUrl(ALL_TEST_IMAGE_URLS[index]);
-                index += 1;
-            }
-
-            if (index < ALL_TEST_IMAGE_URLS.length) {
-                window.setTimeout(preloadBatch, 120);
+            if (event.key === "ArrowLeft" || event.key === "1") {
+                event.preventDefault();
+                answer({ kind: "choose", key: session.slots[0].key });
+            } else if (event.key === "ArrowRight" || event.key === "2") {
+                event.preventDefault();
+                answer({ kind: "choose", key: session.slots[1].key });
+            } else if (event.key.toLowerCase() === "b" || event.key.toLowerCase() === "и") {
+                event.preventDefault();
+                answer({ kind: "both" });
+            } else if (event.key.toLowerCase() === "n" || event.key.toLowerCase() === "т") {
+                event.preventDefault();
+                answer({ kind: "neither" });
+            } else if (event.key === "Backspace" && session.history.length > 0) {
+                event.preventDefault();
+                goBack();
             }
         };
 
-        window.setTimeout(preloadBatch, 600);
+        window.addEventListener("keydown", handleKeyboard);
+        return () => window.removeEventListener("keydown", handleKeyboard);
+    }, [answer, goBack, session]);
 
-        return () => {
-            cancelled = true;
-        };
-    }, [preloadUrl]);
-
-    const handleChoice = useCallback(
-        (chosenKey: string) => {
-            if (!preparedRound) return;
-
-            setState((prev) => {
-                if (prev.phase === "results") return prev;
-                // Update scores
-                const newScores: Record<string, number> = {
-                    ...prev.scores,
-                    [chosenKey]: (prev.scores[chosenKey] ?? 0) + 1,
-                };
-                const newUsed = preparedRound.usedAfterRound;
-
-                if (prev.node.type === "binary") {
-                    const { left, right, next } = prev.node;
-                    const ls = newScores[left.key] ?? 0;
-                    const rs = newScores[right.key] ?? 0;
-                    const done =
-                        ls >= BINARY_WIN || rs >= BINARY_WIN || prev.round >= BINARY_ROUNDS;
-
-                    if (done) {
-                        // Advance to next node
-                        const winnerKey = ls >= rs ? left.key : right.key;
-                        const preparedAdvance = preparedRound.advanceByWinner?.[winnerKey];
-                        const nextNode = preparedAdvance?.node ?? next(winnerKey);
-                        return {
-                            phase: "playing",
-                            node: nextNode,
-                            round: 1,
-                            scores: {},
-                            usedImages: newUsed,
-                            slots: preparedAdvance?.slots ?? buildSlots(nextNode, newUsed, 1),
-                        };
-                    }
-
-                    return {
-                        ...prev,
-                        round: prev.round + 1,
-                        scores: newScores,
-                        usedImages: newUsed,
-                        slots:
-                            preparedRound.continueSlots ??
-                            buildSlots(prev.node, newUsed, prev.round + 1),
-                    };
-                }
-
-                // Leaf (3-way)
-                if (prev.round >= LEAF_ROUNDS) {
-                    const winner = prev.node.styles.reduce((best, s) =>
-                        (newScores[s.key] ?? 0) > (newScores[best.key] ?? 0) ? s : best,
-                    );
-                    return {
-                        ...prev,
-                        phase: "results",
-                        scores: newScores,
-                        usedImages: newUsed,
-                        winnerKey: winner.key,
-                    };
-                }
-
-                return {
-                    ...prev,
-                    round: prev.round + 1,
-                    scores: newScores,
-                    usedImages: newUsed,
-                    slots:
-                        preparedRound.continueSlots ??
-                        buildSlots(prev.node, newUsed, prev.round + 1),
-                };
-            });
-        },
-        [preparedRound],
-    );
-
-    const restart = useCallback(() => setState(initState), []);
-
-    // Results screen
-    if (state.phase === "results" && state.node.type === "leaf") {
-        const winner = state.node.styles.find((s) => s.key === state.winnerKey);
+    if (!session) {
         return (
             <div className={styles.test}>
                 <Navigation />
-                <main className={styles.main}>
-                    <div className={styles.container}>
-                        <div className={styles.results}>
-                            <h1 className={styles.title}>Твой стиль: {winner?.label}</h1>
-                            <p className={styles.resultIntro}>
-                                Стиль найден. Теперь короткая анкета определит, какая мебель нужна
-                                именно вашей комнате.
-                            </p>
-                            {winner && (
-                                <Link
-                                    className={styles.furnitureCta}
-                                    href={{
-                                        pathname: "/questionnaire",
-                                        query: { style: winner.key, styleLabel: winner.label },
-                                    }}
-                                >
-                                    Подобрать мебель для комнаты
-                                </Link>
-                            )}
-                            <button
-                                type="button"
-                                className={styles.restartButton}
-                                onClick={restart}
-                            >
-                                Пройти ещё раз
-                            </button>
-                        </div>
+                <main id="main-content" className={styles.main} tabIndex={-1}>
+                    <div className={styles.loading} role="status" aria-live="polite">
+                        <span className={styles.loadingMark} aria-hidden="true" />
+                        <p>Восстанавливаем ваш выбор…</p>
                     </div>
                 </main>
                 <Footer />
@@ -523,46 +288,222 @@ const Test: React.FC = () => {
         );
     }
 
-    const isLeaf = state.node.type === "leaf";
-    const totalRounds = isLeaf ? LEAF_ROUNDS : BINARY_ROUNDS;
+    if (session.phase === "results" && session.result) {
+        const primary = STYLE_PROFILES[session.result.primaryKey];
+        const nearby = session.result.nearbyKeys.map((key) => STYLE_PROFILES[key]);
+        const styleContent = getStyleResultContent(primary.key);
 
-    const battleLabel = state.slots.map((slot) => slot.cat.label).join(" vs ");
+        return (
+            <div className={styles.test}>
+                <Navigation />
+                <main id="main-content" className={styles.main} tabIndex={-1}>
+                    <section
+                        className={styles.resultHero}
+                        aria-labelledby="result-title"
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                    >
+                        <p className={styles.eyebrow}>ВАШ ВИЗУАЛЬНЫЙ ОРИЕНТИР</p>
+                        <p className={styles.resultOverline}>Основное направление</p>
+                        <h1 id="result-title" className={styles.resultTitle}>
+                            {primary.label}
+                        </h1>
+                        <p className={styles.resultLead}>
+                            Это не диагноз и не окончательный ярлык, а отправная точка. Сочетания,
+                            цвета и предметы можно менять под вашу комнату и привычки.
+                        </p>
+                        <div className={styles.confidence}>
+                            <span>Уверенность результата</span>
+                            <strong>
+                                {session.result.confidenceLabel} · {session.result.confidenceScore}
+                                /100
+                            </strong>
+                        </div>
+                    </section>
+
+                    {styleContent && (
+                        <section
+                            className={styles.styleStory}
+                            aria-labelledby="style-description-title"
+                        >
+                            <div className={styles.styleCopyHeading}>
+                                <p className={styles.eyebrow}>ОПИСАНИЕ СТИЛЯ</p>
+                                <h2 id="style-description-title">{primary.label}</h2>
+                            </div>
+                            <div className={styles.styleDescription}>
+                                {styleContent.description.map((paragraph) => (
+                                    <p key={paragraph}>{paragraph}</p>
+                                ))}
+                            </div>
+                            <ResultStyleGallery content={styleContent} styleLabel={primary.label} />
+                        </section>
+                    )}
+
+                    <div className={styles.resultGrid}>
+                        <section className={styles.resultPanel} aria-labelledby="signals-title">
+                            <p className={styles.panelNumber}>01</p>
+                            <h2 id="signals-title">Что повлияло на результат</h2>
+                            <ul className={styles.signalList}>
+                                {session.result.influences.map((signal) => (
+                                    <li key={signal}>{signal}</li>
+                                ))}
+                            </ul>
+                        </section>
+
+                        <section className={styles.resultPanel} aria-labelledby="palette-title">
+                            <p className={styles.panelNumber}>02</p>
+                            <h2 id="palette-title">Палитра и материалы</h2>
+                            <div className={styles.palette} aria-label="Рекомендуемая палитра">
+                                {session.result.palette.map((color, index) => (
+                                    <span
+                                        key={color}
+                                        className={styles.swatch}
+                                        style={{ backgroundColor: color }}
+                                        title={`Цвет ${index + 1}: ${color}`}
+                                    />
+                                ))}
+                            </div>
+                            <p className={styles.materials}>
+                                {session.result.materials.join(" · ")}
+                            </p>
+                        </section>
+                    </div>
+
+                    <section className={styles.nearbySection} aria-labelledby="nearby-title">
+                        <div>
+                            <p className={styles.eyebrow}>БЛИЗКИЕ НАПРАВЛЕНИЯ</p>
+                            <h2 id="nearby-title">Ваш вкус не обязан помещаться в один стиль</h2>
+                        </div>
+                        <div className={styles.nearbyGrid}>
+                            {nearby.map((profile) => (
+                                <article key={profile.key} className={styles.nearbyCard}>
+                                    <h3>{profile.label}</h3>
+                                    <p>{profile.signals.slice(0, 2).join(" · ")}</p>
+                                </article>
+                            ))}
+                        </div>
+                    </section>
+
+                    <section className={styles.resultActions} aria-label="Следующий шаг">
+                        <div>
+                            <p className={styles.eyebrow}>ДАЛЬШЕ — ПОТРЕБНОСТИ КОМНАТЫ</p>
+                            <h2>Соберём мебель, а затем проверим расстановку</h2>
+                            <p>
+                                Стиль останется подсказкой и не будет подменять ваши реальные
+                                задачи.
+                            </p>
+                        </div>
+                        <div className={styles.actionButtons}>
+                            <Link
+                                className={styles.primaryAction}
+                                href={{
+                                    pathname: "/questionnaire",
+                                    query: { style: primary.key, styleLabel: primary.label },
+                                }}
+                            >
+                                Перейти к мебели
+                            </Link>
+                            <button
+                                type="button"
+                                className={styles.secondaryAction}
+                                onClick={restart}
+                            >
+                                Начать тест заново
+                            </button>
+                        </div>
+                    </section>
+                </main>
+                <Footer />
+            </div>
+        );
+    }
+
+    const step = getVisualTestStep(session);
+    const progress = Math.round((session.answers.length / VISUAL_TEST_TOTAL_STEPS) * 100);
 
     return (
         <div className={styles.test}>
             <Navigation />
-            <main className={styles.main}>
-                <div className={styles.container}>
-                    <h1 className={styles.title}>Выбери понравившееся изображение</h1>
-                    <p className={styles.battle}>{battleLabel}</p>
-                    <p className={styles.progress}>
-                        {state.round} <span>/ {totalRounds}</span>
-                    </p>
-                    <div
-                        className={`${styles.imageBlock} ${
-                            state.slots.length === 3 ? styles.threeWay : ""
-                        }`}
-                    >
-                        {state.slots.map((slot) => (
-                            <button
-                                key={slot.cat.key}
-                                className={styles.imgButton}
-                                onClick={() => handleChoice(slot.cat.key)}
-                            >
-                                <Image
-                                    src={imgPath(slot.cat, slot.imgIndex)}
-                                    alt={slot.cat.label}
-                                    fill
-                                    unoptimized
-                                    sizes={imageSizes(state.slots.length)}
-                                    quality={70}
-                                    priority
-                                    style={{ objectFit: "cover" }}
-                                />
-                            </button>
-                        ))}
+            <main id="main-content" className={styles.main} tabIndex={-1}>
+                <section className={styles.intro} aria-labelledby="test-title">
+                    <div>
+                        <p className={styles.eyebrow}>ВИЗУАЛЬНЫЕ ПРЕДПОЧТЕНИЯ</p>
+                        <h1 id="test-title">Что вам ближе?</h1>
+                        <p>
+                            Выбирайте интуитивно. Это не научная диагностика: тест замечает
+                            визуальные склонности и предлагает направление для дальнейшей работы.
+                        </p>
                     </div>
-                </div>
+                    <button type="button" className={styles.restartTop} onClick={restart}>
+                        Начать заново
+                    </button>
+                </section>
+
+                <section className={styles.testCard} aria-label="Сравнение изображений">
+                    <div className={styles.progressRow}>
+                        <p className={styles.progressText} aria-live="polite" aria-atomic="true">
+                            Сравнение {step} из {VISUAL_TEST_TOTAL_STEPS}
+                        </p>
+                        <span>{progress}% пройдено</span>
+                    </div>
+                    <div
+                        className={styles.progressTrack}
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={VISUAL_TEST_TOTAL_STEPS}
+                        aria-valuenow={session.answers.length}
+                        aria-label="Прогресс теста"
+                    >
+                        <span style={{ width: `${progress}%` }} />
+                    </div>
+
+                    <div className={styles.imageBlock}>
+                        {session.slots.map((slot, index) => {
+                            const categoryDefinition = getCategoryForSlot(session, slot);
+                            const side = index === 0 ? "левое" : "правое";
+                            return (
+                                <button
+                                    key={`${session.nodeId}:${session.round}:${slot.key}`}
+                                    type="button"
+                                    className={styles.imageChoice}
+                                    onClick={() => answer({ kind: "choose", key: slot.key })}
+                                    aria-label={`Выбрать ${side} изображение`}
+                                >
+                                    <Image
+                                        src={getVisualImagePath(
+                                            categoryDefinition,
+                                            slot.imageIndex,
+                                        )}
+                                        alt=""
+                                        fill
+                                        unoptimized
+                                        sizes="(max-width: 767px) 50vw, 50vw"
+                                        priority
+                                    />
+                                    <span aria-hidden="true">{index === 0 ? "А" : "Б"}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <div className={styles.choiceControls}>
+                        <button
+                            type="button"
+                            className={styles.neutralButton}
+                            onClick={() => answer({ kind: "both" })}
+                        >
+                            Нравятся оба
+                        </button>
+                        <button
+                            type="button"
+                            className={styles.neutralButton}
+                            onClick={() => answer({ kind: "neither" })}
+                        >
+                            Не нравится ни один
+                        </button>
+                    </div>
+                </section>
             </main>
             <Footer />
         </div>
