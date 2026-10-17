@@ -10,5 +10,7 @@ export default defineConfig({
     test: {
         include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
         exclude: ["e2e/**", "node_modules/**", ".next/**"],
+        // Solver scenarios take 3–4 s on an idle machine; the 5 s default flakes under CPU load.
+        testTimeout: 20_000,
     },
 });
