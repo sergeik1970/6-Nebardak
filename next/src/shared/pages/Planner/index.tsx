@@ -3203,8 +3203,10 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
         setSelectedInstanceId(null);
         setManualRemovalTarget(null);
         setUnplacedPreferredInstanceIds([]);
+        // A fresh room or questionnaire hand-off has no earlier layout to hide.
+        if (generatedSignature === null) return;
         setResultNotice("Параметры изменены. Прежняя расстановка скрыта — уместите набор заново.");
-    }, [isStale, placements]);
+    }, [generatedSignature, isStale, placements]);
     const displayedPlacements = useMemo(() => {
         if (!shouldShowPlannerLayout({ isStale, result: lastResult })) return [];
         return previewPlacement
@@ -4337,6 +4339,8 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                     getLayoutPreferences(nextSelection, "sleep"),
                 ),
             );
+        } else {
+            setGeneratedSignature(null);
         }
         setRoom(result.value);
         setVariants([]);
