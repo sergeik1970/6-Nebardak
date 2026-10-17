@@ -1,0 +1,47 @@
+{
+    "schemaVersion": 1,
+    "publicRoot": "public/images",
+    "releasePolicy": "all-cleared",
+    "groups": [
+        {
+            "id": "preference-test",
+            "path": "Home/test-images.20260716-v1",
+            "excludePrefixes": [],
+            "expectedFileCount": 318,
+            "contentDigestSha256": "f7464d315223669d4abfecc34354ce6561b46709dfb0a97b1ac7e9fecd39d1bc",
+            "source": "designer-supplied",
+            "rightsStatus": "unverified",
+            "rightsEvidence": "pending"
+        },
+        {
+            "id": "planner-furniture",
+            "path": "planner",
+            "excludePrefixes": [],
+            "expectedFileCount": 15,
+            "contentDigestSha256": "db82c4e3d3eeae056c98c768b48c55d62013e5eb07b79b8bee643dd71e35e2c1",
+            "source": "designer-supplied",
+            "rightsStatus": "unverified",
+            "rightsEvidence": "pending"
+        },
+        {
+            "id": "style-results",
+            "path": "Home/style-results.20260827-v1",
+            "excludePrefixes": [],
+            "expectedFileCount": 72,
+            "contentDigestSha256": "1e06bc68b993ca3f644fa802fb17607b5a0e9c830e2a585fca06cedb0e33c88c",
+            "source": "designer-supplied",
+            "rightsStatus": "unverified",
+            "rightsEvidence": "pending"
+        },
+        {
+            "id": "home-static",
+            "path": "Home",
+            "excludePrefixes": ["Home/test-images.20260716-v1", "Home/style-results.20260827-v1"],
+            "expectedFileCount": 9,
+            "contentDigestSha256": "e05b26b8f2e18fb38066c7228b6ccdcedb4a794674f055eecfc1258f6e182ad0",
+            "source": "designer-supplied",
+            "rightsStatus": "unverified",
+            "rightsEvidence": "pending"
+        }
+    ]
+}

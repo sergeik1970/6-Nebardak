@@ -1,9 +1,14 @@
 node_modules
 .next
 out
+coverage
+playwright-report
+test-results
+e2e
 npm-debug.log
+*.log
 .env*
-!.env
-public/images/Home/test-images/**/*.png
+.DS_Store
+**/.DS_Store
 ._*
 .__*
