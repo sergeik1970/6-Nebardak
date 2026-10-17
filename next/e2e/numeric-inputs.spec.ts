@@ -28,7 +28,7 @@ test("planner number fields allow an empty draft and reject values above their m
     await expect(width).toHaveValue("7,25");
 
     await page.locator("summary").filter({ hasText: "Проёмы и отопление" }).click();
-    const doorOffset = page.locator('input[name="door-offset"]');
+    const doorOffset = page.locator('input[name="door-door-main-offset"]');
     await doorOffset.fill("");
     await expect(doorOffset).toHaveValue("");
     await doorOffset.fill("0");
@@ -58,7 +58,7 @@ test("shrinking a room keeps an oversized opening visible and offers an explicit
     await page.goto("/planner", { waitUntil: "networkidle" });
     await page.locator("summary").filter({ hasText: "Проёмы и отопление" }).click();
 
-    const doorWidth = page.locator('input[name="door-width"]');
+    const doorWidth = page.locator('input[name="door-door-main-width"]');
     await doorWidth.fill("400");
     await doorWidth.blur();
     await expect(doorWidth).toHaveValue("400");
@@ -94,7 +94,7 @@ test("planner edits room items directly and Escape restores an unfinished gestur
     const doorOpening = room.locator('[data-room-opening="door"]').first();
     const windowOffset = page.locator('input[name^="window-"][name$="-offset"]').first();
     const rightWindowOffset = page.locator('input[name^="window-"][name$="-offset"]').nth(1);
-    const doorOffset = page.locator('input[name="door-offset"]');
+    const doorOffset = page.locator('input[name="door-door-main-offset"]');
     const radiator = room.locator('[data-room-obstacle="radiator"]').first();
     const radiatorOffset = page.locator('input[name^="radiator-"][name$="-offset"]').first();
     const initialOffset = await windowOffset.inputValue();

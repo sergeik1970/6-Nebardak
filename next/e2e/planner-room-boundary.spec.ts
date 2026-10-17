@@ -32,7 +32,7 @@ test("planner edits and restores an L-room boundary on desktop and mobile", asyn
     await expect(notch).toHaveAttribute("aria-label", committedLabel ?? "");
 
     await page.locator("summary").filter({ hasText: "Проёмы и отопление" }).click();
-    const doorSegment = page.locator('select[name="door-wall"]');
+    const doorSegment = page.locator('select[name="door-door-main-wall"]');
     await expect(doorSegment).toHaveValue(/segment-/);
     await expect(doorSegment.locator("option")).toHaveCount(6);
     await expect(room.locator('[data-room-opening="door"]')).toBeVisible();
@@ -293,123 +293,12 @@ test("mobile fit recovers a lower long-page board and keeps a 10m custom room vi
         .toBe(0);
 });
 
-test("planner draws and applies a custom orthogonal contour", async ({ page }, testInfo) => {
-    await page.goto("/planner");
-    await page.getByRole("button", { name: "Нарисовать", exact: true }).click();
+test("planner sends custom contour drawing to the dedicated room editor", async ({ page }) => {
+    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page
+        .getByRole("button", { name: "Открыть отдельный редактор контура комнаты", exact: true })
+        .click();
 
-    const room = page.getByRole("group", { name: /План комнаты/ });
-    await expect(room).toHaveAttribute("data-contour-drawing", "true");
-    await expect(page.getByRole("heading", { name: "Чертёж комнаты" })).toBeVisible();
-    await expect(page.getByText("Нарисуйте контур по углам")).toBeVisible();
-    await expect(room.locator("[data-room-segment]")).toHaveCount(0);
-    await expect(room.locator("[data-room-opening]")).toHaveCount(0);
-    await expect(room.locator("[data-furniture-piece]")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Уместить всё", exact: true })).toHaveCount(0);
-    await expect(
-        page.getByText(
-            /Сначала примените или отмените чертёж — расчёт расстановки пока недоступен/,
-        ),
-    ).toBeVisible();
-    const drawSurface = room.getByRole("button", { name: /Добавить вершину контура/ });
-    const box = await drawSurface.boundingBox();
-    expect(box).not.toBeNull();
-    if (!box) throw new Error("Contour drawing surface is not visible");
-
-    if (testInfo.project.name === "mobile-chromium") {
-        await expect(drawSurface).toBeFocused();
-        const panViewport = page.getByLabel("Прокручиваемая область плана");
-        const panBox = await panViewport.boundingBox();
-        expect(panBox).not.toBeNull();
-        if (!panBox) throw new Error("Plan viewport is not visible");
-        expect(box.x).toBeGreaterThanOrEqual(panBox.x);
-        expect(box.x + box.width).toBeLessThanOrEqual(panBox.x + panBox.width + 1);
-    }
-
-    const points = [
-        [0.05, 0.05],
-        [0.6, 0.05],
-        [0.6, 0.4],
-        // Target the 5.70m grid line directly. The drawing field now uses
-        // its full width, so this ratio maps to the intended 50mm snap
-        // without relying on an old padded surface.
-        [0.95, 0.4],
-        [0.95, 0.95],
-    ];
-    for (const [x, y] of points) {
-        await drawSurface.click({
-            position: { x: box.width * x, y: box.height * y },
-            force: true,
-        });
-    }
-    if (testInfo.project.name === "mobile-chromium") {
-        await expect(page.getByText(/X 5700 мм · Y \d+ мм/)).toBeVisible();
-    }
-    await expect(page.getByText(/Точек: 5 из 15/)).toBeVisible();
-    await page.getByRole("button", { name: "Применить контур", exact: true }).click();
-
-    await expect(room).toHaveAttribute("data-contour-drawing", "false");
-    await expect(room).toHaveAttribute("data-room-shape", "orthogonal");
-    await expect(room.locator("[data-room-segment]")).toHaveCount(6);
-    await expect(page.getByText(/Параметры изменены.*уместите набор заново/)).toBeVisible();
-});
-
-test("planner keeps the committed room while a custom contour is cancelled", async ({ page }) => {
-    await page.goto("/planner");
-    const room = page.getByRole("group", { name: /План комнаты/ });
-    await expect(room.locator("[data-room-segment]")).toHaveCount(4);
-
-    await page.getByRole("button", { name: "Нарисовать", exact: true }).click();
-    const drawSurface = room.getByRole("button", { name: /Добавить вершину контура/ });
-    const box = await drawSurface.boundingBox();
-    expect(box).not.toBeNull();
-    if (!box) throw new Error("Contour drawing surface is not visible");
-
-    await drawSurface.click({ position: { x: box.width * 0.15, y: box.height * 0.15 } });
-    await expect(page.getByText(/Точка 1 поставлена/)).toBeVisible();
-    await page.getByRole("button", { name: "Отменить чертёж", exact: true }).click();
-
-    await expect(room).toHaveAttribute("data-contour-drawing", "false");
-    await expect(room.locator("[data-room-segment]")).toHaveCount(4);
-    await expect(page.getByText(/текущая форма комнаты сохранена/)).toBeVisible();
-});
-
-test("planner caps an open contour before it can exceed the supported room vertices", async ({
-    page,
-}) => {
-    await page.goto("/planner");
-    await page.getByRole("button", { name: "Нарисовать", exact: true }).click();
-
-    const room = page.getByRole("group", { name: /План комнаты/ });
-    const drawSurface = room.getByRole("button", { name: /Добавить вершину контура/ });
-    const clickContourPoint = async (x: number, y: number) => {
-        const box = await drawSurface.boundingBox();
-        expect(box).not.toBeNull();
-        if (!box) throw new Error("Contour drawing surface is not visible");
-        await drawSurface.click({ position: { x: box.width * x, y: box.height * y } });
-    };
-
-    const points = [
-        [0.05, 0.05],
-        [0.2, 0.05],
-        [0.2, 0.2],
-        [0.35, 0.2],
-        [0.35, 0.35],
-        [0.5, 0.35],
-        [0.5, 0.5],
-        [0.65, 0.5],
-        [0.65, 0.65],
-        [0.8, 0.65],
-        [0.8, 0.8],
-        [0.95, 0.8],
-        [0.95, 0.95],
-        [0.7, 0.95],
-        [0.7, 0.5],
-    ];
-    for (const [x, y] of points) {
-        await clickContourPoint(x, y);
-    }
-    await clickContourPoint(0.1, 0.5);
-
-    await expect(page.getByText(/максимум 15 точек/)).toBeVisible();
-    await expect(drawSurface).toHaveAccessibleName(/Сейчас точек: 15 из 15/);
+    await expect(page).toHaveURL(/\/planner\/draw$/);
+    await expect(page.locator("[data-draw-room-board='true']")).toBeVisible();
 });

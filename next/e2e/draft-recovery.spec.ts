@@ -47,7 +47,10 @@ test("legacy v1 project is migrated and its inputs remain editable", async ({ pa
 
     await page.goto("/planner", { waitUntil: "networkidle" });
 
-    await expect(page.getByText(/Черновик перенесён в новую версию/)).toBeVisible();
+    // The header and the narrow-screen status row share this text; one of them is shown.
+    await expect(
+        page.getByText(/Черновик перенесён в новую версию/).filter({ visible: true }),
+    ).toBeVisible();
     await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
     await expect(page.getByRole("textbox", { name: "Ширина м" })).toHaveValue("6,2");
     await expect

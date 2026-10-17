@@ -283,6 +283,8 @@ const PLAN_FIT_EDITOR_FRAME_HORIZONTAL_PX = 132;
 const PLAN_FIT_EDITOR_FRAME_VERTICAL_PX = 186;
 const PLAN_FIT_OFFSCREEN_HEIGHT_PX = 280;
 const PLAN_FIT_VIEWPORT_BOTTOM_GAP = 24;
+/** The plan viewport's 1px focus-safe padding on both sides, plus rounding room. */
+const PLAN_FIT_VIEWPORT_INSET_PX = 4;
 // A fit is only meaningful once there is actual space left for the room.  In
 // particular, do not trade the room itself for editor control lanes when the
 // board is temporarily below the browser fold.
@@ -2902,7 +2904,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
         // The viewport has a 1px focus-safe inset on both sides. Keeping that
         // inset out of the fit calculation prevents the browser from exposing
         // a cosmetic horizontal scrollbar at the default 100% zoom.
-        const availableWidth = Math.max(0, viewport.clientWidth - 4);
+        const availableWidth = Math.max(0, viewport.clientWidth - PLAN_FIT_VIEWPORT_INSET_PX);
         const browserViewportHeight = window.visualViewport?.height ?? window.innerHeight;
         const topInsideViewport = Math.max(0, viewportRect.top);
         // On the desktop worktable the drawing viewport is a flex item whose
@@ -2910,7 +2912,11 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
         // edge. Fit against the stricter value: using only window height made
         // the calculated room taller than its own viewport, clipping the
         // bottom wall and direct-edit controls at laptop heights.
-        const constrainedViewportHeight = Math.max(0, viewport.clientHeight - 4);
+        // Read the full client height: the inset is taken from the content
+        // budget below. Subtracting it here shrank a viewport capped by its own
+        // previous fit by 4 px on every scroll event, and scroll anchoring on
+        // long pages turned that into an endless shrinking loop.
+        const constrainedViewportHeight = Math.max(0, viewport.clientHeight);
         // While the board is below the page fold it has no visible height to
         // measure. Give it a practical provisional size until it enters the
         // viewport; once visible, fit must honour the actual remaining height
@@ -2952,7 +2958,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
             : PLAN_FIT_FRAME_VERTICAL_PX;
         const roomWidthForAvailableHeight = Math.max(
             0,
-            (availableHeight - frameVertical) * roomAspect,
+            (availableHeight - PLAN_FIT_VIEWPORT_INSET_PX - frameVertical) * roomAspect,
         );
         const calculatedFittedWidth = Math.max(
             0,
