@@ -90,8 +90,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 6 THEN
-        RAISE EXCEPTION 'expected 6 applied migrations, got %', applied_migrations;
+    IF applied_migrations <> 9 THEN
+        RAISE EXCEPTION 'expected 9 applied migrations, got %', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table still exists';
@@ -149,6 +149,17 @@ BEGIN
     IF NOT has_sequence_privilege(current_user, 'public.user_id_seq', 'USAGE') THEN
         RAISE EXCEPTION 'runtime role cannot allocate user identifiers';
     END IF;
+    IF NOT has_table_privilege(current_user, 'public.planner_observations', 'SELECT') OR
+       NOT has_table_privilege(current_user, 'public.planner_observations', 'INSERT') OR
+       NOT has_table_privilege(current_user, 'public.planner_observations', 'UPDATE') THEN
+        RAISE EXCEPTION 'runtime role lacks required planner-observation rights';
+    END IF;
+    IF has_table_privilege(current_user, 'public.planner_observations', 'DELETE') THEN
+        RAISE EXCEPTION 'runtime role can delete planner observations';
+    END IF;
+    IF NOT has_sequence_privilege(current_user, 'public.planner_observations_id_seq', 'USAGE') THEN
+        RAISE EXCEPTION 'runtime role cannot allocate planner observation identifiers';
+    END IF;
     IF has_sequence_privilege(current_user, 'public.user_id_seq', 'SELECT') OR
        has_sequence_privilege(current_user, 'public.user_id_seq', 'UPDATE') THEN
         RAISE EXCEPTION 'runtime role has broader sequence rights than required';
@@ -189,6 +200,15 @@ VALUES ('runtime-ci@example.test', 'Runtime CI', 'not-a-real-password-hash');
 SELECT "id" FROM "user" WHERE "email" = 'runtime-ci@example.test';
 UPDATE "user" SET "name" = 'Runtime CI updated'
 WHERE "email" = 'runtime-ci@example.test';
+INSERT INTO "planner_observations" (
+    "created_by_user_id", "client_observation_id", "input_snapshot", "layout_snapshot",
+    "input_fingerprint", "layout_fingerprint", "algorithm_version", "catalog_version",
+    "solver_status"
+)
+SELECT "id", 'runtime-ci', '{}', '{}', 'ci', 'ci', 'ci', 'ci', 'solved'
+FROM "user" WHERE "email" = 'runtime-ci@example.test';
+UPDATE "planner_observations" SET "review_verdict" = 'good'
+WHERE "client_observation_id" = 'runtime-ci';
 DELETE FROM "user" WHERE "email" = 'runtime-ci@example.test';
 SQL
 
@@ -211,8 +231,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 6 THEN
-        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 6', applied_migrations;
+    IF applied_migrations <> 9 THEN
+        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 9', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table returned after rollback/reapply';

@@ -53,8 +53,9 @@ AUTH_REGISTRATION_ENABLED=false
 PostgreSQL получает только admin-переменные и не видит JWT. One-off сервис
 `db-roles` создаёт отдельного владельца миграций и runtime-роль без права менять
 схему. Сервис `nest` получает только runtime-реквизиты, `migrate` — только
-миграционные. Runtime-роль получает DML только для таблицы `user` и `USAGE`
-только для `user_id_seq`; доступ к migration history, созданию временных объектов
+миграционные. Runtime-роль получает DML для таблицы `user`, `SELECT`, `INSERT`
+и `UPDATE` для `planner_observations` и `USAGE` только для `user_id_seq` и
+`planner_observations_id_seq`; доступ к migration history, созданию временных объектов
 и остальным sequence отсутствует. Все роли должны иметь разные имена и пароли.
 
 Если база уже существует, `POSTGRES_ADMIN_USER` и

@@ -140,12 +140,22 @@ SELECT format(
 FROM pg_tables
 WHERE schemaname = 'public' AND tablename = 'user' \gexec
 
+-- Planner observations are written and triaged by the API but never deleted
+-- by it; user deletion cascades as the table owner.
+SELECT format(
+    'GRANT SELECT, INSERT, UPDATE ON TABLE %I.%I TO %I',
+    schemaname, tablename, :'app_user'
+)
+FROM pg_tables
+WHERE schemaname = 'public' AND tablename = 'planner_observations' \gexec
+
 SELECT format(
     'GRANT USAGE ON SEQUENCE %I.%I TO %I',
     sequence_schema, sequence_name, :'app_user'
 )
 FROM information_schema.sequences
-WHERE sequence_schema = 'public' AND sequence_name = 'user_id_seq' \gexec
+WHERE sequence_schema = 'public'
+  AND sequence_name IN ('user_id_seq', 'planner_observations_id_seq') \gexec
 
 SELECT format(
     'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON TABLES FROM %I',
