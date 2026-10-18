@@ -9,7 +9,7 @@ services:
     caddy:
         build:
             context: ./infra/caddy
-        image: nebardak-caddy:2.10.2-nonroot
+        image: nebardak-caddy:2.11.7-nonroot
         user: "10001:10001"
         environment:
             SITE_ADDRESS: "stylefinder.online, www.stylefinder.online"

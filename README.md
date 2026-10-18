@@ -18,7 +18,7 @@ Production runbook — в [`DEPLOY.md`](DEPLOY.md).
 ## Локальный запуск
 
 Нужны Node.js 22.23.1, npm и Docker. Контейнерный baseline зафиксирован на
-PostgreSQL 16.14 (Alpine 3.24) и Caddy 2.10.2; обновление версий выполняется
+PostgreSQL 16.15 (Alpine 3.24) и Caddy 2.11.7; обновление версий выполняется
 отдельным проверяемым изменением, а не плавающим major-тегом.
 
 ```bash

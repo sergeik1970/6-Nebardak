@@ -222,7 +222,7 @@ sudo chmod 600 "$BACKUP_FILE"
 sudo test -s "$BACKUP_FILE"
 sudo docker run --rm \
   -v /var/backups/stylefinder:/backup:ro \
-  postgres:16.14-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777 \
+  postgres:16.15-alpine3.24@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea \
   pg_restore --list "/backup/$(basename "$BACKUP_FILE")" | head
 ```
 
@@ -365,7 +365,7 @@ PostgreSQL. Docker healthcheck использует readiness, а внешний
 
 Контейнеры Next, Nest и миграций запускаются от пользователя `node`, без Linux
 capabilities и с `no-new-privileges`. Тонкий образ Caddy наследует закреплённый
-`caddy:2.10.2-alpine` по digest, создаёт непривилегированного пользователя
+`caddy:2.11.7-alpine` по digest, создаёт непривилегированного пользователя
 `10001:10001` и заранее передаёт ему `/data` и `/config`. Поэтому новые именованные
 volumes получают корректного владельца при первом подключении, а ACME-данные и
 конфигурация остаются записываемыми без root. Compose удаляет все capabilities и
