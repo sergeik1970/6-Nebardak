@@ -3045,6 +3045,48 @@ test("a compact closed L contour remains a room but is guarded from planner hand
     );
 });
 
+test("an L contour off the 50 mm lattice is rounded on its way into the planner", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Desktop handoff is covered once");
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+
+    // Freehand 10 mm centre lines: none of the clear-face corners lands on 50 mm.
+    const points = [
+        { x: 4020, y: 3010 },
+        { x: 11980, y: 3010 },
+        { x: 11980, y: 7520 },
+        { x: 8030, y: 7520 },
+        { x: 8030, y: 5010 },
+        { x: 4020, y: 5010 },
+        { x: 4020, y: 3010 },
+    ];
+    for (let index = 0; index < points.length - 1; index += 1) {
+        await dragOnBoardWorld(page, points[index], points[index + 1]);
+    }
+
+    await expect(page.locator("[data-draw-room-planner-eligibility='blocked']")).toHaveCount(0);
+    await expect(page.locator("[data-draw-room-planner-eligibility='rounded']")).toContainText(
+        "округлятся до 5 см",
+    );
+    await page.getByRole("button", { name: "Продолжить с комнатой" }).click();
+    await expect(page).toHaveURL(/\/planner/);
+
+    const width = Number(
+        (await page.locator('input[name="room-width"]').inputValue()).replace(",", "."),
+    );
+    const depth = Number(
+        (await page.locator('input[name="room-depth"]').inputValue()).replace(",", "."),
+    );
+    expect(width).toBeGreaterThanOrEqual(7.8);
+    expect(width).toBeLessThanOrEqual(8.0);
+    expect(depth).toBeGreaterThanOrEqual(4.35);
+    expect(depth).toBeLessThanOrEqual(4.5);
+    expect(Math.round(width * 1000) % 50).toBe(0);
+    expect(Math.round(depth * 1000) % 50).toBe(0);
+    await expect(page.getByRole("group", { name: "Форма комнаты" })).toBeVisible();
+});
+
 test("closed rectangle and L-room keep dimension chains and the area card collision-free", async ({
     page,
 }, testInfo) => {

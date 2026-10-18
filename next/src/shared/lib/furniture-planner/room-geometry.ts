@@ -560,6 +560,107 @@ export const applyRoomGeometry = (room: Room, geometry: RoomGeometry): Room => {
     };
 };
 
+export const PLANNER_GRID_MM = 50;
+
+const snapToPlannerGrid = (value: number): number =>
+    Math.round(value / PLANNER_GRID_MM) * PLANNER_GRID_MM;
+
+export interface PlannerGridSnapResult {
+    room: Room;
+    /** Largest coordinate shift applied to the contour, in millimetres. */
+    maxShift: number;
+}
+
+/**
+ * DrawRoom keeps 10 mm construction coordinates, while the planner's contour
+ * contract, boundary editor and solver work on a 50 mm lattice. Snapping is a
+ * monotone per-axis map, so walls that met or ran collinear still do, and an
+ * opening keeps its absolute position along the moved wall; only its offset is
+ * re-derived and clamped. Opening and radiator widths are product sizes and
+ * stay exact.
+ */
+export const snapRoomToPlannerGrid = (room: Room): PlannerGridSnapResult => {
+    const geometry = canonicalRoomGeometry(room);
+    const vertices =
+        geometry.kind === "orthogonal"
+            ? geometry.vertices.map((vertex) => ({
+                  ...vertex,
+                  x: snapToPlannerGrid(vertex.x),
+                  y: snapToPlannerGrid(vertex.y),
+              }))
+            : null;
+    const maxShift = Math.max(
+        Math.abs(snapToPlannerGrid(room.width) - room.width),
+        Math.abs(snapToPlannerGrid(room.depth) - room.depth),
+        ...(geometry.kind === "orthogonal"
+            ? geometry.vertices.flatMap((vertex) => [
+                  Math.abs(snapToPlannerGrid(vertex.x) - vertex.x),
+                  Math.abs(snapToPlannerGrid(vertex.y) - vertex.y),
+              ])
+            : []),
+    );
+    if (maxShift === 0) return { room, maxShift };
+
+    const snappedRoom: Room = {
+        ...room,
+        width: snapToPlannerGrid(room.width),
+        depth: snapToPlannerGrid(room.depth),
+        ...(vertices ? { geometry: { version: 1, kind: "orthogonal", vertices } } : {}),
+        ...(room.partitions
+            ? {
+                  partitions: room.partitions.map((partition) => ({
+                      ...partition,
+                      start: {
+                          x: snapToPlannerGrid(partition.start.x),
+                          y: snapToPlannerGrid(partition.start.y),
+                      },
+                      end: {
+                          x: snapToPlannerGrid(partition.end.x),
+                          y: snapToPlannerGrid(partition.end.y),
+                      },
+                  })),
+              }
+            : {}),
+    };
+    const reanchor = <
+        T extends {
+            wall: Wall;
+            segmentId?: string;
+            partitionId?: string;
+            offset: number;
+            width: number;
+        },
+    >(
+        item: T,
+    ): T => {
+        const before = getRoomSegment(room, item);
+        const after = getRoomSegment(snappedRoom, item);
+        if (!before || !after || before.length === 0) return item;
+        const along = (segment: RoomBoundarySegment) =>
+            segment.orientation === "horizontal" ? segment.start.x : segment.start.y;
+        const direction =
+            before.orientation === "horizontal"
+                ? Math.sign(before.end.x - before.start.x)
+                : Math.sign(before.end.y - before.start.y);
+        const absoluteStart = along(before) + direction * item.offset;
+        const offset = direction * (absoluteStart - along(after));
+        return {
+            ...item,
+            offset: Math.min(Math.max(0, offset), Math.max(0, after.length - item.width)),
+        };
+    };
+
+    return {
+        room: {
+            ...snappedRoom,
+            doors: room.doors.map(reanchor),
+            windows: room.windows.map(reanchor),
+            ...(room.radiators ? { radiators: room.radiators.map(reanchor) } : {}),
+        },
+        maxShift,
+    };
+};
+
 export const getLRoomNotch = (room: Room): { x: number; y: number } | null => {
     if (room.geometry?.kind !== "orthogonal" || room.geometry.vertices.length !== 6) return null;
     const rightSide = room.geometry.vertices[0]?.x === 0;

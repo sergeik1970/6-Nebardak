@@ -28,6 +28,7 @@ import {
     ensureUniqueDrawWallSegmentIds,
     snapDrawRoomCoordinate,
     snapDrawRoomWallLaneCentre,
+    snapRoomToPlannerGrid,
     validateRoomGeometry,
     resolveDrawWallAnchor,
     moveDrawWallContourSegment,
@@ -1416,16 +1417,33 @@ const getDoorWidthLabelPoint = (
     origin: Point,
     offset: number,
     width: number,
-    door: Pick<DoorOpening, "doorKind" | "swingDirection">,
+    door: Pick<DoorOpening, "doorKind" | "width" | "swingDirection">,
     millimetersPerPixel: number,
+    fontSize: number,
+    wallDimensions: PositionedDimension[],
 ) => {
     const line = openingLine(segment, origin, offset, width);
     const normal = getDoorDimensionNormal(segment, door);
-    const distance = Math.max(180, millimetersPerPixel * 24);
-    return {
-        x: (line.start.x + line.end.x) / 2 + normal.x * distance,
-        y: (line.start.y + line.end.y) / 2 + normal.y * distance,
-    };
+    const centre = { x: (line.start.x + line.end.x) / 2, y: (line.start.y + line.end.y) / 2 };
+    const halfWidth = (formatMillimeters(door.width).length * fontSize * 0.62) / 2;
+    const halfHeight = fontSize * 0.6;
+    // The preferred lane is also where an exterior wall's dimension chain
+    // runs; step outward past any wall dimension the label would sit on.
+    let distance = Math.max(180, millimetersPerPixel * 24);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+        const point = { x: centre.x + normal.x * distance, y: centre.y + normal.y * distance };
+        const bounds = {
+            left: point.x - halfWidth,
+            right: point.x + halfWidth,
+            top: point.y - halfHeight,
+            bottom: point.y + halfHeight,
+        };
+        if (!wallDimensions.some((dimension) => dimensionIntersectsRect(dimension, bounds))) {
+            return point;
+        }
+        distance += fontSize * 1.4;
+    }
+    return { x: centre.x + normal.x * distance, y: centre.y + normal.y * distance };
 };
 
 const getOpeningLocalDimensions = (
@@ -3916,9 +3934,15 @@ const DrawRoom: React.FC = () => {
     // the irreversible handoff into the planner.
     const plannerPreview =
         previews.find((room) => room.wallIds?.includes(plannerBuildingHostId ?? "")) ?? preview;
-    const plannerEligibilityError = useMemo(
-        () => (plannerPreview ? validateRoomGeometry(plannerPreview.room) : null),
+    // The planner works on a 50 mm lattice; a 10 mm drawing is rounded on
+    // handoff instead of blocking it (at most 25 mm per coordinate).
+    const plannerGridSnap = useMemo(
+        () => (plannerPreview ? snapRoomToPlannerGrid(plannerPreview.room) : null),
         [plannerPreview],
+    );
+    const plannerEligibilityError = useMemo(
+        () => (plannerGridSnap ? validateRoomGeometry(plannerGridSnap.room) : null),
+        [plannerGridSnap],
     );
     const plannerEligible = Boolean(preview && !plannerEligibilityError);
     const boundarySegments = useMemo(
@@ -4431,6 +4455,29 @@ const DrawRoom: React.FC = () => {
               }
             : null;
     }, [openingPreview, renderedOpenings, selectedOpening]);
+    // While an opening is placed or selected, its own before/width/after
+    // chain is the measurement of that wall. The wall's persistent outer and
+    // clear totals sit in the same lanes and would print over it.
+    const openingFreeClosedRoomDimensions = useMemo(() => {
+        if (!activeOpeningAnnotation) return displayedClosedRoomDimensions;
+        const { segment, origin } = activeOpeningAnnotation;
+        const vertical = segment.orientation === "vertical";
+        const across = (point: Point) => (vertical ? point.x : point.y);
+        const along = (point: Point) => (vertical ? point.y : point.x);
+        const wallAcross = across(segment.start) + across(origin);
+        const wallFrom = Math.min(along(segment.start), along(segment.end)) + along(origin);
+        const wallTo = Math.max(along(segment.start), along(segment.end)) + along(origin);
+        const reach = clamp(annotationMillimetersPerPixel * 50, 700, 1500);
+        return displayedClosedRoomDimensions.filter((dimension) => {
+            if (dimension.vertical !== vertical) return true;
+            const from = Math.min(along(dimension.dimensionStart), along(dimension.dimensionEnd));
+            const to = Math.max(along(dimension.dimensionStart), along(dimension.dimensionEnd));
+            const sharesSpan = from < wallTo && to > wallFrom;
+            return !(
+                sharesSpan && Math.abs(across(dimension.dimensionStart) - wallAcross) <= reach
+            );
+        });
+    }, [activeOpeningAnnotation, annotationMillimetersPerPixel, displayedClosedRoomDimensions]);
     // Keep the diagonal material legible at every zoom level: 8px between
     // hatches avoids the mobile aliasing that turned narrow vertical walls into
     // a solid fill while keeping the drafting texture restrained on desktop.
@@ -6242,13 +6289,14 @@ const DrawRoom: React.FC = () => {
             );
             return;
         }
-        const validation = plannerEligibilityError ?? validateRoomGeometry(plannerPreview.room);
+        const plannerRoom = plannerGridSnap?.room ?? plannerPreview.room;
+        const validation = plannerEligibilityError ?? validateRoomGeometry(plannerRoom);
         if (validation) {
             setNotice(`Контур замкнут, но ещё не подходит для планировщика: ${validation}`);
             return;
         }
         const furnitureHandoff = prepareDrawFurnitureHandoff(
-            plannerPreview.room,
+            plannerRoom,
             plannerPreview.origin,
             scene.furniture ?? [],
         );
@@ -6257,7 +6305,7 @@ const DrawRoom: React.FC = () => {
             return;
         }
         setSaving(true);
-        const handoff = saveDrawRoomDraft(plannerPreview.room, furnitureHandoff.placements);
+        const handoff = saveDrawRoomDraft(plannerRoom, furnitureHandoff.placements);
         if (handoff.status !== "success") {
             setSaving(false);
             setNotice(
@@ -6266,7 +6314,7 @@ const DrawRoom: React.FC = () => {
             return;
         }
         void router.push("/planner?drawRoom=1");
-    }, [plannerEligibilityError, plannerPreview, router, scene.furniture]);
+    }, [plannerEligibilityError, plannerGridSnap, plannerPreview, router, scene.furniture]);
 
     useEffect(() => {
         const handleKey = (event: KeyboardEvent) => {
@@ -6775,6 +6823,18 @@ const DrawRoom: React.FC = () => {
                             Контур замкнут. Для перехода в планировщик: {plannerEligibilityError}
                         </span>
                     )}
+                    {preview &&
+                        !plannerEligibilityError &&
+                        (plannerGridSnap?.maxShift ?? 0) > 0 &&
+                        activeToolGroup !== "furniture" && (
+                            <span
+                                className={styles.plannerEligibilityWarning}
+                                data-draw-room-planner-eligibility="rounded"
+                            >
+                                В планировщике размеры округлятся до 5 см (сдвиг до{" "}
+                                {plannerGridSnap?.maxShift} мм).
+                            </span>
+                        )}
                 </div>
 
                 <section
@@ -7613,7 +7673,7 @@ const DrawRoom: React.FC = () => {
                                         data-draw-room-architectural-dimensions="true"
                                         aria-hidden="true"
                                     >
-                                        {displayedClosedRoomDimensions.map((dimension) => (
+                                        {openingFreeClosedRoomDimensions.map((dimension) => (
                                             <g
                                                 key={dimension.id}
                                                 data-draw-room-dimension-chain={dimension.kind}
@@ -8356,6 +8416,10 @@ const DrawRoom: React.FC = () => {
                                         door.width,
                                         door,
                                         annotationMillimetersPerPixel,
+                                        dimensionFontSize * 0.78,
+                                        showCommittedDimensions && !ghost
+                                            ? openingFreeClosedRoomDimensions
+                                            : [],
                                     );
                                     return (
                                         <g

@@ -15,8 +15,10 @@ import {
     splitOrthogonalRoomSegment,
     moveLRoomNotch,
     rectInsideRoomGeometry,
+    snapRoomToPlannerGrid,
     validateOrthogonalRoomGeometry,
 } from "./room-geometry";
+import { validateRoomGeometry } from "./geometry";
 import { Room } from "./types";
 
 const rectangularRoom: Room = {
@@ -259,5 +261,72 @@ describe("orthogonal contour validation", () => {
 
         expect(validateOrthogonalRoomGeometry(diagonal)).toContain("ортогональными");
         expect(validateOrthogonalRoomGeometry(reversed)).toContain("часовой стрелке");
+    });
+});
+
+describe("snapRoomToPlannerGrid", () => {
+    // A freehand 10 mm DrawRoom L-contour; none of its vertices sit on 50 mm.
+    const drawnLRoom = (): Room => ({
+        width: 8220,
+        depth: 4300,
+        geometry: {
+            version: 1,
+            kind: "orthogonal",
+            vertices: [
+                { id: "v1", x: 0, y: 0 },
+                { id: "v2", x: 8220, y: 0 },
+                { id: "v3", x: 8220, y: 4300 },
+                { id: "v4", x: 3840, y: 4300 },
+                { id: "v5", x: 3840, y: 2500 },
+                { id: "v6", x: 0, y: 2500 },
+            ],
+        },
+        doors: [
+            {
+                id: "door",
+                wall: "bottom",
+                segmentId: "segment-v3",
+                offset: 400,
+                width: 900,
+                clearanceDepth: 900,
+                hinge: "start",
+            },
+        ],
+        windows: [
+            { id: "window", wall: "top", segmentId: "segment-v1", offset: 3510, width: 1200 },
+        ],
+        radiators: [],
+    });
+
+    it("rounds a 10 mm contour onto the planner lattice and makes it eligible", () => {
+        const room = drawnLRoom();
+        expect(validateRoomGeometry(room)).toMatch(/сетке 50 мм/);
+
+        const { room: snapped, maxShift } = snapRoomToPlannerGrid(room);
+
+        expect(maxShift).toBe(20);
+        expect(snapped.width).toBe(8200);
+        expect(snapped.depth).toBe(4300);
+        expect(validateRoomGeometry(snapped)).toBeNull();
+    });
+
+    it("keeps every opening at its absolute position along a moved wall", () => {
+        const { room: snapped } = snapRoomToPlannerGrid(drawnLRoom());
+
+        expect(snapped.windows[0]).toMatchObject({ segmentId: "segment-v1", offset: 3510 });
+        // The bottom wall runs right to left from x 8220 → 8200; the door
+        // still starts at x 7820, so its offset shrinks by the same 20 mm.
+        expect(snapped.doors[0]).toMatchObject({
+            segmentId: "segment-v3",
+            offset: 380,
+            width: 900,
+        });
+    });
+
+    it("leaves a room already on the lattice untouched", () => {
+        const room = lRoom();
+        const result = snapRoomToPlannerGrid(room);
+        expect(result.maxShift).toBe(0);
+        expect(result.room).toBe(room);
     });
 });
