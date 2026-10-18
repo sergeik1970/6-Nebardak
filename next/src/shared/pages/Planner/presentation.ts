@@ -10,6 +10,8 @@ export const PLANNER_CIRCULAR_FURNITURE_CAVEAT =
 export interface PlannerCaveatApplicability {
     hasDoorOpening?: boolean;
     hasCircularFurniture?: boolean;
+    /** A drawn or edited contour rather than the default rectangle. */
+    hasOrthogonalContour?: boolean;
 }
 
 export const buildPlannerCaveats = (
@@ -18,7 +20,9 @@ export const buildPlannerCaveats = (
     applicability: PlannerCaveatApplicability = {},
 ): string[] => [
     ...resultNotes,
-    "Расстановка рассчитана для прямоугольной комнаты и введённых пользователем размеров.",
+    applicability.hasOrthogonalContour
+        ? "Расстановка рассчитана для заданного контура комнаты и введённых пользователем размеров."
+        : "Расстановка рассчитана для прямоугольной комнаты и введённых пользователем размеров.",
     ...(applicability.hasDoorOpening ? [PLANNER_DOOR_ENVELOPE_CAVEAT] : []),
     ...(applicability.hasCircularFurniture ? [PLANNER_CIRCULAR_FURNITURE_CAVEAT] : []),
     ...(betaEnabled ? ["Планировщик работает в бета-режиме."] : []),

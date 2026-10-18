@@ -66,19 +66,20 @@ test("normal plan stays unobstructed and fits before intentional zoom", async ({
     await expect(page.getByRole("button", { name: "Вместить план по ширине" })).toContainText(
         "125%",
     );
+    // The zoomed board is laid out after the click settles; wait for it to overflow.
     await expect
-        .poll(() => page.evaluate(getScrollMetrics, "[aria-label='Прокручиваемая область плана']"))
-        .toMatchObject({ scrollWidth: expect.any(Number) });
-    const zoomMetrics = await page.evaluate(
-        getScrollMetrics,
-        "[aria-label='Прокручиваемая область плана']",
-    );
-    expect(zoomMetrics).not.toBeNull();
-    if (!zoomMetrics) throw new Error("Plan viewport is unavailable after zoom");
-    expect(
-        zoomMetrics.scrollWidth > zoomMetrics.clientWidth ||
-            zoomMetrics.scrollHeight > zoomMetrics.clientHeight,
-    ).toBe(true);
+        .poll(async () => {
+            const metrics = await page.evaluate(
+                getScrollMetrics,
+                "[aria-label='Прокручиваемая область плана']",
+            );
+            if (!metrics) throw new Error("Plan viewport is unavailable after zoom");
+            return (
+                metrics.scrollWidth > metrics.clientWidth ||
+                metrics.scrollHeight > metrics.clientHeight
+            );
+        })
+        .toBe(true);
 
     await page.getByRole("button", { name: "Вместить план по ширине" }).click();
     await expect(viewport).toHaveAttribute("data-plan-zoom", "fit");

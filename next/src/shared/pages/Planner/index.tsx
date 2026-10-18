@@ -2567,13 +2567,12 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
                                 )}
                             {selected && (
                                 <>
+                                    {/* One line: a separate rotation badge collided with
+                                        a wrapped label on shallow items. */}
                                     <span className={styles.furnitureLabel}>
-                                        {definition.shortLabel}
+                                        {definition.shortLabel} · {placement.rotation}°
                                     </span>
                                     <span className={styles.grabCue} aria-hidden="true" />
-                                    <span className={styles.rotationMark} aria-hidden="true">
-                                        {placement.rotation}°
-                                    </span>
                                 </>
                             )}
                         </button>
@@ -3165,6 +3164,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
             generatedAt,
             caveats: buildPlannerCaveats(resultNotes, isBetaBadgeEnabled, {
                 hasDoorOpening: room.doors.length > 0,
+                hasOrthogonalContour: room.geometry?.kind === "orthogonal",
                 hasCircularFurniture: placements.some(
                     ({ definitionId }) => getFurniture(definitionId).body.kind === "circle",
                 ),
@@ -7685,8 +7685,11 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                             {resultSpecification.room.depth} мм
                                         </strong>
                                         <small>
-                                            {formatArea(resultSpecification.room)} м² ·
-                                            прямоугольная
+                                            {formatArea(resultSpecification.room)} м² ·{" "}
+                                            {resultSpecification.room.geometry?.kind ===
+                                            "orthogonal"
+                                                ? "сложный контур"
+                                                : "прямоугольная"}
                                         </small>
                                     </div>
                                     <ul aria-label="Проёмы и отопление">

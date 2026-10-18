@@ -56,4 +56,13 @@ describe("planner presentation caveats", () => {
         expect(caveats).toContain("Планировщик работает в бета-режиме.");
         expect(caveats.at(-1)).toBe(PLANNER_MEASUREMENT_DISCLAIMER);
     });
+
+    it("names the room shape the plan was computed for", () => {
+        const rectangle = buildPlannerCaveats([], false).join(" ");
+        const contour = buildPlannerCaveats([], false, { hasOrthogonalContour: true }).join(" ");
+
+        expect(rectangle).toMatch(/прямоугольной комнаты/);
+        expect(contour).toMatch(/заданного контура/);
+        expect(contour).not.toMatch(/прямоугольной/);
+    });
 });
