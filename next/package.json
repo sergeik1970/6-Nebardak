@@ -18,7 +18,7 @@
         "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings=0",
         "planner:lab:check": "PLANNER_LAB_WRITE_REPORT=1 vitest run src/shared/lib/furniture-planner/room-lab.test.ts --reporter=verbose",
         "planner:lab:render": "PLANNER_LAB_WRITE_REPORT=1 PLANNER_LAB_RENDER=1 vitest run src/shared/lib/furniture-planner/room-lab.test.ts --reporter=verbose",
-        "typecheck": "tsc --noEmit --incremental false",
+        "typecheck": "next typegen && tsc --noEmit --incremental false",
         "test": "vitest run",
         "test:watch": "vitest",
         "test:e2e": "playwright test",
