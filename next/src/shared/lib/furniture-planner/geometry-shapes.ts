@@ -87,7 +87,35 @@ export const getBounds = (rects: Rect[]): Rect => {
     return { x: minX, y: minY, width: maxX - minX, depth: maxY - minY };
 };
 
+/**
+ * The solver asks for the same definition/rotation/size thousands of times per
+ * search, so results are cached per definition object. Definitions are never
+ * mutated and callers treat the returned geometry as read-only.
+ */
+const rotatedGeometryCache = new WeakMap<FurnitureDefinition, Map<string, RotatedGeometry>>();
+
 export const getRotatedGeometry = (
+    definition: FurnitureDefinition,
+    rotation: Rotation,
+    size?: Pick<Placement, "width" | "depth">,
+): RotatedGeometry => {
+    const resized = size?.width !== undefined && size.depth !== undefined;
+    const key = resized ? `${rotation}:${size.width}x${size.depth}` : `${rotation}`;
+    let byKey = rotatedGeometryCache.get(definition);
+    if (!byKey) {
+        byKey = new Map();
+        rotatedGeometryCache.set(definition, byKey);
+    }
+    let geometry = byKey.get(key);
+    if (!geometry) {
+        geometry = computeRotatedGeometry(definition, rotation, resized ? size : undefined);
+        byKey.set(key, geometry);
+    }
+
+    return geometry;
+};
+
+const computeRotatedGeometry = (
     definition: FurnitureDefinition,
     rotation: Rotation,
     size?: Pick<Placement, "width" | "depth">,
