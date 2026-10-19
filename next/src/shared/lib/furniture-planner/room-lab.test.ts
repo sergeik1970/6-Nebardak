@@ -36,7 +36,7 @@ describe("planner room lab", () => {
             const result = evaluateRoomLabCase(roomCase);
             results.push(result);
             expect(result.passed, describeFailure(result)).toBe(true);
-        }, 30_000);
+        });
     });
 });
 

@@ -75,7 +75,7 @@ describe("preferred placement fallback", () => {
         );
         expect(result.result.placements.some((item) => item.definitionId === "desk")).toBe(true);
         expect(result.unplacedInstances).toEqual([]);
-    }, 10_000);
+    });
 
     it("keeps a dense all-required questionnaire usable when the variants search reaches its limit", () => {
         const selection: FurnitureSelection = {
@@ -104,5 +104,5 @@ describe("preferred placement fallback", () => {
         expect(fallback.result.status).toBe("success");
         expect(fallback.result.placements).toHaveLength(denseInstances.length);
         expect(fallback.unplacedInstances).toEqual([]);
-    }, 30_000);
+    });
 });

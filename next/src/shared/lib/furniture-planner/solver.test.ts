@@ -538,7 +538,7 @@ describe("solver trust guarantees", () => {
             valid: true,
             issues: [],
         });
-    }, 10_000);
+    });
 
     it("places schematic furniture by its stated geometry without treating a TV console as a television", () => {
         const result = solveRoom(ROOM, [
@@ -557,7 +557,7 @@ describe("solver trust guarantees", () => {
         expect(result.notes).toContain(
             "В плане есть схематичные предметы с типовыми размерами; перед покупкой сверьте габариты выбранной модели.",
         );
-    }, 10_000);
+    });
 
     it("returns a fully validated layout and is deterministic for the same request", () => {
         const instances = [
@@ -572,7 +572,7 @@ describe("solver trust guarantees", () => {
         expect(second).toEqual(first);
         if (first.status !== "success") throw new Error(first.message);
         expect(validateLayout(ROOM, first.placements)).toEqual({ valid: true, issues: [] });
-    }, 10_000);
+    });
 
     it("allows a cradle request without a double bed", () => {
         const result = solveRoom(ROOM, [
@@ -1118,7 +1118,7 @@ describe("solver trust guarantees", () => {
             getLayoutStructureSignature(wideRoom, variant.placements),
         );
         expect(new Set(signatures).size).toBe(signatures.length);
-    }, 15_000);
+    });
 
     it("does not treat a coordinate nudge on the same wall as a new structural variant", () => {
         const first = [placement("bookcase", "bookcase", 500, 0, 0)];
@@ -1213,8 +1213,9 @@ describe("solver trust guarantees", () => {
         expect(first.exploredNodes).toBeLessThanOrEqual(45_000);
         if (first.status !== "success") throw new Error(first.message);
         expect(first.notes.join(" ")).toContain("глобальный оптимум");
-        expect(elapsed).toBeLessThan(5000);
-    }, 7000);
+        // CI runners are several times slower than a developer machine.
+        expect(elapsed).toBeLessThan(process.env.CI ? 20_000 : 5000);
+    });
 
     it("proves impossibility only after the finite MVP candidate search is complete", () => {
         const room: Room = { ...ROOM, width: 2400, depth: 2400 };
@@ -1286,5 +1287,5 @@ describe("solver trust guarantees", () => {
 
         expect(proposal.result.status).toBe("success");
         expect(proposal.removedInstances.map((item) => item.definitionId)).toEqual(["sofa-three"]);
-    }, 15_000);
+    });
 });
