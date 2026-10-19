@@ -1,0 +1,17 @@
+{
+    "name": "StyleFinder",
+    "short_name": "StyleFinder",
+    "description": "Тест визуальных предпочтений, подбор мебели и проверка планировки комнаты",
+    "lang": "ru",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#f5f0e6",
+    "theme_color": "#f28c00",
+    "icons": [
+        {
+            "src": "/favicon.ico",
+            "sizes": "any",
+            "type": "image/x-icon"
+        }
+    ]
+}

@@ -1,0 +1,44 @@
+:root {
+    color-scheme: light;
+
+    --font-primary: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+        Arial, sans-serif;
+    --font-brand: "Ostrovsky", "DaMiOne", cursive, serif;
+    --font-display: "DaMiOne", cursive, serif;
+
+    --sf-color-brand: #bd590c;
+    --sf-color-brand-hover: #9c4808;
+    --sf-color-brand-active: #7d3906;
+    --sf-color-brand-soft: #fdeedd;
+    --sf-color-ink: #292824;
+    --sf-color-ink-muted: #655f56;
+    --sf-color-paper: #fbf8f1;
+    --sf-color-surface: #fffdfa;
+    --sf-color-surface-strong: #f0e9dc;
+    --sf-color-canvas: #f3eee4;
+    --sf-color-line: #c7baa8;
+    --sf-color-line-strong: #8e8171;
+    --sf-color-focus: var(--sf-color-brand-hover);
+    --sf-color-success: #17663b;
+    --sf-color-success-surface: #e9f6ee;
+    --sf-color-warning: #7a4700;
+    --sf-color-warning-surface: #fff2d8;
+    --sf-color-error: #a52b24;
+    --sf-color-error-surface: #fff0ee;
+
+    --sf-space-1: 4px;
+    --sf-space-2: 8px;
+    --sf-space-3: 12px;
+    --sf-space-4: 16px;
+    --sf-space-5: 24px;
+    --sf-space-6: 32px;
+    --sf-space-7: 48px;
+
+    --sf-radius-sm: 4px;
+    --sf-radius-md: 8px;
+    --sf-radius-lg: 16px;
+    --sf-control-height: 44px;
+    --sf-shadow-sm: 0 2px 8px rgb(41 40 36 / 10%);
+    --sf-shadow-md: 0 12px 32px rgb(41 40 36 / 16%);
+    --sf-focus-ring: 0 0 0 3px rgb(189 89 12 / 28%);
+}

@@ -1,28 +1,49 @@
-FROM node:20-alpine as deps
+FROM node:22.23.1-alpine3.24@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS deps
 WORKDIR /app
-COPY ./package.json ./package.json
-COPY ./package-lock.json ./package-lock.json
+COPY package.json package-lock.json ./
 
 RUN npm ci
 
-FROM node:20-alpine as builder
+FROM node:22.23.1-alpine3.24@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS builder
 WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-COPY --from=deps /app/node_modules ./node_modules
+ENV NEXT_TELEMETRY_DISABLED=1
+
+ARG NEXT_PUBLIC_API_URL=/api
+ARG NEXT_PUBLIC_AUTH_ENABLED=false
+ARG NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED=false
+ARG NEXT_PUBLIC_BETA_BADGE_ENABLED=true
+
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_AUTH_ENABLED=${NEXT_PUBLIC_AUTH_ENABLED}
+ENV NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED=${NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED}
+ENV NEXT_PUBLIC_BETA_BADGE_ENABLED=${NEXT_PUBLIC_BETA_BADGE_ENABLED}
 
 RUN npm run build
 
-FROM node:20-alpine as runner
+FROM node:22.23.1-alpine3.24@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
-COPY --from=deps /app/package.json ./package.json
-COPY --from=deps /app/package-lock.json ./package-lock.json
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
+# The runtime starts with `node` only. Drop the bundled package managers
+# (their own dependency trees carry scanner findings) and take Alpine's
+# current OpenSSL patch release.
+RUN apk upgrade --no-cache libcrypto3 libssl3 \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+        /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+        /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-v*
+
+COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start"]
+USER node
+
+CMD ["node", "server.js"]

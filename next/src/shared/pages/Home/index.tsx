@@ -10,9 +10,11 @@ const Home: React.FC = () => {
     return (
         <div className={styles.home}>
             <Navigation />
-            <Header />
-            <About />
-            <HeroTest />
+            <main id="main-content" tabIndex={-1}>
+                <Header />
+                <About />
+                <HeroTest />
+            </main>
             <Footer />
         </div>
     );

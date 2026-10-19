@@ -1,18 +1,25 @@
+import "./src/config/load-environment";
 import { DataSource } from "typeorm";
+import { join } from "node:path";
+import { getRuntimeConfig } from "./src/config/runtime.config";
+
+const runtime = getRuntimeConfig();
+const usesTypeScriptSources = runtime.nodeEnv !== "production";
+const sourceExtension = usesTypeScriptSources ? "ts" : "js";
 
 export default new DataSource({
     type: "postgres",
-    host:
-        process.env.DB_HOST ||
-        (process.env.NODE_ENV === "dev" ? "127.0.0.1" : "db"),
-    port: Number(process.env.DB_PORT) || 5432,
-    username: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    entities: [
-        process.env.NODE_ENV === "dev"
-            ? "./src/entities/**/*.ts"
-            : "./dist/src/entities/**/*.js",
-    ],
-    migrations: ["./migrations/**/*.ts"],
+    host: runtime.database.host,
+    port: runtime.database.port,
+    username: runtime.database.username,
+    password: runtime.database.password,
+    database: runtime.database.name,
+    entities: [join(__dirname, `src/entities/**/*.${sourceExtension}`)],
+    migrations: [join(__dirname, `migrations/**/*.${sourceExtension}`)],
+    extra: {
+        statement_timeout: runtime.database.statementTimeoutMs,
+        query_timeout: runtime.database.queryTimeoutMs,
+        connectionTimeoutMillis: runtime.database.connectionTimeoutMs,
+        application_name: "stylefinder-migrator",
+    },
 });

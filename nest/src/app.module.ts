@@ -1,28 +1,53 @@
 import { Module } from "@nestjs/common";
-import { DealsModule } from "./modules/DealsModule/deal.module";
+import { APP_GUARD } from "@nestjs/core";
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AuthModule } from "./modules/AuthModule/auth.module";
+import { PlannerObservationsModule } from "./modules/PlannerObservationsModule/planner-observations.module";
+import { AdminPlannerObservationsModule } from "./modules/AdminPlannerObservationsModule/admin-planner-observations.module";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { AppController } from "./controllers/AppController/app.controller";
-import { AppService } from "./services/AppService/app.service";
+import { HealthController } from "./controllers/HealthController/health.controller";
+import { OperationalLogger } from "./services/OperationalLogger/operational-logger.service";
+import { getRateLimit, getRuntimeConfig } from "./config/runtime.config";
+
+const runtime = getRuntimeConfig();
 
 @Module({
     imports: [
         TypeOrmModule.forRoot({
             type: "postgres",
-            host:
-                process.env.DB_HOST ||
-                (process.env.NODE_ENV == "dev" ? "127.0.0.1" : "db"),
-            port: Number(process.env.DB_PORT) || 5432,
-            username: process.env.DB_USERNAME,
-            password: process.env.DB_PASSWORD,
-            database: process.env.DB_NAME,
+            host: runtime.database.host,
+            port: runtime.database.port,
+            username: runtime.database.username,
+            password: runtime.database.password,
+            database: runtime.database.name,
             autoLoadEntities: true,
-            synchronize: process.env.NODE_ENV === "dev",
+            synchronize:
+                runtime.nodeEnv === "development" || runtime.nodeEnv === "dev",
+            extra: {
+                statement_timeout: runtime.database.statementTimeoutMs,
+                query_timeout: runtime.database.queryTimeoutMs,
+                connectionTimeoutMillis: runtime.database.connectionTimeoutMs,
+                application_name: "stylefinder-api",
+            },
         }),
-        DealsModule,
+        ThrottlerModule.forRoot([
+            {
+                ttl: getRateLimit("RATE_LIMIT_TTL_MS", 60_000),
+                limit: getRateLimit("RATE_LIMIT_REQUESTS", 120),
+                blockDuration: 60_000,
+            },
+        ]),
         AuthModule,
+        PlannerObservationsModule,
+        AdminPlannerObservationsModule,
     ],
-    controllers: [AppController],
-    providers: [AppService],
+    controllers: [HealthController],
+    providers: [
+        OperationalLogger,
+        {
+            provide: APP_GUARD,
+            useClass: ThrottlerGuard,
+        },
+    ],
 })
 export class AppModule {}

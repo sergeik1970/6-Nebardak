@@ -13,7 +13,8 @@ const Header: React.FC = () => {
                         src="/images/Home/houses-mobile.jpg"
                         alt=""
                         className={styles["header-image"]}
-                        fetchPriority="high"
+                        // React 18.2 only forwards the lowercase HTML attribute.
+                        {...{ fetchpriority: "high" }}
                         decoding="async"
                     />
                 </picture>
@@ -22,6 +23,9 @@ const Header: React.FC = () => {
                 <Link href="/" className={styles["header-title"]}>
                     StyleFinder
                 </Link>
+                <h1 className={styles["header-heading"]}>
+                    Подбор стиля, мебели и планировки комнаты
+                </h1>
                 <p className={styles["header-subtitle"]}>Найди свой стиль</p>
             </div>
         </header>

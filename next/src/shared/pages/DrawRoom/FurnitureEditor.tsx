@@ -1,0 +1,767 @@
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+    FURNITURE_CATALOG,
+    getRotatedGeometry,
+    type DrawWallSegment,
+    type Rotation,
+    type Rect,
+} from "@/shared/lib/furniture-planner";
+import {
+    furnitureDefinition,
+    furnitureError,
+    furnitureConflicts,
+    furnitureWallDistances,
+    furnitureGeometry,
+    rotatedFurnitureCandidates,
+    type DrawFurniture,
+} from "./furniture";
+import styles from "./furniture.module.scss";
+import FurniturePhoto from "@/shared/components/FurniturePhoto";
+import {
+    getFurniturePhoto,
+    getFurniturePhotos,
+} from "@/shared/lib/furniture-planner/furniture-photos";
+import { isSchematicFurnitureSource } from "@/shared/lib/furniture-planner/catalog";
+
+const categories = {
+    sleep: "Кровати",
+    living: "Гостиная",
+    storage: "Хранение",
+    work: "Рабочее место",
+    media: "ТВ",
+    children: "Детская",
+};
+const snap = (n: number) => Math.round(n / 10) * 10;
+export default function FurnitureEditor({
+    boardRef,
+    active,
+    selectable,
+    onActivate,
+    items,
+    walls,
+    thickness,
+    doorObstacles,
+    onChange,
+}: {
+    boardRef: React.RefObject<SVGSVGElement>;
+    active: boolean;
+    selectable: boolean;
+    onActivate: () => void;
+    items: DrawFurniture[];
+    walls: DrawWallSegment[];
+    thickness: number;
+    doorObstacles: readonly Rect[];
+    onChange: (items: DrawFurniture[]) => void;
+}) {
+    const [board, setBoard] = useState<SVGSVGElement | null>(null);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [pending, setPending] = useState<DrawFurniture | null>(null);
+    const [reposition, setReposition] = useState<DrawFurniture | null>(null);
+    const [preview, setPreview] = useState<DrawFurniture | null>(null);
+    const [query, setQuery] = useState("");
+    const [message, setMessage] = useState("");
+    const drag = useRef<{ initial: DrawFurniture; start: DOMPoint; last: DrawFurniture } | null>(
+        null,
+    );
+    const storedSelected = items.find((item) => item.id === selectedId);
+    const selected = storedSelected && reposition?.id === selectedId ? reposition : storedSelected;
+    useEffect(() => {
+        setReposition(null);
+    }, [selectedId, active]);
+    const editing = pending ?? selected;
+    useEffect(() => {
+        setBoard(boardRef.current);
+    }, [boardRef]);
+    useEffect(() => {
+        if (!active) {
+            setSelectedId(null);
+            setReposition(null);
+            setPending(null);
+            setPreview(null);
+            setMessage("");
+            drag.current = null;
+        }
+    }, [active]);
+    useEffect(() => {
+        if (!board || !active || pending) return;
+        const clearSelection = (event: PointerEvent) => {
+            if (event.button !== 0 || drag.current) return;
+            const target = event.target;
+            if (target instanceof Element && target.closest("[data-draw-furniture]")) return;
+            setSelectedId(null);
+            setReposition(null);
+            setPreview(null);
+            setMessage("");
+        };
+        board.addEventListener("pointerdown", clearSelection, true);
+        return () => board.removeEventListener("pointerdown", clearSelection, true);
+    }, [board, active, pending]);
+    const point = (clientX: number, clientY: number) => {
+        const matrix = board?.getScreenCTM();
+        return matrix ? new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse()) : null;
+    };
+    const error = (item: DrawFurniture) =>
+        furnitureError(item, items, walls, thickness, doorObstacles);
+    const update = (item: DrawFurniture) => {
+        if (items.find((old) => old.id === item.id)?.locked) {
+            setMessage("Предмет закреплён. Разблокируйте его для редактирования.");
+            return;
+        }
+        const reason = error(item);
+        if (reason) {
+            setMessage(`Это положение не сохранено. ${reason}`);
+            if (reposition) setReposition(item);
+            return;
+        }
+        setReposition(null);
+        onChange(items.map((old) => (old.id === item.id ? item : old)));
+        setMessage("");
+    };
+    const rotate = () => {
+        if (!editing || editing.locked) return;
+        const next = { ...editing, rotation: ((editing.rotation + 90) % 360) as Rotation };
+        if (pending) {
+            setPending(next);
+            setPreview(null);
+        } else {
+            const rotated = rotatedFurnitureCandidates(editing)[0];
+            if (!error(rotated)) update(rotated);
+            else {
+                setReposition(rotated);
+                setPreview(null);
+                setMessage(
+                    "Предмет повёрнут. Перетащите предмет на свободное место. Esc — отменить перестановку.",
+                );
+            }
+        }
+    };
+    useEffect(() => {
+        if (!board || !active || !pending) return;
+        const candidate = (event: PointerEvent) => {
+            const p = point(event.clientX, event.clientY);
+            if (!p) return null;
+            const geometry = furnitureGeometry(pending);
+            return {
+                ...pending,
+                x: snap(p.x - geometry.width / 2),
+                y: snap(p.y - geometry.depth / 2),
+            };
+        };
+        const move = (event: PointerEvent) => {
+            if (event.buttons) return;
+            event.stopPropagation();
+            setPreview(candidate(event));
+        };
+        const down = (event: PointerEvent) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const item = candidate(event);
+            if (!item) return;
+            const reason = error(item);
+            if (reason) {
+                setMessage(reason);
+                return;
+            }
+            const placed = { ...item, id: `furniture-${crypto.randomUUID()}` };
+            onChange([...items, placed]);
+            setSelectedId(placed.id);
+            setPending(null);
+            setPreview(null);
+            setMessage("Предмет добавлен. Потяните его, чтобы переместить.");
+        };
+        board.addEventListener("pointermove", move, true);
+        board.addEventListener("pointerdown", down, true);
+        return () => {
+            board.removeEventListener("pointermove", move, true);
+            board.removeEventListener("pointerdown", down, true);
+        };
+    });
+    useEffect(() => {
+        if (!active) return;
+        const key = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement;
+            if (
+                target.closest('input,textarea,select,[contenteditable="true"]') ||
+                event.ctrlKey ||
+                event.metaKey ||
+                event.altKey
+            )
+                return;
+            if (event.key === "Escape") {
+                event.stopImmediatePropagation();
+                drag.current = null;
+                setPreview(null);
+                setPending(null);
+                setSelectedId(null);
+                setReposition(null);
+                setMessage("");
+                return;
+            }
+            if (!editing) return;
+            if (
+                [
+                    "Delete",
+                    "Backspace",
+                    "r",
+                    "R",
+                    "к",
+                    "К",
+                    "ArrowLeft",
+                    "ArrowRight",
+                    "ArrowUp",
+                    "ArrowDown",
+                ].includes(event.key)
+            ) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                if (editing.locked) {
+                    setMessage("Предмет закреплён. Разблокируйте его для редактирования.");
+                    return;
+                }
+                if (["r", "R", "к", "К"].includes(event.key)) rotate();
+                else if (event.key === "Delete" || event.key === "Backspace") {
+                    if (pending) setPending(null);
+                    else onChange(items.filter((item) => item.id !== selectedId));
+                    setSelectedId(null);
+                    setReposition(null);
+                    setPreview(null);
+                } else if (selected && !pending) {
+                    const step = event.shiftKey ? 100 : 10;
+                    update({
+                        ...selected,
+                        x:
+                            selected.x +
+                            (event.key === "ArrowRight"
+                                ? step
+                                : event.key === "ArrowLeft"
+                                  ? -step
+                                  : 0),
+                        y:
+                            selected.y +
+                            (event.key === "ArrowDown"
+                                ? step
+                                : event.key === "ArrowUp"
+                                  ? -step
+                                  : 0),
+                    });
+                }
+            }
+        };
+        window.addEventListener("keydown", key, true);
+        return () => window.removeEventListener("keydown", key, true);
+    });
+    const symbol = (item: DrawFurniture, ghost = false) => {
+        const geometry = furnitureGeometry(item);
+        const definition = furnitureDefinition(item.definitionId)!;
+        const photo = getFurniturePhoto(item.definitionId, item.photoId);
+        const invalid = Boolean(error(item));
+        const baseGeometry = furnitureGeometry({ ...item, rotation: 0 });
+        const transform =
+            item.rotation === 90
+                ? `translate(${item.depth} 0) rotate(90)`
+                : item.rotation === 180
+                  ? `translate(${item.width} ${item.depth}) rotate(180)`
+                  : item.rotation === 270
+                    ? `translate(0 ${item.width}) rotate(270)`
+                    : undefined;
+        return (
+            <g
+                key={ghost ? "preview" : item.id}
+                data-draw-furniture={ghost ? "preview" : item.id}
+                data-definition-id={item.definitionId}
+                transform={`translate(${item.x} ${item.y})`}
+                className={styles.item}
+                data-selected={active && selectedId === item.id}
+                data-invalid={invalid}
+                data-locked={Boolean(item.locked)}
+                style={{
+                    pointerEvents: (active || selectable) && !ghost && !pending ? "auto" : "none",
+                    opacity: ghost ? 0.65 : 1,
+                    cursor: item.locked ? "pointer" : undefined,
+                }}
+                role={ghost ? undefined : "button"}
+                tabIndex={(active || selectable) && !ghost ? 0 : undefined}
+                aria-label={ghost ? undefined : definition.label}
+                onFocus={() => {
+                    onActivate();
+                    setSelectedId(item.id);
+                }}
+                onPointerDown={(event) => {
+                    if ((!active && !selectable) || event.button !== 0 || pending) return;
+                    onActivate();
+                    const p = point(event.clientX, event.clientY);
+                    if (!p) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setSelectedId(item.id);
+                    setMessage(
+                        item.locked
+                            ? "Предмет закреплён. Разблокируйте его для редактирования."
+                            : "",
+                    );
+                    if (item.locked) return;
+                    // Pointer-event session; this assignment never runs during rendering.
+                    // eslint-disable-next-line react-hooks/refs
+                    drag.current = { initial: item, start: p, last: item };
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                }}
+                onPointerMove={(event) => {
+                    const session = drag.current;
+                    if (!session || session.initial.id !== item.id) return;
+                    event.stopPropagation();
+                    const p = point(event.clientX, event.clientY);
+                    if (!p) return;
+                    const next = {
+                        ...session.initial,
+                        x: snap(session.initial.x + p.x - session.start.x),
+                        y: snap(session.initial.y + p.y - session.start.y),
+                    };
+                    const reason = error(next);
+                    // Follow the pointer across obstacles; validate the destination on release.
+                    session.last = next;
+                    setMessage(reason ?? "");
+                    setPreview(next);
+                }}
+                onPointerUp={(event) => {
+                    if (!drag.current || drag.current.initial.id !== item.id) return;
+                    event.stopPropagation();
+                    const next = drag.current.last;
+                    const initial = drag.current.initial;
+                    drag.current = null;
+                    setPreview(null);
+                    if (event.currentTarget.hasPointerCapture(event.pointerId))
+                        event.currentTarget.releasePointerCapture(event.pointerId);
+                    if (next.x !== initial.x || next.y !== initial.y) update(next);
+                }}
+                onPointerCancel={(event) => {
+                    event.stopPropagation();
+                    drag.current = null;
+                    setPreview(null);
+                }}
+                onLostPointerCapture={() => {
+                    drag.current = null;
+                    setPreview(null);
+                }}
+            >
+                <title>
+                    {definition.label} · {item.width} × {item.depth} мм
+                </title>
+                <g transform={transform}>
+                    {baseGeometry.bodyRects.map((rect, i) => (
+                        <g key={i}>
+                            <rect
+                                x={rect.x}
+                                y={rect.y}
+                                width={rect.width}
+                                height={rect.depth}
+                                rx={20}
+                            />
+                            {!photo &&
+                                (definition.category === "sleep" ||
+                                    definition.category === "living") && (
+                                    <rect
+                                        x={rect.x + rect.width * 0.12}
+                                        y={rect.y + rect.depth * 0.1}
+                                        width={rect.width * 0.76}
+                                        height={rect.depth * 0.2}
+                                        rx={30}
+                                        className={styles.detail}
+                                    />
+                                )}
+                            {!photo && definition.category === "storage" && (
+                                <path
+                                    d={`M ${rect.x + rect.width / 2} ${rect.y} v ${rect.depth}`}
+                                />
+                            )}
+                        </g>
+                    ))}
+                    {photo && (
+                        <svg width={item.width} height={item.depth} overflow="visible">
+                            <FurniturePhoto photo={photo} />
+                        </svg>
+                    )}
+                </g>
+                {(!photo || (active && selectedId === item.id)) && (
+                    <text
+                        x={geometry.width / 2}
+                        y={geometry.depth * 0.62}
+                        fontSize={Math.min(120, geometry.width / 9, geometry.depth / 5)}
+                        textAnchor="middle"
+                    >
+                        {definition.shortLabel}
+                    </text>
+                )}
+            </g>
+        );
+    };
+    const inspected = active ? preview ?? reposition ?? selected : null;
+    const conflicts = inspected
+        ? furnitureConflicts(inspected, items, walls, thickness, doorObstacles)
+        : [];
+    const distances =
+        selected && !pending && !preview && !reposition
+            ? furnitureWallDistances(selected, walls, thickness)
+            : [];
+    const sideLabels = { left: "Слева", right: "Справа", top: "Сверху", bottom: "Снизу" };
+    const screenUnit = 1 / (board?.getScreenCTM()?.a || 0.1);
+    return (
+        <>
+            {board &&
+                createPortal(
+                    <g data-draw-furniture-layer="true">
+                        {items.map((item) =>
+                            symbol(
+                                preview?.id === item.id && !pending
+                                    ? preview
+                                    : reposition?.id === item.id && selectedId === item.id
+                                      ? reposition
+                                      : item,
+                            ),
+                        )}
+                        {pending && preview && symbol(preview, true)}
+                        <g pointerEvents="none" aria-hidden="true" data-furniture-conflicts="true">
+                            {conflicts.map((conflict, index) => (
+                                <rect
+                                    key={index}
+                                    data-furniture-conflict={conflict.kind}
+                                    x={conflict.rect.x}
+                                    y={conflict.rect.y}
+                                    width={conflict.rect.width}
+                                    height={conflict.rect.depth}
+                                    fill="#d13c2926"
+                                    stroke="#bd3424"
+                                    strokeWidth={2}
+                                    strokeDasharray="6 4"
+                                    vectorEffect="non-scaling-stroke"
+                                />
+                            ))}
+                            {inspected && conflicts.length > 0 && (
+                                <g
+                                    transform={`translate(${inspected.x} ${inspected.y - 32 * screenUnit})`}
+                                >
+                                    <rect
+                                        width={245 * screenUnit}
+                                        height={26 * screenUnit}
+                                        rx={4 * screenUnit}
+                                        fill="#fff8f3"
+                                        stroke="#bd3424"
+                                        strokeWidth={screenUnit}
+                                    />
+                                    <text
+                                        x={8 * screenUnit}
+                                        y={17 * screenUnit}
+                                        fontSize={12 * screenUnit}
+                                        fill="#8f271c"
+                                    >
+                                        {conflicts[0].kind === "door"
+                                            ? "Освободите проход перед дверью"
+                                            : conflicts[0].kind === "wall"
+                                              ? "Предмет пересекает стену"
+                                              : "Место занято другой мебелью"}
+                                    </text>
+                                </g>
+                            )}
+                        </g>
+                    </g>,
+                    board,
+                )}
+            {active && (
+                <aside
+                    className={styles.panel}
+                    aria-label="Мебель на чертеже"
+                    data-editing={Boolean(editing)}
+                    onPointerDown={(event) => event.stopPropagation()}
+                >
+                    <header>
+                        <b>Мебель</b>
+                        {editing ? (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setPending(null);
+                                    setSelectedId(null);
+                                    setReposition(null);
+                                    setPreview(null);
+                                    setMessage("");
+                                }}
+                            >
+                                Каталог
+                            </button>
+                        ) : (
+                            <span>{items.length} на плане</span>
+                        )}
+                    </header>
+                    {editing && (
+                        <section className={styles.properties}>
+                            <b>{furnitureDefinition(editing.definitionId)?.label}</b>
+                            {isSchematicFurnitureSource(
+                                furnitureDefinition(editing.definitionId)!.source,
+                            ) && (
+                                <small>
+                                    Типовые габариты. Уточните размеры вашего предмета
+                                    {editing.definitionId.startsWith("dining-")
+                                        ? ": вместе со стульями"
+                                        : ""}
+                                    .
+                                </small>
+                            )}
+                            {getFurniturePhotos(editing.definitionId).length > 0 && (
+                                <div className={styles.variants} aria-label="Варианты изображения">
+                                    {getFurniturePhotos(editing.definitionId).map(
+                                        (photo, index) => (
+                                            <button
+                                                key={photo.id}
+                                                type="button"
+                                                aria-label={`Вариант ${index + 1}`}
+                                                disabled={Boolean(editing.locked)}
+                                                aria-pressed={
+                                                    getFurniturePhoto(
+                                                        editing.definitionId,
+                                                        editing.photoId,
+                                                    )?.id === photo.id
+                                                }
+                                                onClick={() => {
+                                                    const next = { ...editing, photoId: photo.id };
+                                                    if (pending) {
+                                                        setPending(next);
+                                                        setPreview(null);
+                                                    } else update(next);
+                                                }}
+                                            >
+                                                <FurniturePhoto photo={photo} fit />
+                                            </button>
+                                        ),
+                                    )}
+                                </div>
+                            )}
+                            <div className={styles.sizes}>
+                                {(["width", "depth"] as const).map((field) => (
+                                    <label key={`${editing.id}-${field}`}>
+                                        {field === "width" ? "Ширина, мм" : "Глубина, мм"}
+                                        <input
+                                            key={`${editing.id}-${editing[field]}`}
+                                            type="number"
+                                            min={10}
+                                            max={10000}
+                                            step={10}
+                                            disabled={Boolean(editing.locked)}
+                                            defaultValue={editing[field]}
+                                            onBlur={(event) => {
+                                                const value = Number(event.target.value);
+                                                if (
+                                                    !Number.isFinite(value) ||
+                                                    value < 10 ||
+                                                    value > 10000
+                                                ) {
+                                                    event.target.value = String(editing[field]);
+                                                    return;
+                                                }
+                                                const next = { ...editing, [field]: value };
+                                                if (pending) {
+                                                    setPending(next);
+                                                    setPreview(null);
+                                                } else {
+                                                    update(next);
+                                                    if (error(next))
+                                                        event.target.value = String(editing[field]);
+                                                }
+                                            }}
+                                            onKeyDown={(event) => {
+                                                if (event.key === "Enter")
+                                                    event.currentTarget.blur();
+                                            }}
+                                        />
+                                    </label>
+                                ))}
+                            </div>
+                            {distances.length > 0 && (
+                                <fieldset className={styles.distances}>
+                                    <legend>До стен, мм</legend>
+                                    <div className={styles.sizes}>
+                                        {distances.map((entry) => (
+                                            <label key={entry.side}>
+                                                {sideLabels[entry.side]}
+                                                <input
+                                                    aria-label={`До стены ${sideLabels[entry.side].toLowerCase()}, мм`}
+                                                    key={`${selected!.id}-${entry.distance}-${entry.side}`}
+                                                    type="number"
+                                                    disabled={Boolean(editing.locked)}
+                                                    min={0}
+                                                    step={10}
+                                                    defaultValue={Math.round(entry.distance)}
+                                                    onBlur={(event) => {
+                                                        const value = Number(event.target.value);
+                                                        if (
+                                                            !event.target.value.trim() ||
+                                                            !Number.isFinite(value) ||
+                                                            value < 0
+                                                        ) {
+                                                            event.target.value = String(
+                                                                Math.round(entry.distance),
+                                                            );
+                                                            return;
+                                                        }
+                                                        const next = {
+                                                            ...selected!,
+                                                            [entry.axis]:
+                                                                selected![entry.axis] +
+                                                                entry.direction *
+                                                                    (value - entry.distance),
+                                                        };
+                                                        update(next);
+                                                        if (error(next))
+                                                            event.target.value = String(
+                                                                Math.round(entry.distance),
+                                                            );
+                                                    }}
+                                                    onKeyDown={(event) => {
+                                                        if (event.key === "Enter")
+                                                            event.currentTarget.blur();
+                                                    }}
+                                                />
+                                            </label>
+                                        ))}
+                                    </div>
+                                </fieldset>
+                            )}
+                            <div className={styles.actions}>
+                                <button onClick={rotate} disabled={Boolean(editing.locked)}>
+                                    Повернуть ↻
+                                </button>
+                                <button
+                                    disabled={Boolean(editing.locked)}
+                                    onClick={() => {
+                                        if (pending) setPending(null);
+                                        else
+                                            onChange(
+                                                items.filter((item) => item.id !== selectedId),
+                                            );
+                                        setSelectedId(null);
+                                        setReposition(null);
+                                        setPreview(null);
+                                    }}
+                                >
+                                    {pending ? "Отменить" : "Удалить"}
+                                </button>
+                            </div>
+                            {!pending && (
+                                <div className={styles.actions}>
+                                    <button
+                                        onClick={() => {
+                                            setPending({
+                                                ...editing,
+                                                id: "pending-copy",
+                                                locked: false,
+                                            });
+                                            setSelectedId(null);
+                                            setReposition(null);
+                                            setPreview(null);
+                                            setMessage(
+                                                "Копия готова. Укажите свободное место на плане. Esc — отмена.",
+                                            );
+                                        }}
+                                    >
+                                        Копировать
+                                    </button>
+                                    <button
+                                        aria-pressed={Boolean(editing.locked)}
+                                        disabled={Boolean(reposition)}
+                                        onClick={() => {
+                                            onChange(
+                                                items.map((item) =>
+                                                    item.id === editing.id
+                                                        ? { ...item, locked: !item.locked }
+                                                        : item,
+                                                ),
+                                            );
+                                            setMessage(
+                                                editing.locked
+                                                    ? "Предмет разблокирован."
+                                                    : "Предмет закреплён. Его нельзя случайно сдвинуть или удалить.",
+                                            );
+                                        }}
+                                    >
+                                        {editing.locked ? "Разблокировать" : "Закрепить"}
+                                    </button>
+                                </div>
+                            )}
+                        </section>
+                    )}
+                    <p role="status">
+                        {message ||
+                            (pending
+                                ? "Щёлкните по свободному месту на плане. R — поворот, Esc — отмена."
+                                : "Выберите предмет и укажите место на плане. Мебель можно перетаскивать мышью.")}
+                    </p>
+                    <input
+                        aria-label="Поиск мебели"
+                        placeholder="Найти мебель"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                    />
+                    <div className={styles.catalog}>
+                        {Object.entries(categories).map(([category, label]) => {
+                            const definitions = FURNITURE_CATALOG.filter(
+                                (item) =>
+                                    item.category === category &&
+                                    item.label.toLowerCase().includes(query.toLowerCase()),
+                            );
+                            return definitions.length ? (
+                                <section key={category}>
+                                    <h3>{label}</h3>
+                                    {definitions.map((definition) => {
+                                        const geometry = getRotatedGeometry(definition, 0);
+                                        return (
+                                            <button
+                                                key={definition.id}
+                                                data-add-furniture={definition.id}
+                                                aria-pressed={
+                                                    pending?.definitionId === definition.id
+                                                }
+                                                onClick={() => {
+                                                    setPending({
+                                                        id: "pending",
+                                                        definitionId: definition.id,
+                                                        x: 0,
+                                                        y: 0,
+                                                        width: geometry.width,
+                                                        depth: geometry.depth,
+                                                        rotation: 0,
+                                                    });
+                                                    setSelectedId(null);
+                                                    setReposition(null);
+                                                    setPreview(null);
+                                                    setMessage("");
+                                                }}
+                                            >
+                                                {getFurniturePhoto(definition.id) && (
+                                                    <span className={styles.thumbnail}>
+                                                        <FurniturePhoto
+                                                            photo={
+                                                                getFurniturePhoto(definition.id)!
+                                                            }
+                                                            fit
+                                                        />
+                                                    </span>
+                                                )}
+                                                <span>{definition.label}</span>
+                                                <small>
+                                                    {geometry.width} × {geometry.depth} мм
+                                                    {isSchematicFurnitureSource(definition.source)
+                                                        ? " · типовые"
+                                                        : ""}
+                                                </small>
+                                            </button>
+                                        );
+                                    })}
+                                </section>
+                            ) : null;
+                        })}
+                    </div>
+                </aside>
+            )}
+        </>
+    );
+}

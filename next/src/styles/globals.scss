@@ -1,15 +1,58 @@
-@import '~normalize.css';
-@import '../shared/styles/fonts.scss';
+@import "~normalize.css";
+@import "../shared/styles/fonts.scss";
+@import "../shared/styles/tokens.scss";
 
 * {
-	box-sizing: border-box;
-	margin: 0;
-	padding: 0;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    min-width: 320px;
+    background: var(--sf-color-paper);
 }
 
 body {
-	font-family: var(--font-primary);
-	line-height: 1.6;
-	color: #2c2c2c;
-	background-color: #ffffff;
+    font-family: var(--font-primary);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--sf-color-ink);
+    background-color: var(--sf-color-paper);
+    text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+a,
+button,
+input,
+select,
+textarea,
+[tabindex]:not([tabindex="-1"]) {
+    &:focus-visible {
+        outline: 3px solid var(--sf-color-focus);
+        outline-offset: 3px;
+        box-shadow: var(--sf-focus-ring);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html:focus-within {
+        scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }

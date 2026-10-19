@@ -1,7 +1,8 @@
-postgres
+/postgres/
 **/node_modules/
 **/.nest
 **/dist
 **/.DS_Store
 **/.env
+**/.env.server
 **/*.sql

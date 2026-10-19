@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User, RegisterData, LoginData } from "../types/auth";
 import { authService } from "../services/authService";
-import { isAuthEnabled } from "@/shared/config/runtime";
+import { isAuthEnabled, isAuthRegistrationEnabled } from "@/shared/config/runtime";
 
 interface AuthContextType {
     user: User | null;
@@ -24,6 +24,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     useEffect(() => {
         if (!isAuthEnabled) {
+            authService.logout();
+            setUser(null);
             setIsLoading(false);
             return;
         }
@@ -52,25 +54,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             throw new Error("Авторизация недоступна в демо-режиме");
         }
 
-        try {
-            const response = await authService.login(data);
-            setUser(response.user);
-        } catch (error) {
-            throw error;
-        }
+        const response = await authService.login(data);
+        setUser(response.user);
     };
 
     const register = async (data: RegisterData) => {
-        if (!isAuthEnabled) {
-            throw new Error("Регистрация недоступна в демо-режиме");
+        if (!isAuthEnabled || !isAuthRegistrationEnabled) {
+            throw new Error("Регистрация сейчас отключена");
         }
 
-        try {
-            const response = await authService.register(data);
-            setUser(response.user);
-        } catch (error) {
-            throw error;
-        }
+        const response = await authService.register(data);
+        setUser(response.user);
     };
 
     const logout = () => {
