@@ -19,7 +19,10 @@ FROM caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f43
 
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 
-RUN addgroup -S -g 10001 caddy \
+# COPY drops file capabilities; restore the one upstream sets so the
+# non-root user can still bind 80/443.
+RUN setcap cap_net_bind_service=+ep /usr/bin/caddy \
+    && addgroup -S -g 10001 caddy \
     && adduser -S -D -h /home/caddy -s /sbin/nologin -u 10001 -G caddy caddy \
     && install -d -o caddy -g caddy -m 0750 /home/caddy /data /config \
     && chown -R caddy:caddy /data /config \
