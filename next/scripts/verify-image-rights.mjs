@@ -22,7 +22,9 @@ const walk = async (directory) => {
     return files.flat();
 };
 
-const normalizePath = (value) => value.split(path.sep).join("/");
+// macOS can hand back NFD file names; git and Linux use NFC. Normalize so the
+// digest is identical on every platform.
+const normalizePath = (value) => value.split(path.sep).join("/").normalize("NFC");
 const belongsToGroup = (relativePath, group) => {
     const inPath = relativePath === group.path || relativePath.startsWith(`${group.path}/`);
     const excluded = group.excludePrefixes.some(
