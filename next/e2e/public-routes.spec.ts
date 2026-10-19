@@ -41,6 +41,16 @@ for (const route of PUBLIC_ROUTES) {
         });
         expect(overflows.scrollWidth).toBeLessThanOrEqual(overflows.clientWidth + 1);
 
+        // Entrance animations fade content in; axe would measure contrast mid-fade.
+        await page.evaluate(() =>
+            Promise.all(
+                document
+                    .getAnimations()
+                    .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+                    .map((animation) => animation.finished),
+            ),
+        );
+
         const accessibility = await new AxeBuilder({ page })
             .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
             .analyze();
