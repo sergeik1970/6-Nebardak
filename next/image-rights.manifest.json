@@ -36,24 +36,10 @@
         {
             "id": "home-static",
             "path": "Home",
-            "excludePrefixes": [
-                "Home/test-images.20260716-v1",
-                "Home/style-results.20260827-v1",
-                "Home/test-images"
-            ],
+            "excludePrefixes": ["Home/test-images.20260716-v1", "Home/style-results.20260827-v1"],
             "expectedFileCount": 19,
             "contentDigestSha256": "1857155c39f38004b4b66daa054a945fbac7ff986fcff6da2ec9dd20bb0d2cf6",
             "source": "designer-supplied",
-            "rightsStatus": "unverified",
-            "rightsEvidence": "pending"
-        },
-        {
-            "id": "legacy-preference-test",
-            "path": "Home/test-images",
-            "excludePrefixes": [],
-            "expectedFileCount": 660,
-            "contentDigestSha256": "51c91feb98de3ca24f44a02c91e3a18e269a4507459468a15c592ea493942554",
-            "source": "unrecorded",
             "rightsStatus": "unverified",
             "rightsEvidence": "pending"
         },
