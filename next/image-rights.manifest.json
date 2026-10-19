@@ -7,8 +7,8 @@
             "id": "preference-test",
             "path": "Home/test-images.20260716-v1",
             "excludePrefixes": [],
-            "expectedFileCount": 318,
-            "contentDigestSha256": "f7464d315223669d4abfecc34354ce6561b46709dfb0a97b1ac7e9fecd39d1bc",
+            "expectedFileCount": 330,
+            "contentDigestSha256": "d1140a8b2c5254c792ac32bd977a4c9f2cb38ce051a4dfffe71abed76a6f7f65",
             "source": "designer-supplied",
             "rightsStatus": "unverified",
             "rightsEvidence": "pending"
@@ -17,8 +17,8 @@
             "id": "planner-furniture",
             "path": "planner",
             "excludePrefixes": [],
-            "expectedFileCount": 15,
-            "contentDigestSha256": "db82c4e3d3eeae056c98c768b48c55d62013e5eb07b79b8bee643dd71e35e2c1",
+            "expectedFileCount": 30,
+            "contentDigestSha256": "0e3a97817f90c3b0a3fa1ffdd2bc6995852c68b6e91fe8ad05f6f3f223bbd85c",
             "source": "designer-supplied",
             "rightsStatus": "unverified",
             "rightsEvidence": "pending"
@@ -36,10 +36,34 @@
         {
             "id": "home-static",
             "path": "Home",
-            "excludePrefixes": ["Home/test-images.20260716-v1", "Home/style-results.20260827-v1"],
-            "expectedFileCount": 9,
-            "contentDigestSha256": "e05b26b8f2e18fb38066c7228b6ccdcedb4a794674f055eecfc1258f6e182ad0",
+            "excludePrefixes": [
+                "Home/test-images.20260716-v1",
+                "Home/style-results.20260827-v1",
+                "Home/test-images"
+            ],
+            "expectedFileCount": 19,
+            "contentDigestSha256": "1857155c39f38004b4b66daa054a945fbac7ff986fcff6da2ec9dd20bb0d2cf6",
             "source": "designer-supplied",
+            "rightsStatus": "unverified",
+            "rightsEvidence": "pending"
+        },
+        {
+            "id": "legacy-preference-test",
+            "path": "Home/test-images",
+            "excludePrefixes": [],
+            "expectedFileCount": 660,
+            "contentDigestSha256": "51c91feb98de3ca24f44a02c91e3a18e269a4507459468a15c592ea493942554",
+            "source": "unrecorded",
+            "rightsStatus": "unverified",
+            "rightsEvidence": "pending"
+        },
+        {
+            "id": "planner-furniture-photos",
+            "path": "furniture-20260914",
+            "excludePrefixes": [],
+            "expectedFileCount": 27,
+            "contentDigestSha256": "971a8a03cfbf29914037888396fcfb06446c97c8716b32be1eee87806e31c0df",
+            "source": "unrecorded",
             "rightsStatus": "unverified",
             "rightsEvidence": "pending"
         }
