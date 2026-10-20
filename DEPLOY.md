@@ -31,7 +31,7 @@ chmod 600 .env.server
 ```
 
 `.env.server` не входит в Git и не копируется в Docker image. Сгенерируйте три
-разных пароля БД длиной не менее 16 символов и JWT-секрет. DB-пароли в шаблоне
+разных пароля БД длиной не менее 16 символов. DB-пароли в шаблоне
 намеренно пустые: Compose остановится до создания volume, пока вы их не заполните.
 Production preflight также отклоняет старые placeholder-значения, одинаковые
 пароли ролей и пароль, совпадающий с именем роли:
@@ -45,15 +45,22 @@ APP_DB_USER=stylefinder_app
 APP_DB_PASSWORD=REPLACE_WITH_DIFFERENT_APP_PASSWORD
 MIGRATOR_DB_USER=stylefinder_migrator
 MIGRATOR_DB_PASSWORD=REPLACE_WITH_DIFFERENT_MIGRATOR_PASSWORD
-JWT_SECRET=REPLACE_WITH_AT_LEAST_32_RANDOM_BYTES
+PUBLIC_ORIGIN=https://stylefinder.design
 AUTH_ENABLED=false
 AUTH_REGISTRATION_ENABLED=false
 ```
 
-PostgreSQL получает только admin-переменные и не видит JWT. One-off сервис
+Аккаунты используют серверные сессии: браузер получает случайный токен только в
+cookie `__Host-sf_session` (`HttpOnly; Secure; SameSite=Lax`), а в таблице
+`user_session` хранится лишь его SHA-256. Подписывающего секрета нет. При
+`AUTH_ENABLED=true` обязателен `PUBLIC_ORIGIN` — точный https-origin сайта; API
+отклоняет изменяющие запросы с другим `Origin` или без заголовка
+`X-Requested-With: stylefinder`.
+
+PostgreSQL получает только admin-переменные. One-off сервис
 `db-roles` создаёт отдельного владельца миграций и runtime-роль без права менять
 схему. Сервис `nest` получает только runtime-реквизиты, `migrate` — только
-миграционные. Runtime-роль получает DML для таблицы `user`, `SELECT`, `INSERT`
+миграционные. Runtime-роль получает DML для таблиц `user` и `user_session`, `SELECT`, `INSERT`
 и `UPDATE` для `planner_observations` и `USAGE` только для `user_id_seq` и
 `planner_observations_id_seq`; доступ к migration history, созданию временных объектов
 и остальным sequence отсутствует. Все роли должны иметь разные имена и пароли.

@@ -8,6 +8,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { HealthController } from "./controllers/HealthController/health.controller";
 import { OperationalLogger } from "./services/OperationalLogger/operational-logger.service";
 import { getRateLimit, getRuntimeConfig } from "./config/runtime.config";
+import { CsrfGuard } from "./guards/csrf.guard";
 
 const runtime = getRuntimeConfig();
 
@@ -44,6 +45,10 @@ const runtime = getRuntimeConfig();
     controllers: [HealthController],
     providers: [
         OperationalLogger,
+        {
+            provide: APP_GUARD,
+            useClass: CsrfGuard,
+        },
         {
             provide: APP_GUARD,
             useClass: ThrottlerGuard,

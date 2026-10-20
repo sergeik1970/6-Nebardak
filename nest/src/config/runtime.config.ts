@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-
 export type NodeEnvironment = "development" | "dev" | "test" | "production";
 
 export interface DatabaseRuntimeConfig {
@@ -20,17 +18,18 @@ export interface RuntimeConfig {
     trustProxyHops: number;
     authEnabled: boolean;
     registrationEnabled: boolean;
-    jwtSecret?: string;
-    jwtIssuer: string;
-    jwtAudience: string;
+    /** The browser origin that serves both the site and `/api`. */
+    publicOrigin: string;
+    session: SessionRuntimeConfig;
     database: DatabaseRuntimeConfig;
 }
 
-const insecureJwtSecrets = new Set([
-    "change_this_secret_in_production",
-    "replace_with_at_least_32_random_bytes",
-    "REPLACE_WITH_AT_LEAST_32_RANDOM_BYTES",
-]);
+export interface SessionRuntimeConfig {
+    cookieName: string;
+    secureCookie: boolean;
+}
+
+const defaultLocalPublicOrigin = "http://localhost:3000";
 
 const minimumProductionDatabasePasswordLength = 16;
 const insecureDatabasePasswords = new Set([
@@ -119,6 +118,40 @@ function parseBoolean(name: string, fallback: boolean): boolean {
     if (rawValue === "true") return true;
     if (rawValue === "false") return false;
     throw new Error(`${name} must be either true or false`);
+}
+
+function parsePublicOrigin(
+    isProduction: boolean,
+    authEnabled: boolean,
+): string {
+    // Compose passes an unset optional variable as an empty string.
+    const rawValue = process.env.PUBLIC_ORIGIN?.trim();
+    if (!rawValue) {
+        if (isProduction && authEnabled) {
+            throw new Error("PUBLIC_ORIGIN is required in production");
+        }
+        return defaultLocalPublicOrigin;
+    }
+
+    let url: URL;
+    try {
+        url = new URL(rawValue);
+    } catch {
+        throw new Error("PUBLIC_ORIGIN must be an absolute http(s) origin");
+    }
+    if (
+        (url.protocol !== "https:" && url.protocol !== "http:") ||
+        url.origin !== rawValue.replace(/\/$/, "") ||
+        url.username ||
+        url.password
+    ) {
+        throw new Error("PUBLIC_ORIGIN must be an absolute http(s) origin");
+    }
+    if (isProduction && authEnabled && url.protocol !== "https:") {
+        throw new Error("PUBLIC_ORIGIN must use https in production");
+    }
+
+    return url.origin;
 }
 
 function parseNodeEnvironment(): NodeEnvironment {
@@ -211,26 +244,8 @@ export function getRuntimeConfig(): RuntimeConfig {
         assertProductionDatabasePassword(database.username, database.password);
     }
 
-    let jwtSecret = parseOptionalString("JWT_SECRET", undefined, 4_096);
-    if (authEnabled) {
-        if (isProduction) {
-            jwtSecret = requireProductionValue("JWT_SECRET");
-        } else if (nodeEnv === "dev" && !jwtSecret) {
-            // A local test session can work without persisting a signing key.
-            // The key exists only in the Nest process and invalidates all
-            // sessions on restart; production can never use this path.
-            jwtSecret = randomBytes(48).toString("base64url");
-        }
-        if (
-            !jwtSecret ||
-            jwtSecret.length < 32 ||
-            insecureJwtSecrets.has(jwtSecret)
-        ) {
-            throw new Error(
-                "JWT_SECRET must be a non-default value with at least 32 characters when authentication is enabled",
-            );
-        }
-    }
+    const publicOrigin = parsePublicOrigin(isProduction, authEnabled);
+    const secureCookie = publicOrigin.startsWith("https:");
 
     return {
         nodeEnv,
@@ -243,9 +258,12 @@ export function getRuntimeConfig(): RuntimeConfig {
         ),
         authEnabled,
         registrationEnabled,
-        jwtSecret,
-        jwtIssuer: parseOptionalString("JWT_ISSUER", "stylefinder-api")!,
-        jwtAudience: parseOptionalString("JWT_AUDIENCE", "stylefinder-web")!,
+        publicOrigin,
+        session: {
+            // `__Host-` binds the cookie to this exact origin over HTTPS only.
+            cookieName: secureCookie ? "__Host-sf_session" : "sf_session",
+            secureCookie,
+        },
         database,
     };
 }

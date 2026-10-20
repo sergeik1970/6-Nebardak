@@ -37,6 +37,19 @@ const nextConfig = {
         // Prevent Sass from inserting a BOM between concatenated CSS modules.
         charset: false,
     },
+    // Locally the API runs on its own port; proxying keeps it same-origin so the
+    // HttpOnly session cookie works exactly as behind Caddy in production.
+    ...(process.env.NODE_ENV === "development" && !isStaticExport
+        ? {
+              async rewrites() {
+                  const target = (process.env.API_PROXY_TARGET || "http://localhost:3001").replace(
+                      /\/$/,
+                      "",
+                  );
+                  return [{ source: "/api/:path*", destination: `${target}/api/:path*` }];
+              },
+          }
+        : {}),
     webpack: (config, { isServer }) => {
         if (!isServer) config.plugins.push(new StripCssBomPlugin());
         return config;

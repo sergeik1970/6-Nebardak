@@ -11,7 +11,9 @@ import { HealthController } from "../src/controllers/HealthController/health.con
 import { AuthEnabledGuard } from "../src/guards/auth-enabled.guard";
 import { AuthGuard } from "../src/guards/auth.guard";
 import { RegistrationEnabledGuard } from "../src/guards/registration-enabled.guard";
+import { CsrfGuard } from "../src/guards/csrf.guard";
 import { AuthService } from "../src/services/AuthService/auth.service";
+import { SessionService } from "../src/services/SessionService/session.service";
 import { OperationalLogger } from "../src/services/OperationalLogger/operational-logger.service";
 
 interface HarnessOptions {
@@ -27,17 +29,23 @@ interface Harness {
     authService: {
         register: jest.Mock;
         login: jest.Mock;
-        validateToken: jest.Mock;
+    };
+    sessionService: {
+        create: jest.Mock;
+        authenticate: jest.Mock;
+        revoke: jest.Mock;
+        revokeAll: jest.Mock;
     };
     databaseQuery: jest.Mock;
 }
 
 const activeApps: INestApplication[] = [];
+const SESSION_TOKEN = "s".repeat(43);
 const originalEnvironment = {
     NODE_ENV: process.env.NODE_ENV,
     AUTH_ENABLED: process.env.AUTH_ENABLED,
     AUTH_REGISTRATION_ENABLED: process.env.AUTH_REGISTRATION_ENABLED,
-    JWT_SECRET: process.env.JWT_SECRET,
+    PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN,
 };
 
 describe("Nest 11 / Express 5 security HTTP behavior", () => {
@@ -52,7 +60,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
             "AUTH_REGISTRATION_ENABLED",
             originalEnvironment.AUTH_REGISTRATION_ENABLED,
         );
-        restoreEnvironment("JWT_SECRET", originalEnvironment.JWT_SECRET);
+        restoreEnvironment("PUBLIC_ORIGIN", originalEnvironment.PUBLIC_ORIGIN);
     });
 
     it("does not expose a legacy API root endpoint", async () => {
@@ -66,10 +74,12 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
 
         await request(harness.baseUrl)
             .post("/api/auth/login")
+            .set("X-Requested-With", "stylefinder")
             .send({ email: "maria@example.com", password: "safe-password" })
             .expect(404);
         await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .send({
                 name: "Мария",
                 email: "maria@example.com",
@@ -80,7 +90,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
 
         expect(harness.authService.login).not.toHaveBeenCalled();
         expect(harness.authService.register).not.toHaveBeenCalled();
-        expect(harness.authService.validateToken).not.toHaveBeenCalled();
+        expect(harness.sessionService.authenticate).not.toHaveBeenCalled();
     });
 
     it("applies global DTO validation without echoing rejected passwords", async () => {
@@ -91,6 +101,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
 
         const unknownProperty = await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .send({
                 name: "Мария",
                 email: "maria@example.com",
@@ -101,6 +112,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
         const oversizedPassword = "я".repeat(37);
         const oversized = await request(harness.baseUrl)
             .post("/api/auth/login")
+            .set("X-Requested-With", "stylefinder")
             .send({
                 email: "maria@example.com",
                 password: oversizedPassword,
@@ -129,11 +141,13 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
         for (let index = 0; index < 3; index += 1) {
             await request(harness.baseUrl)
                 .post("/api/auth/register")
+                .set("X-Requested-With", "stylefinder")
                 .send(payload)
                 .expect(201);
         }
         await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .send(payload)
             .expect(429);
 
@@ -155,12 +169,14 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
         for (let index = 0; index < 3; index += 1) {
             await request(harness.baseUrl)
                 .post("/api/auth/register")
+                .set("X-Requested-With", "stylefinder")
                 .set("X-Forwarded-For", `198.51.100.${index + 1}`)
                 .send(payload)
                 .expect(201);
         }
         await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .set("X-Forwarded-For", "203.0.113.200")
             .send(payload)
             .expect(429);
@@ -183,23 +199,116 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
         for (let index = 0; index < 3; index += 1) {
             await request(harness.baseUrl)
                 .post("/api/auth/register")
+                .set("X-Requested-With", "stylefinder")
                 .set("X-Forwarded-For", "198.51.100.70")
                 .send(payload)
                 .expect(201);
         }
         await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .set("X-Forwarded-For", "198.51.100.70")
             .send(payload)
             .expect(429);
 
         await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .set("X-Forwarded-For", "203.0.113.80")
             .send(payload)
             .expect(201);
 
         expect(harness.authService.register).toHaveBeenCalledTimes(4);
+    });
+
+    it("rejects state changes without the same-origin marker before any auth work", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .post("/api/auth/login")
+            .send({ email: "maria@example.com", password: "safe-password" })
+            .expect(403);
+        await request(harness.baseUrl)
+            .post("/api/auth/login")
+            .set("X-Requested-With", "stylefinder")
+            .set("Origin", "https://evil.example")
+            .send({ email: "maria@example.com", password: "safe-password" })
+            .expect(403);
+
+        expect(harness.authService.login).not.toHaveBeenCalled();
+    });
+
+    it("signs in with an HttpOnly SameSite cookie and never returns a token", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        const response = await request(harness.baseUrl)
+            .post("/api/auth/login")
+            .set("X-Requested-With", "stylefinder")
+            .set("Origin", "http://localhost:3000")
+            .send({ email: "maria@example.com", password: "safe-password" })
+            .expect(200);
+
+        const cookie = String(response.headers["set-cookie"]);
+        expect(cookie).toContain(`sf_session=${SESSION_TOKEN}`);
+        expect(cookie).toMatch(/HttpOnly/);
+        expect(cookie).toMatch(/SameSite=Lax/);
+        expect(cookie).toMatch(/Path=\//);
+        expect(response.body).toEqual({
+            user: {
+                id: 1,
+                name: "Мария",
+                email: "maria@example.com",
+                role: "designer",
+            },
+        });
+        expect(JSON.stringify(response.body)).not.toContain(SESSION_TOKEN);
+    });
+
+    it("resolves the profile only from the session cookie", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .get("/api/auth/me")
+            .set("Authorization", `Bearer ${SESSION_TOKEN}`)
+            .expect(401);
+        const profile = await request(harness.baseUrl)
+            .get("/api/auth/me")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .expect(200);
+
+        expect(profile.body.user).toMatchObject({ id: 1, role: "designer" });
+        expect(profile.body.user.password).toBeUndefined();
+    });
+
+    it("answers the page-load probe without an error for guests", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .get("/api/auth/session")
+            .expect(200, { user: null });
+        const signedIn = await request(harness.baseUrl)
+            .get("/api/auth/session")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .expect(200);
+
+        expect(signedIn.body.user).toMatchObject({ id: 1, role: "designer" });
+    });
+
+    it("revokes the session and expires the cookie on logout", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        const response = await request(harness.baseUrl)
+            .post("/api/auth/logout")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .expect(204);
+
+        expect(harness.sessionService.revoke).toHaveBeenCalledWith(
+            SESSION_TOKEN,
+        );
+        expect(String(response.headers["set-cookie"])).toMatch(
+            /sf_session=;.*Expires=Thu, 01 Jan 1970/,
+        );
     });
 
     it("serves live/ready and maps database failures to a bounded 503", async () => {
@@ -233,12 +342,31 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
     process.env.AUTH_REGISTRATION_ENABLED = String(
         options.registrationEnabled ?? false,
     );
-    process.env.JWT_SECRET = "test-only-e2e-jwt-secret-long-enough-2026";
+    process.env.PUBLIC_ORIGIN = "http://localhost:3000";
 
+    const user = {
+        id: 1,
+        name: "Мария",
+        email: "maria@example.com",
+        role: "designer",
+        password: "$2b$12$never-returned",
+    };
     const authService = {
-        register: jest.fn().mockResolvedValue({ user: { id: 1 }, token: "t" }),
-        login: jest.fn().mockResolvedValue({ user: { id: 1 }, token: "t" }),
-        validateToken: jest.fn().mockResolvedValue(null),
+        register: jest.fn().mockResolvedValue(user),
+        login: jest.fn().mockResolvedValue(user),
+    };
+    const sessionService = {
+        create: jest.fn().mockResolvedValue({
+            token: SESSION_TOKEN,
+            session: { id: "session-1" },
+        }),
+        authenticate: jest.fn(async (token?: string) =>
+            token === SESSION_TOKEN
+                ? { user, session: { id: "session-1" } }
+                : null,
+        ),
+        revoke: jest.fn().mockResolvedValue(undefined),
+        revokeAll: jest.fn().mockResolvedValue(undefined),
     };
     const databaseQuery =
         options.databaseQuery ?? jest.fn().mockResolvedValue([{ ok: 1 }]);
@@ -262,8 +390,10 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
             AuthGuard,
             RegistrationEnabledGuard,
             { provide: AuthService, useValue: authService },
+            { provide: SessionService, useValue: sessionService },
             { provide: DataSource, useValue: dataSource },
             { provide: OperationalLogger, useValue: operationalLogger },
+            { provide: APP_GUARD, useClass: CsrfGuard },
             { provide: APP_GUARD, useClass: ThrottlerGuard },
         ],
     }).compile();
@@ -283,6 +413,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
         app,
         baseUrl: `http://127.0.0.1:${address.port}`,
         authService,
+        sessionService,
         databaseQuery,
     };
 }

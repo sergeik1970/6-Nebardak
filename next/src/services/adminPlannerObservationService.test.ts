@@ -9,8 +9,6 @@ const loadService = async () => {
     vi.resetModules();
 
     const { adminPlannerObservationService } = await import("./adminPlannerObservationService");
-    const { authService } = await import("./authService");
-    vi.spyOn(authService, "getToken").mockReturnValue("test-token");
 
     return adminPlannerObservationService;
 };
@@ -50,9 +48,8 @@ describe("adminPlannerObservationService", () => {
             "http://planner.test/api/admin/planner-observations",
             expect.objectContaining({
                 method: "GET",
-                headers: expect.objectContaining({
-                    Authorization: "Bearer test-token",
-                }),
+                credentials: "same-origin",
+                headers: expect.not.objectContaining({ Authorization: expect.anything() }),
             }),
         );
     });
@@ -88,6 +85,8 @@ describe("adminPlannerObservationService", () => {
         );
         expect(fetchMock.mock.calls[1][1]).toMatchObject({
             method: "PATCH",
+            credentials: "same-origin",
+            headers: expect.objectContaining({ "X-Requested-With": "stylefinder" }),
             body: JSON.stringify({ status: "resolved" }),
         });
     });

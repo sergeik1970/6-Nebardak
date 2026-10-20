@@ -1,0 +1,146 @@
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { createHash, randomBytes } from "node:crypto";
+import { LessThan, Repository } from "typeorm";
+import { User } from "../../entities/User/user.entity";
+import { UserSession } from "../../entities/UserSession/user-session.entity";
+
+const DAY_MS = 24 * 60 * 60_000;
+
+export const SESSION_IDLE_TTL_MS = 30 * DAY_MS;
+export const SESSION_ABSOLUTE_TTL_MS = 90 * DAY_MS;
+/** Activity is written at most this often, not on every request. */
+export const SESSION_TOUCH_INTERVAL_MS = 60 * 60_000;
+export const MAX_SESSIONS_PER_USER = 20;
+
+const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+export interface AuthenticatedSession {
+    user: User;
+    session: UserSession;
+}
+
+export function hashSessionToken(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
+}
+
+@Injectable()
+export class SessionService {
+    constructor(
+        @InjectRepository(UserSession)
+        private readonly sessionRepository: Repository<UserSession>,
+    ) {}
+
+    async create(
+        user: User,
+        userAgent?: string,
+        now = new Date(),
+    ): Promise<{ token: string; session: UserSession }> {
+        const token = randomBytes(32).toString("base64url");
+        const absoluteExpiresAt = new Date(
+            now.getTime() + SESSION_ABSOLUTE_TTL_MS,
+        );
+        const session = await this.sessionRepository.save(
+            this.sessionRepository.create({
+                user: { id: user.id } as User,
+                tokenHash: hashSessionToken(token),
+                lastSeenAt: now,
+                expiresAt: new Date(now.getTime() + SESSION_IDLE_TTL_MS),
+                absoluteExpiresAt,
+                userAgent: this.normalizeUserAgent(userAgent),
+            }),
+        );
+
+        await this.pruneUserSessions(user.id, now);
+        return { token, session };
+    }
+
+    async authenticate(
+        token: string | undefined,
+        now = new Date(),
+    ): Promise<AuthenticatedSession | null> {
+        if (!token || !TOKEN_PATTERN.test(token)) return null;
+
+        const session = await this.sessionRepository.findOne({
+            where: { tokenHash: hashSessionToken(token) },
+            relations: { user: true },
+        });
+        if (!session?.user) return null;
+
+        if (session.expiresAt.getTime() <= now.getTime()) {
+            await this.sessionRepository.delete({ id: session.id });
+            return null;
+        }
+
+        if (
+            now.getTime() - session.lastSeenAt.getTime() >=
+            SESSION_TOUCH_INTERVAL_MS
+        ) {
+            session.lastSeenAt = now;
+            session.expiresAt = new Date(
+                Math.min(
+                    now.getTime() + SESSION_IDLE_TTL_MS,
+                    session.absoluteExpiresAt.getTime(),
+                ),
+            );
+            await this.sessionRepository.update(
+                { id: session.id },
+                {
+                    lastSeenAt: session.lastSeenAt,
+                    expiresAt: session.expiresAt,
+                },
+            );
+        }
+
+        return { user: session.user, session };
+    }
+
+    async revoke(token: string | undefined): Promise<void> {
+        if (!token || !TOKEN_PATTERN.test(token)) return;
+        await this.sessionRepository.delete({
+            tokenHash: hashSessionToken(token),
+        });
+    }
+
+    async revokeAll(userId: number): Promise<void> {
+        await this.sessionRepository.delete({ user: { id: userId } });
+    }
+
+    /** Ends every other sign-in, e.g. after the user changes the password. */
+    async revokeOthers(userId: number, keepSessionId: string): Promise<void> {
+        await this.sessionRepository
+            .createQueryBuilder()
+            .delete()
+            .where("user_id = :userId", { userId })
+            .andWhere("id <> :keepSessionId", { keepSessionId })
+            .execute();
+    }
+
+    private async pruneUserSessions(userId: number, now: Date): Promise<void> {
+        await this.sessionRepository.delete({
+            user: { id: userId },
+            expiresAt: LessThan(now),
+        });
+
+        // A raw OFFSET query: `find` with skip + order on a relation filter
+        // makes TypeORM emit an invalid DISTINCT wrapper on PostgreSQL.
+        const surplus: Array<{ id: string }> = await this.sessionRepository
+            .createQueryBuilder("session")
+            .select("session.id", "id")
+            .where("session.user_id = :userId", { userId })
+            .orderBy("session.last_seen_at", "DESC")
+            .addOrderBy("session.created_at", "DESC")
+            .offset(MAX_SESSIONS_PER_USER)
+            .getRawMany();
+        if (surplus.length > 0) {
+            await this.sessionRepository.delete(
+                surplus.map((session) => session.id),
+            );
+        }
+    }
+
+    private normalizeUserAgent(userAgent?: string): string | null {
+        const value = userAgent?.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+        return value ? value.slice(0, 200) : null;
+    }
+}

@@ -33,8 +33,8 @@ const Navigation: React.FC = () => {
     };
 
     const handleLogout = () => {
-        logout();
         closeMenu();
+        void logout();
     };
 
     useEffect(() => {

@@ -90,8 +90,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 9 THEN
-        RAISE EXCEPTION 'expected 9 applied migrations, got %', applied_migrations;
+    IF applied_migrations <> 10 THEN
+        RAISE EXCEPTION 'expected 10 applied migrations, got %', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table still exists';
@@ -160,6 +160,12 @@ BEGIN
     IF NOT has_sequence_privilege(current_user, 'public.planner_observations_id_seq', 'USAGE') THEN
         RAISE EXCEPTION 'runtime role cannot allocate planner observation identifiers';
     END IF;
+    IF NOT has_table_privilege(current_user, 'public.user_session', 'SELECT') OR
+       NOT has_table_privilege(current_user, 'public.user_session', 'INSERT') OR
+       NOT has_table_privilege(current_user, 'public.user_session', 'UPDATE') OR
+       NOT has_table_privilege(current_user, 'public.user_session', 'DELETE') THEN
+        RAISE EXCEPTION 'runtime role lacks required session rights';
+    END IF;
     IF has_sequence_privilege(current_user, 'public.user_id_seq', 'SELECT') OR
        has_sequence_privilege(current_user, 'public.user_id_seq', 'UPDATE') THEN
         RAISE EXCEPTION 'runtime role has broader sequence rights than required';
@@ -209,6 +215,13 @@ SELECT "id", 'runtime-ci', '{}', '{}', 'ci', 'ci', 'ci', 'ci', 'solved'
 FROM "user" WHERE "email" = 'runtime-ci@example.test';
 UPDATE "planner_observations" SET "review_verdict" = 'good'
 WHERE "client_observation_id" = 'runtime-ci';
+INSERT INTO "user_session" (
+    "user_id", "token_hash", "last_seen_at", "expires_at", "absolute_expires_at"
+)
+SELECT "id", repeat('a', 64), now(), now() + interval '1 day', now() + interval '2 days'
+FROM "user" WHERE "email" = 'runtime-ci@example.test';
+UPDATE "user_session" SET "last_seen_at" = now() WHERE "token_hash" = repeat('a', 64);
+DELETE FROM "user_session" WHERE "token_hash" = repeat('a', 64);
 DELETE FROM "user" WHERE "email" = 'runtime-ci@example.test';
 SQL
 
@@ -231,8 +244,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 9 THEN
-        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 9', applied_migrations;
+    IF applied_migrations <> 10 THEN
+        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 10', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table returned after rollback/reapply';

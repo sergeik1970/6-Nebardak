@@ -1,17 +1,10 @@
 import { BadRequestException, UnauthorizedException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
-import * as jwt from "jsonwebtoken";
 import { Repository } from "typeorm";
 import { User } from "../../entities/User/user.entity";
 import { AuthService } from "./auth.service";
 
-const managedEnvironmentKeys = [
-    "NODE_ENV",
-    "AUTH_ENABLED",
-    "JWT_SECRET",
-    "JWT_ISSUER",
-    "JWT_AUDIENCE",
-] as const;
+const managedEnvironmentKeys = ["NODE_ENV", "AUTH_ENABLED"] as const;
 
 function makeRepository() {
     const queryBuilder = {
@@ -47,9 +40,6 @@ describe("AuthService", () => {
     beforeEach(() => {
         process.env.NODE_ENV = "test";
         process.env.AUTH_ENABLED = "true";
-        process.env.JWT_SECRET = "test-secret-that-is-definitely-long-enough";
-        process.env.JWT_ISSUER = "stylefinder-api-test";
-        process.env.JWT_AUDIENCE = "stylefinder-web-test";
     });
 
     afterEach(() => {
@@ -127,7 +117,7 @@ describe("AuthService", () => {
         }
     });
 
-    it("authenticates a cost-12 hash and signs issuer/audience-bound HS256 tokens", async () => {
+    it("authenticates a cost-12 hash by the normalized email", async () => {
         const password = "correct-password";
         const { repository, queryBuilder } = makeRepository();
         queryBuilder.getOne.mockResolvedValue(
@@ -135,48 +125,55 @@ describe("AuthService", () => {
         );
         const service = new AuthService(repository);
 
-        const result = await service.login({
+        const user = await service.login({
             email: " MARIA@EXAMPLE.COM ",
             password,
         });
-        const payload = jwt.verify(result.token, process.env.JWT_SECRET!, {
-            algorithms: ["HS256"],
-            issuer: "stylefinder-api-test",
-            audience: "stylefinder-web-test",
-        }) as jwt.JwtPayload;
 
-        expect(payload.sub).toBe(17);
-        expect(result.user.role).toBe("designer");
+        expect(user.id).toBe(17);
+        expect(user.role).toBe("designer");
         expect(queryBuilder.where).toHaveBeenCalledWith(
             "LOWER(user.email) = :email",
             { email: "maria@example.com" },
         );
     });
 
-    it.each([
-        ["wrong-issuer", "stylefinder-web-test"],
-        ["stylefinder-api-test", "wrong-audience"],
-    ])(
-        "rejects tokens with issuer %s and audience %s before DB lookup",
-        async (issuer, audience) => {
-            const { repository } = makeRepository();
-            const service = new AuthService(repository);
-            const token = jwt.sign({ sub: 17 }, process.env.JWT_SECRET!, {
-                algorithm: "HS256",
-                issuer,
-                audience,
-            });
+    it("rejects a wrong password with the generic credentials error", async () => {
+        const { repository, queryBuilder } = makeRepository();
+        queryBuilder.getOne.mockResolvedValue(
+            makeUser(bcrypt.hashSync("correct-password", 12)),
+        );
+        const service = new AuthService(repository);
 
-            await expect(service.validateToken(token)).resolves.toBeNull();
-            expect(repository.findOne).not.toHaveBeenCalled();
-        },
-    );
+        await expect(
+            service.login({
+                email: "maria@example.com",
+                password: "wrong-password",
+            }),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
 
-    it("constructs without a JWT secret while the server feature is disabled", () => {
-        process.env.AUTH_ENABLED = "false";
-        delete process.env.JWT_SECRET;
-        const { repository } = makeRepository();
+    it("creates designers only and never stores the plain password", async () => {
+        const { repository, queryBuilder } = makeRepository();
+        queryBuilder.getOne.mockResolvedValue(null);
+        (repository.save as jest.Mock).mockImplementation(async (value) => ({
+            ...value,
+            id: 18,
+        }));
+        const service = new AuthService(repository);
 
-        expect(() => new AuthService(repository)).not.toThrow();
+        const user = await service.register({
+            name: "Мария",
+            email: "Maria@Example.com",
+            password: "safe-password",
+        });
+
+        expect(user).toMatchObject({
+            id: 18,
+            email: "maria@example.com",
+            role: "designer",
+        });
+        expect(user.password).not.toBe("safe-password");
+        expect(bcrypt.getRounds(user.password)).toBe(12);
     });
 });

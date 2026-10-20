@@ -23,10 +23,8 @@ async function bootstrap() {
     const expressApplication = app.getHttpAdapter().getInstance();
     configureTrustedProxy(expressApplication, runtime.trustProxyHops);
 
-    if (runtime.nodeEnv === "dev")
-        app.enableCors({
-            origin: ["http://localhost:3000", "http://localhost:3002"],
-        });
+    // No CORS: the browser reaches `/api` on the site's own origin (Caddy in
+    // production, the Next.js dev rewrite locally), which session cookies need.
 
     await app.listen(runtime.port, "0.0.0.0");
     app.get(OperationalLogger).startup({

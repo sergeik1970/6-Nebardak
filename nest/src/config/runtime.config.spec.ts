@@ -11,9 +11,7 @@ const managedEnvironmentKeys = [
     "DB_QUERY_TIMEOUT_MS",
     "DB_CONNECTION_TIMEOUT_MS",
     "DB_READINESS_TIMEOUT_MS",
-    "JWT_SECRET",
-    "JWT_ISSUER",
-    "JWT_AUDIENCE",
+    "PUBLIC_ORIGIN",
     "PORT",
     "TRUST_PROXY_HOPS",
     "RATE_LIMIT_TTL_MS",
@@ -42,7 +40,7 @@ describe("runtime configuration", () => {
         }
     });
 
-    it("uses safe local, auth, JWT and database defaults", () => {
+    it("uses safe local, auth, session and database defaults", () => {
         process.env.NODE_ENV = "dev";
 
         expect(getRuntimeConfig()).toEqual({
@@ -51,9 +49,8 @@ describe("runtime configuration", () => {
             trustProxyHops: 0,
             authEnabled: false,
             registrationEnabled: false,
-            jwtSecret: undefined,
-            jwtIssuer: "stylefinder-api",
-            jwtAudience: "stylefinder-web",
+            publicOrigin: "http://localhost:3000",
+            session: { cookieName: "sf_session", secureCookie: false },
             database: {
                 host: "127.0.0.1",
                 port: 5432,
@@ -74,13 +71,10 @@ describe("runtime configuration", () => {
         expect(() => getRuntimeConfig()).toThrow(/DB_USERNAME.*production/);
     });
 
-    it("does not require a JWT secret while server auth is disabled", () => {
+    it("does not require a public origin while server auth is disabled", () => {
         setProductionDatabaseEnvironment();
 
-        expect(getRuntimeConfig()).toMatchObject({
-            authEnabled: false,
-            jwtSecret: undefined,
-        });
+        expect(getRuntimeConfig()).toMatchObject({ authEnabled: false });
     });
 
     it.each([
@@ -105,58 +99,36 @@ describe("runtime configuration", () => {
         expect(() => getRuntimeConfig()).toThrow(/DB_PASSWORD.*non-default/);
     });
 
-    it("requires a JWT secret when production auth is enabled", () => {
+    it("requires a public origin when production auth is enabled", () => {
         setProductionDatabaseEnvironment();
         process.env.AUTH_ENABLED = "true";
 
-        expect(() => getRuntimeConfig()).toThrow(/JWT_SECRET.*production/);
+        expect(() => getRuntimeConfig()).toThrow(/PUBLIC_ORIGIN.*production/);
     });
 
-    it("requires a sufficiently long production JWT secret", () => {
+    it("requires https and binds the cookie to the production origin", () => {
         setProductionDatabaseEnvironment();
         process.env.AUTH_ENABLED = "true";
-        process.env.JWT_SECRET = "too-short";
+        process.env.PUBLIC_ORIGIN = "http://stylefinder.example";
+        expect(() => getRuntimeConfig()).toThrow(/https in production/);
 
-        expect(() => getRuntimeConfig()).toThrow(/at least 32 characters/);
+        process.env.PUBLIC_ORIGIN = "https://stylefinder.example/";
+        expect(getRuntimeConfig()).toMatchObject({
+            publicOrigin: "https://stylefinder.example",
+            session: { cookieName: "__Host-sf_session", secureCookie: true },
+        });
     });
 
     it.each([
-        "change_this_secret_in_production",
-        "replace_with_at_least_32_random_bytes",
-        "REPLACE_WITH_AT_LEAST_32_RANDOM_BYTES",
-    ])(
-        "rejects the documented JWT placeholder %s when auth is enabled",
-        (placeholder) => {
-            setProductionDatabaseEnvironment();
-            process.env.AUTH_ENABLED = "true";
-            process.env.JWT_SECRET = placeholder;
-
-            expect(() => getRuntimeConfig()).toThrow(/non-default value/);
-        },
-    );
-
-    it.each(["too-short", "change_this_secret_in_production"])(
-        "rejects a short or template JWT secret when local auth is enabled",
-        (jwtSecret) => {
-            process.env.NODE_ENV = "dev";
-            process.env.AUTH_ENABLED = "true";
-            process.env.JWT_SECRET = jwtSecret;
-
-            expect(() => getRuntimeConfig()).toThrow(
-                /JWT_SECRET.*non-default.*at least 32/,
-            );
-        },
-    );
-
-    it("creates a process-only key when explicitly running local dev auth", () => {
+        "stylefinder.example",
+        "https://stylefinder.example/app",
+        "https://user:secret@stylefinder.example",
+        "ftp://stylefinder.example",
+    ])("rejects a public origin that is not a bare origin: %s", (origin) => {
         process.env.NODE_ENV = "dev";
-        process.env.AUTH_ENABLED = "true";
-        delete process.env.JWT_SECRET;
+        process.env.PUBLIC_ORIGIN = origin;
 
-        const config = getRuntimeConfig();
-
-        expect(config.jwtSecret).toEqual(expect.any(String));
-        expect(config.jwtSecret).toHaveLength(64);
+        expect(() => getRuntimeConfig()).toThrow(/PUBLIC_ORIGIN must be/);
     });
 
     it("rejects registration without the auth contour", () => {
@@ -202,7 +174,6 @@ describe("runtime configuration", () => {
         process.env.NODE_ENV = "dev";
         process.env.AUTH_ENABLED = "true";
         process.env.AUTH_REGISTRATION_ENABLED = "true";
-        process.env.JWT_SECRET = "test-only-local-auth-secret-2026";
         expect(getRuntimeConfig()).toMatchObject({
             authEnabled: true,
             registrationEnabled: true,
@@ -224,18 +195,16 @@ describe("runtime configuration", () => {
         expect(() => getRuntimeConfig()).toThrow(/TRUST_PROXY_HOPS.*integer/);
     });
 
-    it("applies explicit JWT identity and database timeout values", () => {
+    it("applies explicit origin and database timeout values", () => {
         process.env.NODE_ENV = "test";
-        process.env.JWT_ISSUER = "stylefinder-api-test";
-        process.env.JWT_AUDIENCE = "stylefinder-web-test";
+        process.env.PUBLIC_ORIGIN = "http://127.0.0.1:3100";
         process.env.DB_STATEMENT_TIMEOUT_MS = "1000";
         process.env.DB_QUERY_TIMEOUT_MS = "1500";
         process.env.DB_CONNECTION_TIMEOUT_MS = "2000";
         process.env.DB_READINESS_TIMEOUT_MS = "500";
 
         expect(getRuntimeConfig()).toMatchObject({
-            jwtIssuer: "stylefinder-api-test",
-            jwtAudience: "stylefinder-web-test",
+            publicOrigin: "http://127.0.0.1:3100",
             database: {
                 statementTimeoutMs: 1000,
                 queryTimeoutMs: 1500,

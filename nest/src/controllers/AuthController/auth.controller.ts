@@ -1,16 +1,40 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common";
+import {
+    Body,
+    Controller,
+    Get,
+    HttpCode,
+    Post,
+    Req,
+    Res,
+    UseGuards,
+} from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { AuthService } from "../../services/AuthService/auth.service";
+import type { Request, Response } from "express";
+import {
+    AuthService,
+    PublicUser,
+    toPublicUser,
+} from "../../services/AuthService/auth.service";
+import { SessionService } from "../../services/SessionService/session.service";
 import { RegisterDto } from "../../dto/auth/register.dto";
 import { LoginDto } from "../../dto/auth/login.dto";
+import { User } from "../../entities/User/user.entity";
 import { AuthGuard, AuthenticatedRequest } from "../../guards/auth.guard";
 import { RegistrationEnabledGuard } from "../../guards/registration-enabled.guard";
 import { AuthEnabledGuard } from "../../guards/auth-enabled.guard";
+import {
+    clearSessionCookie,
+    readSessionToken,
+    setSessionCookie,
+} from "../../security/session-cookie";
 
 @Controller("auth")
 @UseGuards(AuthEnabledGuard)
 export class AuthController {
-    constructor(private readonly authService: AuthService) {}
+    constructor(
+        private readonly authService: AuthService,
+        private readonly sessionService: SessionService,
+    ) {}
 
     @Throttle({
         default: {
@@ -21,8 +45,13 @@ export class AuthController {
     })
     @UseGuards(RegistrationEnabledGuard)
     @Post("register")
-    async register(@Body() registerDto: RegisterDto) {
-        return this.authService.register(registerDto);
+    async register(
+        @Body() registerDto: RegisterDto,
+        @Req() request: Request,
+        @Res({ passthrough: true }) response: Response,
+    ): Promise<{ user: PublicUser }> {
+        const user = await this.authService.register(registerDto);
+        return this.startSession(user, request, response);
     }
 
     @Throttle({
@@ -32,22 +61,73 @@ export class AuthController {
             blockDuration: 5 * 60_000,
         },
     })
+    @HttpCode(200)
     @Post("login")
-    async login(@Body() loginDto: LoginDto) {
-        return this.authService.login(loginDto);
+    async login(
+        @Body() loginDto: LoginDto,
+        @Req() request: Request,
+        @Res({ passthrough: true }) response: Response,
+    ): Promise<{ user: PublicUser }> {
+        const user = await this.authService.login(loginDto);
+        // A sign-in always replaces whatever session this browser had.
+        await this.sessionService.revoke(readSessionToken(request));
+        return this.startSession(user, request, response);
+    }
+
+    /** Idempotent: an expired or missing session still clears the cookie. */
+    @HttpCode(204)
+    @Post("logout")
+    async logout(
+        @Req() request: Request,
+        @Res({ passthrough: true }) response: Response,
+    ): Promise<void> {
+        await this.sessionService.revoke(readSessionToken(request));
+        clearSessionCookie(response);
+    }
+
+    @UseGuards(AuthGuard)
+    @HttpCode(204)
+    @Post("logout-all")
+    async logoutAll(
+        @Req() request: AuthenticatedRequest,
+        @Res({ passthrough: true }) response: Response,
+    ): Promise<void> {
+        await this.sessionService.revokeAll(request.user.id);
+        clearSessionCookie(response);
+    }
+
+    /**
+     * The page-load probe. A guest is a normal state, not an error, so it
+     * answers 200 with `user: null` instead of a 401 in every browser console.
+     */
+    @Get("session")
+    async getSession(
+        @Req() request: Request,
+    ): Promise<{ user: PublicUser | null }> {
+        const authenticated = await this.sessionService.authenticate(
+            readSessionToken(request),
+        );
+        return {
+            user: authenticated ? toPublicUser(authenticated.user) : null,
+        };
     }
 
     @UseGuards(AuthGuard)
     @Get("me")
-    getProfile(@Req() request: AuthenticatedRequest) {
-        const { id, name, email, role } = request.user;
-        return {
-            user: {
-                id,
-                name,
-                email,
-                role,
-            },
-        };
+    getProfile(@Req() request: AuthenticatedRequest): { user: PublicUser } {
+        return { user: toPublicUser(request.user) };
+    }
+
+    private async startSession(
+        user: User,
+        request: Request,
+        response: Response,
+    ): Promise<{ user: PublicUser }> {
+        const { token } = await this.sessionService.create(
+            user,
+            request.headers["user-agent"],
+        );
+        setSessionCookie(response, token);
+        return { user: toPublicUser(user) };
     }
 }
