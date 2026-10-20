@@ -9,7 +9,7 @@
     --draw-brown: #9a603c;
     --draw-green: #22856b;
     --draw-rose: #b54d40;
-    height: 100dvh;
+    height: calc(100dvh - var(--sf-project-bar-height, 0px));
     min-height: 0;
     display: flex;
     flex-direction: column;

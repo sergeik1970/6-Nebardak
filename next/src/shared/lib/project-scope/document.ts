@@ -89,7 +89,8 @@ export const normalizeProjectDocument = (input: unknown): ProjectDocumentResult 
     if (version === PROJECT_DOCUMENT_VERSION && rawDrawing !== undefined) {
         const normalized = normalizeDrawing(rawDrawing);
         if (!normalized) return { status: "invalid", reason: "invalid-drawing" };
-        drawing = normalized;
+        // An untouched editor (no walls yet) is not part of the project.
+        if (hasDrawingContent(normalized)) drawing = normalized;
     }
 
     return {
@@ -119,7 +120,9 @@ export const readProjectDocument = (storage: KeyValueStorage | null): ProjectDoc
     } catch {
         rawDrawing = null;
     }
-    const drawing = normalizeDrawing(rawDrawing) ?? undefined;
+    const parsedDrawing = normalizeDrawing(rawDrawing);
+    // An untouched editor (no walls yet) is not part of the project.
+    const drawing = parsedDrawing && hasDrawingContent(parsedDrawing) ? parsedDrawing : undefined;
 
     if (draft.status === "missing" && !hasDrawingContent(drawing)) return { status: "empty" };
 

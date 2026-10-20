@@ -1894,7 +1894,9 @@ test("separate room drawing route makes the gridded field primary and creates a 
     await expect(windowOpening).toHaveCSS("stroke", "rgb(62, 137, 173)");
 
     await page.getByRole("button", { name: "Продолжить с комнатой" }).click();
-    await expect(page).toHaveURL(/\/planner\?drawRoom=1$/);
+    // The planner drops `?drawRoom=1` once imported, so a refresh cannot re-import over edits.
+    await expect(page).toHaveURL(/\/planner(\?drawRoom=1)?$/);
+    await expect(page.locator('input[name="room-width"]')).toBeVisible();
     const transferredSize = await Promise.all([
         page.locator('input[name="room-width"]').inputValue(),
         page.locator('input[name="room-depth"]').inputValue(),

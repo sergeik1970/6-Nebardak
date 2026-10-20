@@ -11,6 +11,19 @@ import { User, RegisterData, LoginData } from "../types/auth";
 import { authService } from "../services/authService";
 import { isAuthEnabled, isAuthRegistrationEnabled } from "@/shared/config/runtime";
 
+/**
+ * Loaded on demand: the sync engine pulls in the planner's domain code, which
+ * pages outside the project flow (home, legal pages) should not download.
+ * The module instance — and so the open project's engine — is shared.
+ */
+const loadProjectSync = () => import("@/shared/lib/project-sync/registry");
+
+/** How the current session began on this page; drives the guest-draft import. */
+export interface AuthEvent {
+    kind: "login" | "register";
+    at: number;
+}
+
 interface AuthContextType {
     user: User | null;
     isLoading: boolean;
@@ -25,6 +38,7 @@ interface AuthContextType {
     updateProfile: (name: string) => Promise<void>;
     changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
     deleteAccount: (password: string) => Promise<void>;
+    lastAuthEvent: AuthEvent | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -36,6 +50,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [lastAuthEvent, setLastAuthEvent] = useState<AuthEvent | null>(null);
     // Bumped by every explicit change, so a slower page-load probe can never
     // overwrite fresher state (e.g. a sign-in or a just-confirmed email).
     const generationRef = useRef(0);
@@ -83,6 +98,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
             const response = await authService.login(data);
             commitUser(response.user);
+            setLastAuthEvent({ kind: "login", at: Date.now() });
+            // A save paused by an expired session can continue now.
+            void loadProjectSync().then((sync) => sync.getCurrentProjectSync()?.resume());
         },
         [commitUser],
     );
@@ -95,20 +113,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
             const response = await authService.register(data);
             commitUser(response.user);
+            setLastAuthEvent({ kind: "register", at: Date.now() });
         },
         [commitUser],
     );
 
     const logout = useCallback(async () => {
+        // Send pending edits while the session still exists, then forget the
+        // device's copies so the next person here cannot open them.
+        const sync = await loadProjectSync();
+        await sync.flushProjectSync();
         try {
             await authService.logout();
         } finally {
+            sync.purgeProjectCaches();
             commitUser(null);
         }
     }, [commitUser]);
 
     const logoutEverywhere = useCallback(async () => {
+        const sync = await loadProjectSync();
+        await sync.flushProjectSync();
         await authService.logoutEverywhere();
+        sync.purgeProjectCaches();
         commitUser(null);
     }, [commitUser]);
 
@@ -129,6 +156,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const resetPassword = useCallback(
         async (token: string, password: string) => {
             commitUser(await authService.resetPassword(token, password));
+            void loadProjectSync().then((sync) => sync.getCurrentProjectSync()?.resume());
         },
         [commitUser],
     );
@@ -149,6 +177,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const deleteAccount = useCallback(
         async (password: string) => {
             await authService.deleteAccount(password);
+            (await loadProjectSync()).purgeProjectCaches();
             commitUser(null);
         },
         [commitUser],
@@ -168,6 +197,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         updateProfile,
         changePassword,
         deleteAccount,
+        lastAuthEvent,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

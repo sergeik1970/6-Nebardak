@@ -52,43 +52,29 @@ test.beforeEach(async ({ page }, testInfo) => {
     await page.evaluate(() => localStorage.clear());
 });
 
-test("a saved project restores from its own keys and never touches the guest draft", async ({
-    page,
-}) => {
+test("a project link never falls back to the guest draft or another store", async ({ page }) => {
     await page.evaluate(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), {
-        key: scoped(DRAFT_KEY),
+        key: DRAFT_KEY,
         value: draft,
     });
-
-    await page.goto(`/planner?project=${PROJECT_ID}`, { waitUntil: "networkidle" });
-    await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
-    await expect(page.getByRole("textbox", { name: "Ширина м" })).toHaveValue("6,2");
-
-    await page.goto("/planner", { waitUntil: "networkidle" });
-    await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).not.toBeChecked();
-
-    const keys = await page.evaluate(() => Object.keys(localStorage));
-    expect(keys).toContain(scoped(DRAFT_KEY));
-    const guestDraft = await page.evaluate((key) => localStorage.getItem(key), DRAFT_KEY);
-    expect(guestDraft ?? "").not.toContain("single-bed");
-});
-
-test("the room editor keeps the drawing per project and links back into it", async ({ page }) => {
     await page.evaluate(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), {
         key: scoped(EDITOR_KEY),
         value: scene,
     });
 
-    await page.goto(`/planner/draw?project=${PROJECT_ID}`, { waitUntil: "networkidle" });
-    await expect(page.getByText(/Восстановлен сохранённый чертёж/).first()).toBeVisible();
-    await expect(page.getByRole("link", { name: "Назад к планировщику" })).toHaveAttribute(
-        "href",
-        `/planner?project=${PROJECT_ID}`,
+    for (const path of ["/planner", "/planner/draw", "/questionnaire", "/test"]) {
+        await page.goto(`${path}?project=${PROJECT_ID}`, { waitUntil: "networkidle" });
+        // This build has accounts off; a saved project must not open from a local copy.
+        await expect(
+            page.getByRole("heading", { name: /Сохранённые проекты недоступны|Войдите/ }),
+        ).toBeVisible();
+        await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toHaveCount(0);
+    }
+
+    expect(await page.evaluate((key) => localStorage.getItem(key), DRAFT_KEY)).toContain(
+        "single-bed",
     );
     expect(await page.evaluate((key) => localStorage.getItem(key), EDITOR_KEY)).toBeNull();
-
-    await page.goto("/planner/draw", { waitUntil: "networkidle" });
-    await expect(page.getByText(/Восстановлен сохранённый чертёж/)).toHaveCount(0);
 });
 
 test("a malformed project id falls back to the guest draft", async ({ page }) => {
