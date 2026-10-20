@@ -114,6 +114,8 @@ import {
 import { buildPlannerCaveats } from "./presentation";
 import RemovalConfirmationDialog from "./RemovalConfirmationDialog";
 import styles from "./index.module.scss";
+import { useProjectHref, useProjectId } from "@/shared/lib/project-scope/ProjectScope";
+import { withProjectParam, withProjectQuery } from "@/shared/lib/project-scope/storage";
 
 type PlannerPhase = "ready" | "solving" | "result";
 type Selection = Record<string, number>;
@@ -2595,6 +2597,8 @@ const PlanCanvas: React.FC<PlanCanvasProps> = ({
     );
 };
 const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) => {
+    const projectId = useProjectId();
+    const projectHref = useProjectHref();
     const router = useRouter();
     const { isAuthenticated } = useAuth();
     const [room, setRoom] = useState<Room>(DEFAULT_ROOM);
@@ -4094,7 +4098,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                 : "Контур из отдельного редактора перенесён. Добавьте мебель или рассчитайте план.",
         );
         setDraftNotice("Контур комнаты сохранён в локальном черновике.");
-        void router.replace("/planner", undefined, { shallow: true });
+        void router.replace(withProjectParam("/planner"), undefined, { shallow: true });
     }, [drawRoomDraft, draftReady, router]);
 
     useEffect(() => {
@@ -4881,7 +4885,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
         }
         setDraftWritable(false);
         cancelActiveSolver();
-        await router.push({ pathname: "/questionnaire", query: { new: "1" } });
+        await router.push({ pathname: "/questionnaire", query: withProjectQuery({ new: "1" }) });
     }, [cancelActiveSolver, router]);
 
     const discardBrokenDraft = useCallback(() => {
@@ -5748,15 +5752,18 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                         <Link
                             href={{
                                 pathname: "/questionnaire",
-                                query: {
-                                    ...(handoffSource.styleKey
-                                        ? { style: handoffSource.styleKey }
-                                        : {}),
-                                    ...(handoffSource.styleLabel
-                                        ? { styleLabel: handoffSource.styleLabel }
-                                        : {}),
-                                    restore: "1",
-                                },
+                                query: withProjectQuery(
+                                    {
+                                        ...(handoffSource.styleKey
+                                            ? { style: handoffSource.styleKey }
+                                            : {}),
+                                        ...(handoffSource.styleLabel
+                                            ? { styleLabel: handoffSource.styleLabel }
+                                            : {}),
+                                        restore: "1",
+                                    },
+                                    projectId,
+                                ),
                             }}
                         >
                             Изменить ответы
@@ -5768,7 +5775,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                     <div className={styles.handoffWarning} role="alert">
                         <strong>Не удалось загрузить анкету</strong>
                         <span>{handoffWarning}</span>
-                        <Link href="/questionnaire">Пройти анкету</Link>
+                        <Link href={projectHref("/questionnaire")}>Пройти анкету</Link>
                     </div>
                 )}
 
@@ -5865,7 +5872,9 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                                 <button
                                     type="button"
                                     aria-label="Открыть отдельный редактор контура комнаты"
-                                    onClick={() => void router.push("/planner/draw")}
+                                    onClick={() =>
+                                        void router.push(withProjectParam("/planner/draw"))
+                                    }
                                 >
                                     Нарисовать
                                 </button>

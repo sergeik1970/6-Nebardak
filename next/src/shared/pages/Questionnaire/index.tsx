@@ -40,8 +40,11 @@ import {
     WardrobeId,
 } from "./model";
 import styles from "./index.module.scss";
+import { useProjectHref } from "@/shared/lib/project-scope/ProjectScope";
+import { withProjectQuery } from "@/shared/lib/project-scope/storage";
 
 const Questionnaire: React.FC = () => {
+    const projectHref = useProjectHref();
     const router = useRouter();
     const [answers, setAnswers] = useState<QuestionnaireAnswers>(INITIAL_ANSWERS);
     const [priorities, setPriorities] = useState<PriorityMap>({});
@@ -259,7 +262,7 @@ const Questionnaire: React.FC = () => {
         setDraftWarning("");
         setDraftCanReset(false);
         setDraftWritable(true);
-        await router.replace({ pathname: "/questionnaire", query: { new: "1" } });
+        await router.replace({ pathname: "/questionnaire", query: withProjectQuery({ new: "1" }) });
     }, [router]);
 
     const updateBed = useCallback((bed: BedChoice) => {
@@ -354,7 +357,7 @@ const Questionnaire: React.FC = () => {
         try {
             const navigated = await router.push({
                 pathname: "/planner",
-                query: { handoff: result.id },
+                query: withProjectQuery({ handoff: result.id }),
             });
             if (!navigated) {
                 setSubmitError("Не удалось открыть планировщик. Попробуйте ещё раз.");
@@ -381,7 +384,10 @@ const Questionnaire: React.FC = () => {
             <Navigation />
             <main id="main-content" className={styles.main} tabIndex={-1}>
                 <nav className={styles.progressRail} aria-label="Этапы создания комнаты">
-                    <Link href="/test" data-state={styleLabel ? "done" : "available"}>
+                    <Link
+                        href={projectHref("/test")}
+                        data-state={styleLabel ? "done" : "available"}
+                    >
                         <span>{styleLabel ? "✓" : "1"}</span>
                         <span>
                             <strong>Стиль</strong>

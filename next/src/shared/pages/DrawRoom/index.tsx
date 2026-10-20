@@ -1,4 +1,9 @@
 import { prepareDrawFurnitureHandoff } from "@/shared/lib/furniture-planner/draw-furniture-handoff";
+import {
+    DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY,
+    getProjectStorage,
+    withProjectParam,
+} from "@/shared/lib/project-scope/storage";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import Head from "next/head";
@@ -50,6 +55,7 @@ import MeasureTool from "./MeasureTool";
 import { readFurniture, type DrawFurniture } from "./furniture";
 
 import ProjectTools, { DEFAULT_DRAWING_LAYERS } from "./ProjectTools";
+import { useProjectHref } from "@/shared/lib/project-scope/ProjectScope";
 
 type Tool = "select" | "wall" | "door" | "window";
 type ToolGroup = "walls" | "openings" | "furniture";
@@ -225,7 +231,6 @@ const EMPTY_SCENE: Scene = {
     windows: [],
     wallThickness: WALL_THICKNESS_MM,
 };
-const DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY = "stylefinder:draw-room-editor:v1";
 // Up to this width a tool group opens as a sheet over the canvas (a tablet
 // flyout or a phone bottom sheet) rather than inside the desktop rail.
 const TOOL_SHEET_MEDIA_QUERY = "(max-width: 900px)";
@@ -342,7 +347,7 @@ const readEditorSession = (): Scene | null => {
     if (typeof window === "undefined") return null;
     try {
         const parsed = JSON.parse(
-            window.localStorage.getItem(DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY) ?? "null",
+            getProjectStorage()?.getItem(DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY) ?? "null",
         ) as Partial<Scene> | null;
         if (
             !parsed ||
@@ -3788,6 +3793,7 @@ const getRoomSummaryPlacement = (
 };
 
 const DrawRoom: React.FC = () => {
+    const projectHref = useProjectHref();
     const router = useRouter();
     const boardRef = useRef<SVGSVGElement>(null);
     const [tool, setTool] = useState<Tool>("wall");
@@ -4613,10 +4619,9 @@ const DrawRoom: React.FC = () => {
                     items: renderedRoomRegions.map(({ signature, name }) => ({ signature, name })),
                 },
             };
-            window.localStorage.setItem(
-                DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY,
-                JSON.stringify(persisted),
-            );
+            const storage = getProjectStorage();
+            if (!storage) throw new Error("storage unavailable");
+            storage.setItem(DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY, JSON.stringify(persisted));
             setAutosaveStatus("saved");
         } catch {
             setAutosaveStatus("error");
@@ -6254,7 +6259,7 @@ const DrawRoom: React.FC = () => {
         setViewBox(nextViewBox);
         setResetConfirmationOpen(false);
         try {
-            window.localStorage.removeItem(DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY);
+            getProjectStorage()?.removeItem(DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY);
         } catch {
             // Ignore unavailable local storage; the visual reset still succeeded.
         }
@@ -6313,7 +6318,7 @@ const DrawRoom: React.FC = () => {
             );
             return;
         }
-        void router.push("/planner?drawRoom=1");
+        void router.push(withProjectParam("/planner?drawRoom=1"));
     }, [plannerEligibilityError, plannerGridSnap, plannerPreview, router, scene.furniture]);
 
     useEffect(() => {
@@ -6569,7 +6574,7 @@ const DrawRoom: React.FC = () => {
                 <header className={styles.appBar}>
                     <div className={styles.identity}>
                         <Link
-                            href="/planner"
+                            href={projectHref("/planner")}
                             className={styles.backButton}
                             aria-label="Назад к планировщику"
                         >
@@ -9556,7 +9561,7 @@ const DrawRoom: React.FC = () => {
                             ? `X ${cursorPoint.x} · Y ${cursorPoint.y} мм`
                             : "Наведите курсор на поле"}
                     </span>
-                    <Link href="/planner" data-draw-room-status="planner-link">
+                    <Link href={projectHref("/planner")} data-draw-room-status="planner-link">
                         Вернуться к планировщику
                     </Link>
                 </footer>

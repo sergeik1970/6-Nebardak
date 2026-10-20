@@ -1,6 +1,7 @@
 import React from "react";
 import Head from "next/head";
 import Test from "@/shared/pages/Test";
+import ProjectScope from "@/shared/lib/project-scope/ProjectScope";
 
 const TestPage: React.FC = () => {
     return (
@@ -12,7 +13,9 @@ const TestPage: React.FC = () => {
                     content="Сравните близкие вам интерьеры и получите несколько визуальных направлений для дальнейшего подбора мебели."
                 />
             </Head>
-            <Test />
+            <ProjectScope>
+                <Test />
+            </ProjectScope>
         </>
     );
 };

@@ -29,6 +29,8 @@ import {
 } from "@/shared/lib/visual-preference/result-style-content";
 import { restoreVisualTestForTab } from "./storage";
 import styles from "./index.module.scss";
+import { useProjectId } from "@/shared/lib/project-scope/ProjectScope";
+import { withProjectQuery } from "@/shared/lib/project-scope/storage";
 
 const RESULT_GALLERY_SWIPE_THRESHOLD = 48;
 
@@ -183,6 +185,7 @@ const ResultStyleGallery: React.FC<ResultStyleGalleryProps> = ({ content, styleL
 };
 
 const Test: React.FC = () => {
+    const projectId = useProjectId();
     const [session, setSession] = useState<VisualTestSession | null>(null);
     const preloadedUrls = useRef(new Set<string>());
 
@@ -399,7 +402,10 @@ const Test: React.FC = () => {
                                 className={styles.primaryAction}
                                 href={{
                                     pathname: "/questionnaire",
-                                    query: { style: primary.key, styleLabel: primary.label },
+                                    query: withProjectQuery(
+                                        { style: primary.key, styleLabel: primary.label },
+                                        projectId,
+                                    ),
                                 }}
                             >
                                 Перейти к мебели
