@@ -34,6 +34,13 @@ export class User {
     @Column({ type: "timestamptz", nullable: true })
     emailVerifiedAt: Date | null;
 
+    /** Edition of the personal-data consent accepted at sign-up (152-ФЗ). */
+    @Column({ type: "varchar", length: 16, nullable: true })
+    consentVersion: string | null;
+
+    @Column({ type: "timestamptz", nullable: true })
+    consentAt: Date | null;
+
     @CreateDateColumn()
     createdAt: Date;
 

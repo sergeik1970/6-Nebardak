@@ -68,6 +68,31 @@ class AuthService {
         return response.user;
     }
 
+    async updateProfile(name: string): Promise<User> {
+        const response = await apiRequest<{ user: User }>("/account/profile", {
+            method: "PATCH",
+            body: { name },
+            fallbackMessage: "Не удалось сохранить имя",
+        });
+        return response.user;
+    }
+
+    async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+        await apiRequest<void>("/account/password", {
+            method: "POST",
+            body: { currentPassword, newPassword },
+            fallbackMessage: "Не удалось сменить пароль",
+        });
+    }
+
+    async deleteAccount(password: string): Promise<void> {
+        await apiRequest<void>("/account/delete", {
+            method: "POST",
+            body: { password },
+            fallbackMessage: "Не удалось удалить аккаунт",
+        });
+    }
+
     async logout(): Promise<void> {
         await apiRequest<void>("/auth/logout", { method: "POST" });
     }

@@ -30,11 +30,7 @@ export class EmailTokenService {
         purpose: EmailTokenPurpose,
         now = new Date(),
     ): Promise<string> {
-        await this.tokenRepository.delete({
-            user: { id: userId },
-            purpose,
-            usedAt: IsNull(),
-        });
+        await this.revoke(userId, purpose);
 
         const token = createSecretToken();
         await this.tokenRepository.save(
@@ -49,6 +45,15 @@ export class EmailTokenService {
             }),
         );
         return token;
+    }
+
+    /** Invalidates every unused link of this kind, e.g. after a password change. */
+    async revoke(userId: number, purpose: EmailTokenPurpose): Promise<void> {
+        await this.tokenRepository.delete({
+            user: { id: userId },
+            purpose,
+            usedAt: IsNull(),
+        });
     }
 
     /**

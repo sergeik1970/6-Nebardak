@@ -64,6 +64,8 @@ export class AuthService {
             email,
             password: hashedPassword,
             role: "designer",
+            consentVersion: registerDto.consentVersion,
+            consentAt: new Date(),
         });
 
         let savedUser: User;
@@ -123,6 +125,35 @@ export class AuthService {
             { id: userId },
             { password: await bcrypt.hash(password, this.passwordHashCost) },
         );
+    }
+
+    /**
+     * Re-authentication for sensitive account actions. Same cost-12 work
+     * whether or not the hash is usable, like login.
+     */
+    async verifyPassword(userId: number, password: string): Promise<boolean> {
+        assertBcryptPasswordLength(password);
+        const user = await this.userRepository
+            .createQueryBuilder("user")
+            .addSelect("user.password")
+            .where("user.id = :userId", { userId })
+            .getOne();
+
+        if (!user || !this.hasAcceptedPasswordCost(user.password)) {
+            await this.performDummyPasswordCheck(password);
+            return false;
+        }
+        return bcrypt.compare(password, user.password);
+    }
+
+    async updateName(userId: number, name: string): Promise<User | null> {
+        await this.userRepository.update({ id: userId }, { name });
+        return this.getUserById(userId);
+    }
+
+    /** Sessions, links, observations and projects cascade in the database. */
+    async deleteUser(userId: number): Promise<void> {
+        await this.userRepository.delete({ id: userId });
     }
 
     /** Idempotent: the first confirmation time is kept. */

@@ -11,13 +11,14 @@ import { OperationalLogger } from "../../services/OperationalLogger/operational-
 import { AuthService } from "../../services/AuthService/auth.service";
 import { SessionService } from "../../services/SessionService/session.service";
 import { AuthController } from "../../controllers/AuthController/auth.controller";
+import { AccountController } from "../../controllers/AccountController/account.controller";
 import { AuthGuard } from "../../guards/auth.guard";
 import { RegistrationEnabledGuard } from "../../guards/registration-enabled.guard";
 import { AuthEnabledGuard } from "../../guards/auth-enabled.guard";
 
 @Module({
     imports: [TypeOrmModule.forFeature([User, UserSession, EmailToken])],
-    controllers: [AuthController],
+    controllers: [AuthController, AccountController],
     providers: [
         AuthService,
         SessionService,

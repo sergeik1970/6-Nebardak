@@ -3,6 +3,8 @@ import React, { useEffect, useId, useRef, useState } from "react";
 import { useAuth } from "../../../contexts/AuthContext";
 import { isAuthRegistrationEnabled } from "@/shared/config/runtime";
 import InputText from "../InputText";
+import Checkbox from "../Checkbox";
+import { CURRENT_CONSENT_VERSION } from "@/shared/legal/consent";
 import styles from "./index.module.scss";
 
 interface AuthModalProps {
@@ -27,6 +29,7 @@ const AuthModal: React.FC<AuthModalProps> = ({
 }) => {
     const [isLogin, setIsLogin] = useState(true);
     const [formData, setFormData] = useState({ name: "", email: "", password: "" });
+    const [hasConsent, setHasConsent] = useState(false);
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const dialogRef = useRef<HTMLDivElement>(null);
@@ -119,6 +122,10 @@ const AuthModal: React.FC<AuthModalProps> = ({
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
+        if (!isLogin && registrationEnabled && !hasConsent) {
+            setError("Чтобы создать аккаунт, отметьте согласие на обработку данных.");
+            return;
+        }
         setError("");
         setIsLoading(true);
 
@@ -126,7 +133,7 @@ const AuthModal: React.FC<AuthModalProps> = ({
             if (isLogin || !registrationEnabled) {
                 await login({ email: formData.email, password: formData.password });
             } else {
-                await register(formData);
+                await register({ ...formData, consentVersion: CURRENT_CONSENT_VERSION });
             }
             onClose();
         } catch (caughtError: unknown) {
@@ -140,6 +147,7 @@ const AuthModal: React.FC<AuthModalProps> = ({
         if (!registrationEnabled) return;
         setIsLogin((current) => !current);
         setFormData({ name: "", email: "", password: "" });
+        setHasConsent(false);
         setError("");
     };
 
@@ -248,6 +256,27 @@ const AuthModal: React.FC<AuthModalProps> = ({
                             value={formData.password}
                         />
                     </div>
+
+                    {!isLogin && registrationEnabled ? (
+                        <Checkbox
+                            checked={hasConsent}
+                            className={styles.consent}
+                            description={
+                                <>
+                                    <Link href="/consent" target="_blank">
+                                        Текст согласия
+                                    </Link>
+                                    {" · "}
+                                    <Link href="/privacy" target="_blank">
+                                        Политика обработки данных
+                                    </Link>
+                                </>
+                            }
+                            label="Я даю согласие на обработку моих персональных данных"
+                            onChange={(event) => setHasConsent(event.target.checked)}
+                            required
+                        />
+                    ) : null}
 
                     {isLogin ? (
                         <Link className={styles.forgotLink} href="/auth/forgot" onClick={onClose}>

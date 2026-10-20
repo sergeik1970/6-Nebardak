@@ -73,6 +73,11 @@ const Footer: React.FC = () => {
                         </nav>
                     </div>
                 </div>
+                {/* Always visible: 152-ФЗ requires the policy to be freely accessible. */}
+                <p className={styles["footer-legal"]}>
+                    <Link href="/privacy">Политика обработки персональных данных</Link>
+                    <Link href="/consent">Согласие на обработку данных</Link>
+                </p>
             </div>
         </footer>
     );

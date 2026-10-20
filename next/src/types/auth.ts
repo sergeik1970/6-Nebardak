@@ -16,6 +16,8 @@ export interface RegisterData {
     name: string;
     email: string;
     password: string;
+    /** Edition of the personal-data consent the person accepted. */
+    consentVersion: string;
 }
 
 export interface LoginData {

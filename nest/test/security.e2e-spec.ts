@@ -7,6 +7,9 @@ import { DataSource } from "typeorm";
 import { configureTrustedProxy } from "../src/config/http-runtime";
 import { createGlobalValidationPipe } from "../src/config/validation";
 import { AuthController } from "../src/controllers/AuthController/auth.controller";
+import { AccountController } from "../src/controllers/AccountController/account.controller";
+import { EmailTokenService } from "../src/services/EmailTokenService/email-token.service";
+import { CURRENT_CONSENT_VERSION } from "../src/legal/consent";
 import { HealthController } from "../src/controllers/HealthController/health.controller";
 import { AuthEnabledGuard } from "../src/guards/auth-enabled.guard";
 import { AuthGuard } from "../src/guards/auth.guard";
@@ -30,12 +33,17 @@ interface Harness {
     authService: {
         register: jest.Mock;
         login: jest.Mock;
+        verifyPassword: jest.Mock;
+        setPassword: jest.Mock;
+        updateName: jest.Mock;
+        deleteUser: jest.Mock;
     };
     sessionService: {
         create: jest.Mock;
         authenticate: jest.Mock;
         revoke: jest.Mock;
         revokeAll: jest.Mock;
+        revokeOthers: jest.Mock;
     };
     recovery: {
         sendVerification: jest.Mock;
@@ -92,6 +100,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
                 name: "Мария",
                 email: "maria@example.com",
                 password: "safe-password",
+                consentVersion: CURRENT_CONSENT_VERSION,
             })
             .expect(404);
         await request(harness.baseUrl).get("/api/auth/me").expect(404);
@@ -144,6 +153,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
             name: "Мария",
             email: "maria@example.com",
             password: "safe-password",
+            consentVersion: CURRENT_CONSENT_VERSION,
         };
 
         for (let index = 0; index < 3; index += 1) {
@@ -172,6 +182,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
             name: "Мария",
             email: "maria@example.com",
             password: "safe-password",
+            consentVersion: CURRENT_CONSENT_VERSION,
         };
 
         for (let index = 0; index < 3; index += 1) {
@@ -202,6 +213,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
             name: "Мария",
             email: "maria@example.com",
             password: "safe-password",
+            consentVersion: CURRENT_CONSENT_VERSION,
         };
 
         for (let index = 0; index < 3; index += 1) {
@@ -333,6 +345,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
                 name: "Мария",
                 email: "maria@example.com",
                 password: "safe-password",
+                consentVersion: CURRENT_CONSENT_VERSION,
             })
             .expect(201);
 
@@ -413,6 +426,115 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
         expect(harness.recovery.sendVerification).toHaveBeenCalledTimes(1);
     });
 
+    it("rejects sign-up without the current personal-data consent", async () => {
+        const harness = await createHarness({
+            authEnabled: true,
+            registrationEnabled: true,
+        });
+
+        const response = await request(harness.baseUrl)
+            .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
+            .send({
+                name: "Мария",
+                email: "maria@example.com",
+                password: "safe-password",
+                consentVersion: "2000-01-01",
+            })
+            .expect(400);
+
+        expect(JSON.stringify(response.body)).toContain("согласие");
+        expect(harness.authService.register).not.toHaveBeenCalled();
+    });
+
+    it("keeps every account action behind the session cookie", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .patch("/api/account/profile")
+            .set("X-Requested-With", "stylefinder")
+            .send({ name: "Мария" })
+            .expect(401);
+        await request(harness.baseUrl)
+            .post("/api/account/delete")
+            .set("X-Requested-With", "stylefinder")
+            .send({ password: "safe-password" })
+            .expect(401);
+        await request(harness.baseUrl)
+            .post("/api/account/delete")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .send({ password: "safe-password" })
+            .expect(403);
+
+        expect(harness.authService.deleteUser).not.toHaveBeenCalled();
+    });
+
+    it("renames the account with the same rules as sign-up", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .patch("/api/account/profile")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .send({ name: "М" })
+            .expect(400);
+        const renamed = await request(harness.baseUrl)
+            .patch("/api/account/profile")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .send({ name: "  Мария Иванова " })
+            .expect(200);
+
+        expect(renamed.body.user.name).toBe("Мария Иванова");
+    });
+
+    it("changes the password only with the current one and ends other sessions", async () => {
+        const harness = await createHarness({ authEnabled: true });
+        const send = (currentPassword: string) =>
+            request(harness.baseUrl)
+                .post("/api/account/password")
+                .set("X-Requested-With", "stylefinder")
+                .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+                .send({ currentPassword, newPassword: "brand-new-password" });
+
+        await send("wrong-password").expect(403);
+        expect(harness.authService.setPassword).not.toHaveBeenCalled();
+
+        await send("safe-password").expect(204);
+        expect(harness.authService.setPassword).toHaveBeenCalledWith(
+            1,
+            "brand-new-password",
+        );
+        expect(harness.sessionService.revokeOthers).toHaveBeenCalledWith(
+            1,
+            "session-1",
+        );
+    });
+
+    it("deletes the account only with the password and clears the cookie", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .post("/api/account/delete")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .send({ password: "wrong-password" })
+            .expect(403);
+        expect(harness.authService.deleteUser).not.toHaveBeenCalled();
+
+        const deleted = await request(harness.baseUrl)
+            .post("/api/account/delete")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .send({ password: "safe-password" })
+            .expect(204);
+
+        expect(harness.authService.deleteUser).toHaveBeenCalledWith(1);
+        expect(String(deleted.headers["set-cookie"])).toMatch(
+            /sf_session=;.*Expires=Thu, 01 Jan 1970/,
+        );
+    });
+
     it("serves live/ready and maps database failures to a bounded 503", async () => {
         const query = jest.fn().mockResolvedValue([{ ok: 1 }]);
         const harness = await createHarness({ databaseQuery: query });
@@ -469,6 +591,16 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
     const authService = {
         register: jest.fn().mockResolvedValue(user),
         login: jest.fn().mockResolvedValue(user),
+        verifyPassword: jest.fn(
+            async (_userId: number, password: string) =>
+                password === "safe-password",
+        ),
+        setPassword: jest.fn().mockResolvedValue(undefined),
+        updateName: jest.fn(async (_userId: number, name: string) => ({
+            ...user,
+            name,
+        })),
+        deleteUser: jest.fn().mockResolvedValue(undefined),
     };
     const sessionService = {
         create: jest.fn().mockResolvedValue({
@@ -482,6 +614,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
         ),
         revoke: jest.fn().mockResolvedValue(undefined),
         revokeAll: jest.fn().mockResolvedValue(undefined),
+        revokeOthers: jest.fn().mockResolvedValue(undefined),
     };
     const databaseQuery =
         options.databaseQuery ?? jest.fn().mockResolvedValue([{ ok: 1 }]);
@@ -491,6 +624,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
     };
     const operationalLogger = {
         health: jest.fn(),
+        event: jest.fn(),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -499,7 +633,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
                 { ttl: 60_000, limit: 120, blockDuration: 60_000 },
             ]),
         ],
-        controllers: [AuthController, HealthController],
+        controllers: [AuthController, AccountController, HealthController],
         providers: [
             AuthEnabledGuard,
             AuthGuard,
@@ -507,6 +641,10 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
             { provide: AuthService, useValue: authService },
             { provide: SessionService, useValue: sessionService },
             { provide: AccountRecoveryService, useValue: recovery },
+            {
+                provide: EmailTokenService,
+                useValue: { revoke: jest.fn() },
+            },
             { provide: DataSource, useValue: dataSource },
             { provide: OperationalLogger, useValue: operationalLogger },
             { provide: APP_GUARD, useClass: CsrfGuard },

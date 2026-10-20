@@ -90,8 +90,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 11 THEN
-        RAISE EXCEPTION 'expected 11 applied migrations, got %', applied_migrations;
+    IF applied_migrations <> 12 THEN
+        RAISE EXCEPTION 'expected 12 applied migrations, got %', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table still exists';
@@ -256,8 +256,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 11 THEN
-        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 11', applied_migrations;
+    IF applied_migrations <> 12 THEN
+        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 12', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table returned after rollback/reapply';

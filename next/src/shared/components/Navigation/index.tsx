@@ -184,7 +184,13 @@ const Navigation: React.FC = () => {
                         {navigationLinks}
                         {authEnabled && isAuthenticated ? (
                             <div className={styles["user-menu"]}>
-                                <span className={styles["user-name"]}>Привет, {user?.name}!</span>
+                                <Link
+                                    aria-label={`Личный кабинет: ${user?.name ?? ""}`}
+                                    className={styles["user-name"]}
+                                    href="/account"
+                                >
+                                    Привет, {user?.name}!
+                                </Link>
                                 <button
                                     className={styles["nav-logout-btn"]}
                                     onClick={handleLogout}
@@ -260,6 +266,13 @@ const Navigation: React.FC = () => {
                                 <div className={styles["mobile-user-info"]}>
                                     Привет, {user?.name}!
                                 </div>
+                                <Link
+                                    className={styles["mobile-nav-link"]}
+                                    href="/account"
+                                    onClick={closeMenu}
+                                >
+                                    Личный кабинет
+                                </Link>
                                 <button
                                     className={styles["mobile-nav-link"]}
                                     onClick={handleLogout}

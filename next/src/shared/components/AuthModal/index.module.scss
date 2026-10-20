@@ -233,3 +233,13 @@
         outline-offset: 2px;
     }
 }
+
+.consent {
+    font-size: 14px;
+
+    a {
+        color: var(--sf-color-brand-active);
+        font-weight: 700;
+        text-underline-offset: 3px;
+    }
+}

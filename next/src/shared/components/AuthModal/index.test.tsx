@@ -26,6 +26,10 @@ describe("AuthModal modes", () => {
         expect(renderModal(false)).toMatch(/href="\/auth\/forgot"[^>]*>Забыли пароль\?</);
     });
 
+    it("never shows the consent checkbox on the login form", () => {
+        expect(renderModal(true)).not.toContain("согласие на обработку");
+    });
+
     it("offers an explicit registration switch only when enabled", () => {
         expect(renderModal(true)).toContain("Зарегистрироваться");
     });

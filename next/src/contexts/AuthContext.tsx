@@ -22,6 +22,9 @@ interface AuthContextType {
     verifyEmail: (token: string) => Promise<void>;
     resetPassword: (token: string, password: string) => Promise<void>;
     resendVerification: () => Promise<void>;
+    updateProfile: (name: string) => Promise<void>;
+    changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+    deleteAccount: (password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -132,6 +135,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const resendVerification = useCallback(() => authService.resendVerification(), []);
 
+    const updateProfile = useCallback(
+        async (name: string) => commitUser(await authService.updateProfile(name)),
+        [commitUser],
+    );
+
+    const changePassword = useCallback(
+        (currentPassword: string, newPassword: string) =>
+            authService.changePassword(currentPassword, newPassword),
+        [],
+    );
+
+    const deleteAccount = useCallback(
+        async (password: string) => {
+            await authService.deleteAccount(password);
+            commitUser(null);
+        },
+        [commitUser],
+    );
+
     const value: AuthContextType = {
         user,
         isLoading,
@@ -143,6 +165,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         verifyEmail,
         resetPassword,
         resendVerification,
+        updateProfile,
+        changePassword,
+        deleteAccount,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

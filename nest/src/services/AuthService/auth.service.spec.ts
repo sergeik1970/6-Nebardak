@@ -3,6 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { Repository } from "typeorm";
 import { User } from "../../entities/User/user.entity";
 import { AuthService } from "./auth.service";
+import { CURRENT_CONSENT_VERSION } from "../../legal/consent";
 
 const managedEnvironmentKeys = ["NODE_ENV", "AUTH_ENABLED"] as const;
 
@@ -79,6 +80,7 @@ describe("AuthService", () => {
                 name: "Мария",
                 email: "maria@example.com",
                 password: "я".repeat(37),
+                consentVersion: CURRENT_CONSENT_VERSION,
             }),
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(repository.createQueryBuilder).not.toHaveBeenCalled();
@@ -166,14 +168,39 @@ describe("AuthService", () => {
             name: "Мария",
             email: "Maria@Example.com",
             password: "safe-password",
+            consentVersion: CURRENT_CONSENT_VERSION,
         });
 
         expect(user).toMatchObject({
             id: 18,
             email: "maria@example.com",
             role: "designer",
+            consentVersion: CURRENT_CONSENT_VERSION,
         });
+        expect(user.consentAt).toBeInstanceOf(Date);
         expect(user.password).not.toBe("safe-password");
         expect(bcrypt.getRounds(user.password)).toBe(12);
+    });
+
+    it("re-authenticates with the same dummy work for unusable hashes", async () => {
+        const { repository, queryBuilder } = makeRepository();
+        const compare = jest.spyOn(bcrypt, "compare");
+        const service = new AuthService(repository);
+
+        queryBuilder.getOne.mockResolvedValue(null);
+        await expect(service.verifyPassword(17, "any-password")).resolves.toBe(
+            false,
+        );
+        queryBuilder.getOne.mockResolvedValue(
+            makeUser(bcrypt.hashSync("correct-password", 12)),
+        );
+        await expect(
+            service.verifyPassword(17, "correct-password"),
+        ).resolves.toBe(true);
+        await expect(
+            service.verifyPassword(17, "wrong-password"),
+        ).resolves.toBe(false);
+
+        expect(compare).toHaveBeenCalledTimes(3);
     });
 });
