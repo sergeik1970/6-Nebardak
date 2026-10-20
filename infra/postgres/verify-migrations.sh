@@ -90,8 +90,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 12 THEN
-        RAISE EXCEPTION 'expected 12 applied migrations, got %', applied_migrations;
+    IF applied_migrations <> 13 THEN
+        RAISE EXCEPTION 'expected 13 applied migrations, got %', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table still exists';
@@ -172,6 +172,12 @@ BEGIN
        NOT has_table_privilege(current_user, 'public.email_token', 'DELETE') THEN
         RAISE EXCEPTION 'runtime role lacks required email-link rights';
     END IF;
+    IF NOT has_table_privilege(current_user, 'public.project', 'SELECT') OR
+       NOT has_table_privilege(current_user, 'public.project', 'INSERT') OR
+       NOT has_table_privilege(current_user, 'public.project', 'UPDATE') OR
+       NOT has_table_privilege(current_user, 'public.project', 'DELETE') THEN
+        RAISE EXCEPTION 'runtime role lacks required project rights';
+    END IF;
     IF has_sequence_privilege(current_user, 'public.user_id_seq', 'SELECT') OR
        has_sequence_privilege(current_user, 'public.user_id_seq', 'UPDATE') THEN
         RAISE EXCEPTION 'runtime role has broader sequence rights than required';
@@ -234,6 +240,11 @@ FROM "user" WHERE "email" = 'runtime-ci@example.test';
 UPDATE "email_token" SET "used_at" = now() WHERE "token_hash" = repeat('b', 64);
 UPDATE "user" SET "emailVerifiedAt" = now() WHERE "email" = 'runtime-ci@example.test';
 DELETE FROM "email_token" WHERE "token_hash" = repeat('b', 64);
+SELECT "id" FROM "user" WHERE "email" = 'runtime-ci@example.test' FOR UPDATE;
+INSERT INTO "project" ("owner_user_id", "name", "document", "document_version")
+SELECT "id", 'Runtime CI', '{"version": 4}', 4
+FROM "user" WHERE "email" = 'runtime-ci@example.test';
+UPDATE "project" SET "revision" = "revision" + 1 WHERE "name" = 'Runtime CI';
 DELETE FROM "user" WHERE "email" = 'runtime-ci@example.test';
 SQL
 
@@ -256,8 +267,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 12 THEN
-        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 12', applied_migrations;
+    IF applied_migrations <> 13 THEN
+        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 13', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table returned after rollback/reapply';

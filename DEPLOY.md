@@ -83,7 +83,7 @@ Mailgun и т. п.), иначе письма попадут в спам. В ло
 PostgreSQL получает только admin-переменные. One-off сервис
 `db-roles` создаёт отдельного владельца миграций и runtime-роль без права менять
 схему. Сервис `nest` получает только runtime-реквизиты, `migrate` — только
-миграционные. Runtime-роль получает DML для таблиц `user`, `user_session` и `email_token`, `SELECT`, `INSERT`
+миграционные. Runtime-роль получает DML для таблиц `user`, `user_session`, `email_token` и `project`, `SELECT`, `INSERT`
 и `UPDATE` для `planner_observations` и `USAGE` только для `user_id_seq` и
 `planner_observations_id_seq`; доступ к migration history, созданию временных объектов
 и остальным sequence отсутствует. Все роли должны иметь разные имена и пароли.

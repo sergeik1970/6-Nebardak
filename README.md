@@ -67,6 +67,7 @@ cd nest
 npm run lint:check
 npm test
 npm run test:e2e
+npm run test:db   # SQL-тесты проектов на временной PostgreSQL 16 (нужен Docker)
 npm run build
 ```
 

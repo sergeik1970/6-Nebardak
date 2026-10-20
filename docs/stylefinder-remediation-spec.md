@@ -396,7 +396,7 @@ Hard-проверка строит конфигурационное простр
 - rate limiting;
 - отдельные DB-роли;
 - fail-fast для placeholder, коротких и совпадающих паролей DB-ролей;
-- runtime-роль имеет полный DML только к `user` и `user_session`, `SELECT`/`INSERT`/`UPDATE`
+- runtime-роль имеет полный DML только к `user`, `user_session`, `email_token` и `project`, `SELECT`/`INSERT`/`UPDATE`
   к `planner_observations`, `USAGE` только к их id-sequence и не имеет `TEMP`, schema DDL
   или доступа к migration history;
 - сессии — непрозрачный токен в HttpOnly-cookie (в БД только хеш), CSRF-защита

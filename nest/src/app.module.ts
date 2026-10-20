@@ -3,6 +3,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AuthModule } from "./modules/AuthModule/auth.module";
 import { PlannerObservationsModule } from "./modules/PlannerObservationsModule/planner-observations.module";
+import { ProjectsModule } from "./modules/ProjectsModule/projects.module";
 import { AdminPlannerObservationsModule } from "./modules/AdminPlannerObservationsModule/admin-planner-observations.module";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { HealthController } from "./controllers/HealthController/health.controller";
@@ -44,6 +45,7 @@ const runtime = getRuntimeConfig();
         AuthModule,
         PlannerObservationsModule,
         AdminPlannerObservationsModule,
+        ProjectsModule,
     ],
     controllers: [HealthController],
     providers: [

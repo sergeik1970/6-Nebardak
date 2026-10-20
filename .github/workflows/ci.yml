@@ -87,6 +87,8 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run test:e2e
+      - name: SQL integration tests on PostgreSQL 16
+        run: npm run test:db
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high
       # Dev-only chains (braces via eslint-config-next / jest) have no patched

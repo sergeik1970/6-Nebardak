@@ -5,17 +5,22 @@ import { AppModule } from "./app.module";
 import { createGlobalValidationPipe } from "./config/validation";
 import { getRuntimeConfig } from "./config/runtime.config";
 import { OperationalLogger } from "./services/OperationalLogger/operational-logger.service";
-import { configureTrustedProxy } from "./config/http-runtime";
+import {
+    configureBodyParsers,
+    configureTrustedProxy,
+} from "./config/http-runtime";
 
 async function bootstrap() {
     const runtime = getRuntimeConfig();
     const app = await NestFactory.create(AppModule, {
+        bodyParser: false,
         logger: new ConsoleLogger({
             json: runtime.nodeEnv === "production",
             colors: runtime.nodeEnv !== "production",
             compact: true,
         }),
     });
+    configureBodyParsers(app);
     app.setGlobalPrefix("api");
     app.useGlobalPipes(createGlobalValidationPipe());
     app.enableShutdownHooks();
