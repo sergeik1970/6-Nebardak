@@ -16,6 +16,9 @@ const runtime = getRuntimeConfig();
     imports: [
         TypeOrmModule.forRoot({
             type: "postgres",
+            // UUID keys default to gen_random_uuid() in the migrations; the
+            // runtime role may not (and need not) create extensions.
+            installExtensions: false,
             host: runtime.database.host,
             port: runtime.database.port,
             username: runtime.database.username,

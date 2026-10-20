@@ -7,8 +7,8 @@ import {
     SESSION_IDLE_TTL_MS,
     SESSION_TOUCH_INTERVAL_MS,
     SessionService,
-    hashSessionToken,
 } from "./session.service";
+import { hashSecretToken } from "../../security/secret-token";
 
 function makeRepository() {
     const repository = {
@@ -62,7 +62,7 @@ describe("SessionService", () => {
 
         expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
         const saved = repository.save.mock.calls[0][0];
-        expect(saved.tokenHash).toBe(hashSessionToken(token));
+        expect(saved.tokenHash).toBe(hashSecretToken(token));
         expect(saved.tokenHash).not.toContain(token);
         expect(saved.userAgent).toBe("Browser/1");
         expect(saved.expiresAt.getTime()).toBe(
@@ -152,7 +152,7 @@ describe("SessionService", () => {
 
         expect(repository.delete).toHaveBeenCalledTimes(1);
         expect(repository.delete).toHaveBeenCalledWith({
-            tokenHash: hashSessionToken(token),
+            tokenHash: hashSecretToken(token),
         });
     });
 });

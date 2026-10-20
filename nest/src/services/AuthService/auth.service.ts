@@ -17,6 +17,7 @@ export interface PublicUser {
     name: string;
     email: string;
     role: UserRole;
+    emailVerified: boolean;
 }
 
 export function toPublicUser(user: User): PublicUser {
@@ -25,6 +26,7 @@ export function toPublicUser(user: User): PublicUser {
         name: user.name,
         email: user.email,
         role: user.role,
+        emailVerified: Boolean(user.emailVerifiedAt),
     };
 }
 
@@ -109,6 +111,29 @@ export class AuthService {
 
     async getUserById(id: number): Promise<User | null> {
         return this.userRepository.findOne({ where: { id } });
+    }
+
+    findUserByEmail(email: string): Promise<User | null> {
+        return this.findByEmail(this.normalizeEmail(email));
+    }
+
+    async setPassword(userId: number, password: string): Promise<void> {
+        assertBcryptPasswordLength(password);
+        await this.userRepository.update(
+            { id: userId },
+            { password: await bcrypt.hash(password, this.passwordHashCost) },
+        );
+    }
+
+    /** Idempotent: the first confirmation time is kept. */
+    async markEmailVerified(userId: number, now = new Date()): Promise<void> {
+        await this.userRepository
+            .createQueryBuilder()
+            .update(User)
+            .set({ emailVerifiedAt: now })
+            .where("id = :userId", { userId })
+            .andWhere('"emailVerifiedAt" IS NULL')
+            .execute();
     }
 
     private normalizeEmail(email: string): string {

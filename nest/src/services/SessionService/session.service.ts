@@ -1,9 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { createHash, randomBytes } from "node:crypto";
 import { LessThan, Repository } from "typeorm";
 import { User } from "../../entities/User/user.entity";
 import { UserSession } from "../../entities/UserSession/user-session.entity";
+import {
+    createSecretToken,
+    hashSecretToken,
+    isSecretTokenFormat,
+} from "../../security/secret-token";
 
 const DAY_MS = 24 * 60 * 60_000;
 
@@ -13,15 +17,9 @@ export const SESSION_ABSOLUTE_TTL_MS = 90 * DAY_MS;
 export const SESSION_TOUCH_INTERVAL_MS = 60 * 60_000;
 export const MAX_SESSIONS_PER_USER = 20;
 
-const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
-
 export interface AuthenticatedSession {
     user: User;
     session: UserSession;
-}
-
-export function hashSessionToken(token: string): string {
-    return createHash("sha256").update(token).digest("hex");
 }
 
 @Injectable()
@@ -36,14 +34,14 @@ export class SessionService {
         userAgent?: string,
         now = new Date(),
     ): Promise<{ token: string; session: UserSession }> {
-        const token = randomBytes(32).toString("base64url");
+        const token = createSecretToken();
         const absoluteExpiresAt = new Date(
             now.getTime() + SESSION_ABSOLUTE_TTL_MS,
         );
         const session = await this.sessionRepository.save(
             this.sessionRepository.create({
                 user: { id: user.id } as User,
-                tokenHash: hashSessionToken(token),
+                tokenHash: hashSecretToken(token),
                 lastSeenAt: now,
                 expiresAt: new Date(now.getTime() + SESSION_IDLE_TTL_MS),
                 absoluteExpiresAt,
@@ -59,10 +57,10 @@ export class SessionService {
         token: string | undefined,
         now = new Date(),
     ): Promise<AuthenticatedSession | null> {
-        if (!token || !TOKEN_PATTERN.test(token)) return null;
+        if (!isSecretTokenFormat(token)) return null;
 
         const session = await this.sessionRepository.findOne({
-            where: { tokenHash: hashSessionToken(token) },
+            where: { tokenHash: hashSecretToken(token) },
             relations: { user: true },
         });
         if (!session?.user) return null;
@@ -96,9 +94,9 @@ export class SessionService {
     }
 
     async revoke(token: string | undefined): Promise<void> {
-        if (!token || !TOKEN_PATTERN.test(token)) return;
+        if (!isSecretTokenFormat(token)) return;
         await this.sessionRepository.delete({
-            tokenHash: hashSessionToken(token),
+            tokenHash: hashSecretToken(token),
         });
     }
 

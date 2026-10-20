@@ -57,10 +57,22 @@ cookie `__Host-sf_session` (`HttpOnly; Secure; SameSite=Lax`), а в табли�
 отклоняет изменяющие запросы с другим `Origin` или без заголовка
 `X-Requested-With: stylefinder`.
 
+Письма подтверждения почты и сброса пароля уходят через SMTP-релей. При
+`AUTH_ENABLED=true` обязательны `SMTP_HOST` и `SMTP_FROM` (например,
+`StyleFinder <no-reply@stylefinder.design>`); `SMTP_USER`/`SMTP_PASSWORD`
+задаются парой. На порту 465 используется TLS сразу (`SMTP_SECURE=true`), на
+587 production требует STARTTLS. До включения аккаунтов у домена отправителя
+должны быть SPF, DKIM и DMARC, выданные провайдером (Yandex Postbox, Unisender Go,
+Mailgun и т. п.), иначе письма попадут в спам. В логах фиксируются только
+`userId` и коды событий — без адресов и ссылок.
+
+Раз в 6 часов API удаляет истёкшие сессии, использованные ссылки и
+неподтверждённые аккаунты (кроме admin), у которых 30 дней не было активности.
+
 PostgreSQL получает только admin-переменные. One-off сервис
 `db-roles` создаёт отдельного владельца миграций и runtime-роль без права менять
 схему. Сервис `nest` получает только runtime-реквизиты, `migrate` — только
-миграционные. Runtime-роль получает DML для таблиц `user` и `user_session`, `SELECT`, `INSERT`
+миграционные. Runtime-роль получает DML для таблиц `user`, `user_session` и `email_token`, `SELECT`, `INSERT`
 и `UPDATE` для `planner_observations` и `USAGE` только для `user_id_seq` и
 `planner_observations_id_seq`; доступ к migration history, созданию временных объектов
 и остальным sequence отсутствует. Все роли должны иметь разные имена и пароли.

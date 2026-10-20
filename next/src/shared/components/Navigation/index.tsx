@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import React, { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../../contexts/AuthContext";
+import EmailVerificationBanner from "../EmailVerificationBanner";
 import { authUiMode, isAuthRegistrationEnabled } from "@/shared/config/runtime";
 import AuthModal from "../AuthModal";
 import BetaBadge from "../BetaBadge";
@@ -304,6 +305,8 @@ const Navigation: React.FC = () => {
                     </div>
                 </div>
             </nav>
+
+            {authEnabled ? <EmailVerificationBanner /> : null}
 
             {authEnabled ? (
                 <AuthModal

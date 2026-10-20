@@ -140,14 +140,14 @@ SELECT format(
 FROM pg_tables
 WHERE schemaname = 'public' AND tablename = 'user' \gexec
 
--- Sessions are created, refreshed and revoked by the API. Their primary key is
+-- Sessions and email links are created, used and purged by the API. Their primary key is
 -- a UUID default, so no sequence grant is needed.
 SELECT format(
     'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE %I.%I TO %I',
     schemaname, tablename, :'app_user'
 )
 FROM pg_tables
-WHERE schemaname = 'public' AND tablename = 'user_session' \gexec
+WHERE schemaname = 'public' AND tablename IN ('user_session', 'email_token') \gexec
 
 -- Planner observations are written and triaged by the API but never deleted
 -- by it; user deletion cascades as the table owner.

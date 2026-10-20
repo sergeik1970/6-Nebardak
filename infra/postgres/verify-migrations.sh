@@ -90,8 +90,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 10 THEN
-        RAISE EXCEPTION 'expected 10 applied migrations, got %', applied_migrations;
+    IF applied_migrations <> 11 THEN
+        RAISE EXCEPTION 'expected 11 applied migrations, got %', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table still exists';
@@ -166,6 +166,12 @@ BEGIN
        NOT has_table_privilege(current_user, 'public.user_session', 'DELETE') THEN
         RAISE EXCEPTION 'runtime role lacks required session rights';
     END IF;
+    IF NOT has_table_privilege(current_user, 'public.email_token', 'SELECT') OR
+       NOT has_table_privilege(current_user, 'public.email_token', 'INSERT') OR
+       NOT has_table_privilege(current_user, 'public.email_token', 'UPDATE') OR
+       NOT has_table_privilege(current_user, 'public.email_token', 'DELETE') THEN
+        RAISE EXCEPTION 'runtime role lacks required email-link rights';
+    END IF;
     IF has_sequence_privilege(current_user, 'public.user_id_seq', 'SELECT') OR
        has_sequence_privilege(current_user, 'public.user_id_seq', 'UPDATE') THEN
         RAISE EXCEPTION 'runtime role has broader sequence rights than required';
@@ -222,6 +228,12 @@ SELECT "id", repeat('a', 64), now(), now() + interval '1 day', now() + interval 
 FROM "user" WHERE "email" = 'runtime-ci@example.test';
 UPDATE "user_session" SET "last_seen_at" = now() WHERE "token_hash" = repeat('a', 64);
 DELETE FROM "user_session" WHERE "token_hash" = repeat('a', 64);
+INSERT INTO "email_token" ("user_id", "purpose", "token_hash", "expires_at")
+SELECT "id", 'verify-email', repeat('b', 64), now() + interval '1 hour'
+FROM "user" WHERE "email" = 'runtime-ci@example.test';
+UPDATE "email_token" SET "used_at" = now() WHERE "token_hash" = repeat('b', 64);
+UPDATE "user" SET "emailVerifiedAt" = now() WHERE "email" = 'runtime-ci@example.test';
+DELETE FROM "email_token" WHERE "token_hash" = repeat('b', 64);
 DELETE FROM "user" WHERE "email" = 'runtime-ci@example.test';
 SQL
 
@@ -244,8 +256,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 10 THEN
-        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 10', applied_migrations;
+    IF applied_migrations <> 11 THEN
+        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 11', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table returned after rollback/reapply';

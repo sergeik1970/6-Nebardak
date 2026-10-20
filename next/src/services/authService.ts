@@ -34,6 +34,40 @@ class AuthService {
         return response.user;
     }
 
+    async verifyEmail(token: string): Promise<User> {
+        const response = await apiRequest<{ user: User }>("/auth/verify-email", {
+            method: "POST",
+            body: { token },
+            fallbackMessage: "Не удалось подтвердить почту",
+        });
+        return response.user;
+    }
+
+    async resendVerification(): Promise<void> {
+        await apiRequest<void>("/auth/resend-verification", {
+            method: "POST",
+            fallbackMessage: "Не удалось отправить письмо",
+        });
+    }
+
+    /** The server answers the same way whether or not the address is known. */
+    async requestPasswordReset(email: string): Promise<void> {
+        await apiRequest<void>("/auth/forgot-password", {
+            method: "POST",
+            body: { email },
+            fallbackMessage: "Не удалось отправить письмо",
+        });
+    }
+
+    async resetPassword(token: string, password: string): Promise<User> {
+        const response = await apiRequest<{ user: User }>("/auth/reset-password", {
+            method: "POST",
+            body: { token, password },
+            fallbackMessage: "Не удалось сменить пароль",
+        });
+        return response.user;
+    }
+
     async logout(): Promise<void> {
         await apiRequest<void>("/auth/logout", { method: "POST" });
     }

@@ -14,6 +14,7 @@ import { RegistrationEnabledGuard } from "../src/guards/registration-enabled.gua
 import { CsrfGuard } from "../src/guards/csrf.guard";
 import { AuthService } from "../src/services/AuthService/auth.service";
 import { SessionService } from "../src/services/SessionService/session.service";
+import { AccountRecoveryService } from "../src/services/AccountRecoveryService/account-recovery.service";
 import { OperationalLogger } from "../src/services/OperationalLogger/operational-logger.service";
 
 interface HarnessOptions {
@@ -36,11 +37,18 @@ interface Harness {
         revoke: jest.Mock;
         revokeAll: jest.Mock;
     };
+    recovery: {
+        sendVerification: jest.Mock;
+        verifyEmail: jest.Mock;
+        requestPasswordReset: jest.Mock;
+        resetPassword: jest.Mock;
+    };
     databaseQuery: jest.Mock;
 }
 
 const activeApps: INestApplication[] = [];
 const SESSION_TOKEN = "s".repeat(43);
+const VALID_LINK_TOKEN = "v".repeat(43);
 const originalEnvironment = {
     NODE_ENV: process.env.NODE_ENV,
     AUTH_ENABLED: process.env.AUTH_ENABLED,
@@ -259,6 +267,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
                 name: "Мария",
                 email: "maria@example.com",
                 role: "designer",
+                emailVerified: false,
             },
         });
         expect(JSON.stringify(response.body)).not.toContain(SESSION_TOKEN);
@@ -311,6 +320,99 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
         );
     });
 
+    it("sends the verification letter after sign-up without blocking it", async () => {
+        const harness = await createHarness({
+            authEnabled: true,
+            registrationEnabled: true,
+        });
+
+        await request(harness.baseUrl)
+            .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
+            .send({
+                name: "Мария",
+                email: "maria@example.com",
+                password: "safe-password",
+            })
+            .expect(201);
+
+        expect(harness.recovery.sendVerification).toHaveBeenCalledTimes(1);
+    });
+
+    it("answers forgot-password identically for known and unknown addresses", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        const responses = [];
+        for (const email of ["maria@example.com", "nobody@example.com"]) {
+            responses.push(
+                await request(harness.baseUrl)
+                    .post("/api/auth/forgot-password")
+                    .set("X-Requested-With", "stylefinder")
+                    .send({ email })
+                    .expect(202),
+            );
+        }
+
+        expect(responses[0].body).toEqual({ accepted: true });
+        expect(responses[1].body).toEqual(responses[0].body);
+        expect(responses[0].headers["set-cookie"]).toBeUndefined();
+        expect(harness.recovery.requestPasswordReset).toHaveBeenCalledTimes(2);
+    });
+
+    it("rejects an unknown verification link with a generic 400", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        const rejected = await request(harness.baseUrl)
+            .post("/api/auth/verify-email")
+            .set("X-Requested-With", "stylefinder")
+            .send({ token: "u".repeat(43) })
+            .expect(400);
+        const accepted = await request(harness.baseUrl)
+            .post("/api/auth/verify-email")
+            .set("X-Requested-With", "stylefinder")
+            .send({ token: VALID_LINK_TOKEN })
+            .expect(200);
+
+        expect(rejected.body.message).toMatch(/Ссылка недействительна/);
+        expect(accepted.body.user.emailVerified).toBe(true);
+    });
+
+    it("signs in with a fresh session after a successful password reset", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .post("/api/auth/reset-password")
+            .set("X-Requested-With", "stylefinder")
+            .send({ token: "u".repeat(43), password: "new-password-1" })
+            .expect(400);
+        const reset = await request(harness.baseUrl)
+            .post("/api/auth/reset-password")
+            .set("X-Requested-With", "stylefinder")
+            .send({ token: VALID_LINK_TOKEN, password: "new-password-1" })
+            .expect(200);
+
+        expect(String(reset.headers["set-cookie"])).toContain(
+            `sf_session=${SESSION_TOKEN}`,
+        );
+        expect(JSON.stringify(reset.body)).not.toContain("new-password-1");
+    });
+
+    it("lets only a signed-in user request another verification letter", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .post("/api/auth/resend-verification")
+            .set("X-Requested-With", "stylefinder")
+            .expect(401);
+        await request(harness.baseUrl)
+            .post("/api/auth/resend-verification")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .expect(204);
+
+        expect(harness.recovery.sendVerification).toHaveBeenCalledTimes(1);
+    });
+
     it("serves live/ready and maps database failures to a bounded 503", async () => {
         const query = jest.fn().mockResolvedValue([{ ok: 1 }]);
         const harness = await createHarness({ databaseQuery: query });
@@ -350,6 +452,19 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
         email: "maria@example.com",
         role: "designer",
         password: "$2b$12$never-returned",
+        emailVerifiedAt: null,
+    };
+    const recovery = {
+        sendVerification: jest.fn().mockResolvedValue(true),
+        verifyEmail: jest.fn(async (token: string) =>
+            token === VALID_LINK_TOKEN
+                ? { ...user, emailVerifiedAt: new Date() }
+                : null,
+        ),
+        requestPasswordReset: jest.fn().mockResolvedValue(undefined),
+        resetPassword: jest.fn(async (token: string) =>
+            token === VALID_LINK_TOKEN ? user : null,
+        ),
     };
     const authService = {
         register: jest.fn().mockResolvedValue(user),
@@ -391,6 +506,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
             RegistrationEnabledGuard,
             { provide: AuthService, useValue: authService },
             { provide: SessionService, useValue: sessionService },
+            { provide: AccountRecoveryService, useValue: recovery },
             { provide: DataSource, useValue: dataSource },
             { provide: OperationalLogger, useValue: operationalLogger },
             { provide: APP_GUARD, useClass: CsrfGuard },
@@ -414,6 +530,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
         baseUrl: `http://127.0.0.1:${address.port}`,
         authService,
         sessionService,
+        recovery,
         databaseQuery,
     };
 }

@@ -30,6 +30,10 @@ export class User {
     @Column({ type: "varchar", length: 16, default: "designer" })
     role: UserRole;
 
+    /** Null until the owner opens the verification link (or resets the password). */
+    @Column({ type: "timestamptz", nullable: true })
+    emailVerifiedAt: Date | null;
+
     @CreateDateColumn()
     createdAt: Date;
 

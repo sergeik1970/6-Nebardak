@@ -2,6 +2,12 @@ import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { User } from "../../entities/User/user.entity";
 import { UserSession } from "../../entities/UserSession/user-session.entity";
+import { EmailToken } from "../../entities/EmailToken/email-token.entity";
+import { EmailTokenService } from "../../services/EmailTokenService/email-token.service";
+import { MailService } from "../../services/MailService/mail.service";
+import { AccountRecoveryService } from "../../services/AccountRecoveryService/account-recovery.service";
+import { AccountMaintenanceService } from "../../services/AccountMaintenanceService/account-maintenance.service";
+import { OperationalLogger } from "../../services/OperationalLogger/operational-logger.service";
 import { AuthService } from "../../services/AuthService/auth.service";
 import { SessionService } from "../../services/SessionService/session.service";
 import { AuthController } from "../../controllers/AuthController/auth.controller";
@@ -10,11 +16,16 @@ import { RegistrationEnabledGuard } from "../../guards/registration-enabled.guar
 import { AuthEnabledGuard } from "../../guards/auth-enabled.guard";
 
 @Module({
-    imports: [TypeOrmModule.forFeature([User, UserSession])],
+    imports: [TypeOrmModule.forFeature([User, UserSession, EmailToken])],
     controllers: [AuthController],
     providers: [
         AuthService,
         SessionService,
+        EmailTokenService,
+        MailService,
+        AccountRecoveryService,
+        AccountMaintenanceService,
+        OperationalLogger,
         AuthGuard,
         AuthEnabledGuard,
         RegistrationEnabledGuard,

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import React, { useEffect, useId, useRef, useState } from "react";
 import { useAuth } from "../../../contexts/AuthContext";
 import { isAuthRegistrationEnabled } from "@/shared/config/runtime";
@@ -247,6 +248,12 @@ const AuthModal: React.FC<AuthModalProps> = ({
                             value={formData.password}
                         />
                     </div>
+
+                    {isLogin ? (
+                        <Link className={styles.forgotLink} href="/auth/forgot" onClick={onClose}>
+                            Забыли пароль?
+                        </Link>
+                    ) : null}
 
                     <button className={styles.submitButton} disabled={isLoading} type="submit">
                         {isLoading ? "Подождите…" : isLogin ? "Войти" : "Зарегистрироваться"}

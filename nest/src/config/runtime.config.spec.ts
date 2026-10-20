@@ -12,6 +12,12 @@ const managedEnvironmentKeys = [
     "DB_CONNECTION_TIMEOUT_MS",
     "DB_READINESS_TIMEOUT_MS",
     "PUBLIC_ORIGIN",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_SECURE",
+    "SMTP_USER",
+    "SMTP_PASSWORD",
+    "SMTP_FROM",
     "PORT",
     "TRUST_PROXY_HOPS",
     "RATE_LIMIT_TTL_MS",
@@ -51,6 +57,14 @@ describe("runtime configuration", () => {
             registrationEnabled: false,
             publicOrigin: "http://localhost:3000",
             session: { cookieName: "sf_session", secureCookie: false },
+            mail: {
+                host: "127.0.0.1",
+                port: 1025,
+                secure: false,
+                username: undefined,
+                password: undefined,
+                from: "StyleFinder <no-reply@stylefinder.local>",
+            },
             database: {
                 host: "127.0.0.1",
                 port: 5432,
@@ -106,9 +120,77 @@ describe("runtime configuration", () => {
         expect(() => getRuntimeConfig()).toThrow(/PUBLIC_ORIGIN.*production/);
     });
 
+    it("requires an SMTP relay and sender once production accounts are on", () => {
+        setProductionDatabaseEnvironment();
+        process.env.AUTH_ENABLED = "true";
+        process.env.PUBLIC_ORIGIN = "https://stylefinder.example";
+        expect(() => getRuntimeConfig()).toThrow(/SMTP_HOST.*production/);
+
+        process.env.SMTP_HOST = "smtp.example.net";
+        expect(() => getRuntimeConfig()).toThrow(/SMTP_FROM.*production/);
+
+        process.env.SMTP_FROM = "StyleFinder <no-reply@stylefinder.example>";
+        expect(getRuntimeConfig().mail).toEqual({
+            host: "smtp.example.net",
+            port: 587,
+            secure: false,
+            username: undefined,
+            password: undefined,
+            from: "StyleFinder <no-reply@stylefinder.example>",
+        });
+    });
+
+    it.each([
+        ["SMTP_FROM", "no address here"],
+        ["SMTP_FROM", "Two <a@b.c> <d@e.f>"],
+        ["SMTP_HOST", "smtp.example.net/path"],
+    ])("rejects an invalid %s value %s", (name, value) => {
+        process.env.NODE_ENV = "dev";
+        process.env[name] = value;
+
+        expect(() => getRuntimeConfig()).toThrow(new RegExp(name));
+    });
+
+    it("treats blank SMTP values from Compose as unset", () => {
+        setProductionDatabaseEnvironment();
+        for (const name of [
+            "SMTP_HOST",
+            "SMTP_USER",
+            "SMTP_PASSWORD",
+            "SMTP_FROM",
+        ]) {
+            process.env[name] = "";
+        }
+
+        expect(getRuntimeConfig().mail).toMatchObject({
+            username: undefined,
+            password: undefined,
+        });
+
+        process.env.AUTH_ENABLED = "true";
+        process.env.PUBLIC_ORIGIN = "https://stylefinder.example";
+        expect(() => getRuntimeConfig()).toThrow(/SMTP_HOST.*production/);
+    });
+
+    it("requires SMTP credentials as a pair and infers implicit TLS on 465", () => {
+        process.env.NODE_ENV = "dev";
+        process.env.SMTP_USER = "mailer";
+        expect(() => getRuntimeConfig()).toThrow(/set together/);
+
+        process.env.SMTP_PASSWORD = "test-only-smtp-password";
+        process.env.SMTP_PORT = "465";
+        expect(getRuntimeConfig().mail).toMatchObject({
+            port: 465,
+            secure: true,
+            username: "mailer",
+        });
+    });
+
     it("requires https and binds the cookie to the production origin", () => {
         setProductionDatabaseEnvironment();
         process.env.AUTH_ENABLED = "true";
+        process.env.SMTP_HOST = "smtp.example.net";
+        process.env.SMTP_FROM = "no-reply@stylefinder.example";
         process.env.PUBLIC_ORIGIN = "http://stylefinder.example";
         expect(() => getRuntimeConfig()).toThrow(/https in production/);
 

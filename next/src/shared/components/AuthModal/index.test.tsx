@@ -22,6 +22,10 @@ describe("AuthModal modes", () => {
         expect(markup).not.toContain(">Имя<");
     });
 
+    it("links the login form to password recovery", () => {
+        expect(renderModal(false)).toMatch(/href="\/auth\/forgot"[^>]*>Забыли пароль\?</);
+    });
+
     it("offers an explicit registration switch only when enabled", () => {
         expect(renderModal(true)).toContain("Зарегистрироваться");
     });

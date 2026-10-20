@@ -21,7 +21,19 @@ export interface RuntimeConfig {
     /** The browser origin that serves both the site and `/api`. */
     publicOrigin: string;
     session: SessionRuntimeConfig;
+    mail: MailRuntimeConfig;
     database: DatabaseRuntimeConfig;
+}
+
+export interface MailRuntimeConfig {
+    host: string;
+    port: number;
+    /** Implicit TLS (usually port 465); otherwise STARTTLS is required in production. */
+    secure: boolean;
+    username?: string;
+    password?: string;
+    /** RFC 5322 sender, e.g. `StyleFinder <no-reply@example.com>`. */
+    from: string;
 }
 
 export interface SessionRuntimeConfig {
@@ -154,6 +166,75 @@ function parsePublicOrigin(
     return url.origin;
 }
 
+/**
+ * Compose forwards an unset optional variable as an empty string; for these
+ * settings that means "not configured" rather than an invalid value.
+ */
+function parseBlankableString(
+    name: string,
+    fallback: string | undefined,
+    required: boolean,
+    maximumLength = 255,
+): string | undefined {
+    if (!process.env[name]?.trim()) {
+        if (required) throw new Error(`${name} is required in production`);
+        return fallback;
+    }
+    return parseOptionalString(name, fallback, maximumLength);
+}
+
+function parseMailConfig(
+    isProduction: boolean,
+    authEnabled: boolean,
+): MailRuntimeConfig {
+    const requireForAccounts = isProduction && authEnabled;
+    // Locally, Mailpit from docker-compose.dev.yml catches every letter.
+    const host = parseBlankableString(
+        "SMTP_HOST",
+        "127.0.0.1",
+        requireForAccounts,
+        253,
+    )!;
+    if (/\s|\//.test(host)) {
+        throw new Error("SMTP_HOST must be a hostname or IP address");
+    }
+
+    const port = parseInteger(
+        "SMTP_PORT",
+        isProduction ? 587 : 1025,
+        1,
+        65_535,
+    );
+    const from = parseBlankableString(
+        "SMTP_FROM",
+        "StyleFinder <no-reply@stylefinder.local>",
+        requireForAccounts,
+    )!;
+    if (!/^[^<>@]*<[^<>@\s]+@[^<>@\s]+>$|^[^<>@\s]+@[^<>@\s]+$/.test(from)) {
+        throw new Error("SMTP_FROM must be an address or `Name <address>`");
+    }
+
+    const username = parseBlankableString("SMTP_USER", undefined, false);
+    const password = parseBlankableString(
+        "SMTP_PASSWORD",
+        undefined,
+        false,
+        1_024,
+    );
+    if (Boolean(username) !== Boolean(password)) {
+        throw new Error("SMTP_USER and SMTP_PASSWORD must be set together");
+    }
+
+    return {
+        host,
+        port,
+        secure: parseBoolean("SMTP_SECURE", port === 465),
+        username,
+        password,
+        from,
+    };
+}
+
 function parseNodeEnvironment(): NodeEnvironment {
     const rawValue = process.env.NODE_ENV?.trim() || "development";
     if (!allowedNodeEnvironments.has(rawValue as NodeEnvironment)) {
@@ -245,6 +326,7 @@ export function getRuntimeConfig(): RuntimeConfig {
     }
 
     const publicOrigin = parsePublicOrigin(isProduction, authEnabled);
+    const mail = parseMailConfig(isProduction, authEnabled);
     const secureCookie = publicOrigin.startsWith("https:");
 
     return {
@@ -264,6 +346,7 @@ export function getRuntimeConfig(): RuntimeConfig {
             cookieName: secureCookie ? "__Host-sf_session" : "sf_session",
             secureCookie,
         },
+        mail,
         database,
     };
 }

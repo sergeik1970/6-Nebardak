@@ -3,6 +3,8 @@ import { AUTH_API_URL, isAuthEnabled } from "@/shared/config/runtime";
 /** The server rejects state changes without this same-origin marker (CSRF). */
 export const CSRF_HEADERS = { "X-Requested-With": "stylefinder" } as const;
 
+const TOO_MANY_REQUESTS_MESSAGE =
+    "Слишком много попыток. Подождите несколько минут и попробуйте снова.";
 const DISABLED_MESSAGE = "Авторизация временно недоступна: сайт запущен без подключенного API.";
 
 export class ApiError extends Error {
@@ -76,7 +78,12 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     if (!response.ok) {
         throw new ApiError(
             response.status,
-            readServerMessage(payload) ?? options.fallbackMessage ?? "Не удалось выполнить запрос.",
+            // The rate limiter answers in English; people need to know to wait.
+            response.status === 429
+                ? TOO_MANY_REQUESTS_MESSAGE
+                : readServerMessage(payload) ??
+                  options.fallbackMessage ??
+                  "Не удалось выполнить запрос.",
             payload,
         );
     }
