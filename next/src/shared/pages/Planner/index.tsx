@@ -45,10 +45,8 @@ import {
     RemovalRecord,
     Wall,
     WindowOpening,
-    buildFurnitureInstances,
     buildFurnitureInstancesExcludingRemoved,
     buildAutomaticRemovalReason,
-    buildPrioritizedFurnitureSelection,
     buildPlanSpecification,
     canRedoPlacementHistory,
     canUndoPlacementHistory,
@@ -93,7 +91,6 @@ import {
     resetPlacementHistory,
     tryResizeRoomWithDefaultOpenings,
     saveProjectDraft,
-    solveRoom,
     pushPlacementHistory,
     mergeRemovalRecords,
     reconcileRemovalRecordsWithPlacements,
@@ -259,10 +256,17 @@ const getSelectionLimit = (definitionId: string, selection: Selection): number =
     return Math.max(0, Math.min(definitionLimit, 2 - otherWardrobes));
 };
 
-const initialInstances = buildFurnitureInstances(
-    buildPrioritizedFurnitureSelection(DEFAULT_SELECTION, DEFAULT_PRIORITIES),
-);
-const initialResult = solveRoom(DEFAULT_ROOM, initialInstances, DEFAULT_PREFERENCES);
+// Placeholder until the user requests a calculation. The UI hides failures while
+// hasRequestedLayoutCalculation is false, so this never reaches the screen. Solving the
+// demo set synchronously here blocked the main thread for seconds on every page load.
+const initialResult: LayoutResult = {
+    status: "failure",
+    placements: [],
+    exploredNodes: 0,
+    blockingInstanceIds: [],
+    reason: "search-exhausted",
+    message: "",
+};
 
 const snapToGrid = (value: number) => Math.round(value / GRID_MM) * GRID_MM;
 const clamp = (value: number, minimum: number, maximum: number) =>
@@ -2598,12 +2602,8 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
     const [priorities, setPriorities] =
         useState<Record<string, FurniturePriority>>(DEFAULT_PRIORITIES);
     const [tvTargetCategory, setTvTargetCategory] = useState<"sleep" | "living" | undefined>();
-    const [placements, setPlacements] = useState<Placement[]>(
-        initialResult.status === "success" ? initialResult.placements : [],
-    );
-    const [placementHistory, setPlacementHistory] = useState(() =>
-        createPlacementHistory(initialResult.status === "success" ? initialResult.placements : []),
-    );
+    const [placements, setPlacements] = useState<Placement[]>([]);
+    const [placementHistory, setPlacementHistory] = useState(() => createPlacementHistory([]));
     const [previewPlacement, setPreviewPlacement] = useState<Placement | null>(null);
     const [variants, setVariants] = useState<LayoutVariant[]>([]);
     const [activeVariantId, setActiveVariantId] = useState<string | null>(null);
@@ -2611,9 +2611,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
     const [lastResult, setLastResult] = useState<LayoutResult>(initialResult);
     const [phase, setPhase] = useState<PlannerPhase>("result");
     const [hasRequestedLayoutCalculation, setHasRequestedLayoutCalculation] = useState(false);
-    const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(
-        initialResult.status === "success" ? initialResult.placements[0]?.instanceId ?? null : null,
-    );
+    const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
     const [showClearances, setShowClearances] = useState(false);
     const [isRoomEditing, setIsRoomEditing] = useState(false);
     const [isRoomEditGestureActive, setIsRoomEditGestureActive] = useState(false);
@@ -3795,8 +3793,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
 
     const restoreDemoState = useCallback(() => {
         cancelActiveSolver();
-        const restoredPlacements =
-            initialResult.status === "success" ? initialResult.placements : [];
         setRoom(DEFAULT_ROOM);
         setSelection(DEFAULT_SELECTION);
         setPriorities(DEFAULT_PRIORITIES);
@@ -3805,8 +3801,8 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
         setActiveVariantId(null);
         setEditedVariantIds(new Set());
         setUnplacedPreferredInstanceIds([]);
-        setPlacements(restoredPlacements);
-        setPlacementHistory(resetPlacementHistory(restoredPlacements));
+        setPlacements([]);
+        setPlacementHistory(resetPlacementHistory([]));
         setPreviewPlacement(null);
         setLastResult(initialResult);
         setGeneratedSignature(
@@ -3817,11 +3813,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                 DEFAULT_PREFERENCES,
             ),
         );
-        setSelectedInstanceId(
-            initialResult.status === "success"
-                ? initialResult.placements[0]?.instanceId ?? null
-                : null,
-        );
+        setSelectedInstanceId(null);
         setShowClearances(false);
         setResultNotice("");
         setIsManualScene(false);
@@ -4856,48 +4848,8 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
             return;
         }
 
-        const result = solveRoom(DEFAULT_ROOM, initialInstances, DEFAULT_PREFERENCES);
-        setRoom(DEFAULT_ROOM);
-        setSelection(DEFAULT_SELECTION);
-        setPriorities(DEFAULT_PRIORITIES);
-        setTvTargetCategory(undefined);
-        setVariants([]);
-        setActiveVariantId(null);
-        setEditedVariantIds(new Set());
-        setUnplacedPreferredInstanceIds([]);
-        setPlacements(result.placements);
-        setPlacementHistory(resetPlacementHistory(result.placements));
-        setPreviewPlacement(null);
-        setLastResult(result);
-        setGeneratedSignature(
-            selectionSignature(
-                DEFAULT_ROOM,
-                DEFAULT_SELECTION,
-                DEFAULT_PRIORITIES,
-                DEFAULT_PREFERENCES,
-            ),
-        );
-        setSelectedInstanceId(result.placements[0]?.instanceId ?? null);
-        setShowClearances(false);
-        setResultNotice("");
-        setIsManualScene(false);
-        setDesignLabFeedback([]);
-        setDesignLabNote("");
-        setDesignLabNotice("");
-        setObservationRequestsByVariant({});
-        setObservationIdsByVariant({});
-        setObservationStatesByVariant({});
-        setObservationReviewDrafts({});
-        setObservationNotice("");
-        setGeneratedAt(result.status === "success" ? new Date().toISOString() : null);
-        setExportStatus("");
-        setAutomaticRemovalProposal(null);
-        setRemovedItems([]);
-        setManualRemovalTarget(null);
-        removalRecordArchiveRef.current.clear();
-        setHasRequestedLayoutCalculation(true);
-        setPhase("result");
-    }, [applyHandoffBaseline, cancelActiveSolver, handoffSource]);
+        restoreDemoState();
+    }, [applyHandoffBaseline, cancelActiveSolver, handoffSource, restoreDemoState]);
 
     const confirmResetPlanner = useCallback(() => {
         if (
