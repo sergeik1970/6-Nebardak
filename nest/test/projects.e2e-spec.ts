@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import request = require("supertest");
 import {
     configureBodyParsers,
+    configureNoStore,
     configureTrustedProxy,
 } from "../src/config/http-runtime";
 import { createGlobalValidationPipe } from "../src/config/validation";
@@ -94,6 +95,7 @@ describe("projects HTTP contract", () => {
 
         app = moduleRef.createNestApplication({ bodyParser: false });
         configureBodyParsers(app);
+        configureNoStore(app);
         app.setGlobalPrefix("api");
         app.useGlobalPipes(createGlobalValidationPipe());
         configureTrustedProxy(app.getHttpAdapter().getInstance(), 0);
@@ -148,6 +150,8 @@ describe("projects HTTP contract", () => {
         await signedIn("get", `/api/projects/${PROJECT_ID}`).expect(200);
 
         expect(list.body).toMatchObject({ limit: 50 });
+        // Project documents are personal data: never kept by any cache.
+        expect(list.headers["cache-control"]).toBe("no-store");
         expect(projects.list).toHaveBeenCalledWith(7);
         expect(projects.get).toHaveBeenCalledWith(7, PROJECT_ID);
     });

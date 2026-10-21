@@ -7,6 +7,7 @@ import { getRuntimeConfig } from "./config/runtime.config";
 import { OperationalLogger } from "./services/OperationalLogger/operational-logger.service";
 import {
     configureBodyParsers,
+    configureNoStore,
     configureTrustedProxy,
 } from "./config/http-runtime";
 
@@ -21,6 +22,7 @@ async function bootstrap() {
         }),
     });
     configureBodyParsers(app);
+    configureNoStore(app);
     app.setGlobalPrefix("api");
     app.useGlobalPipes(createGlobalValidationPipe());
     app.enableShutdownHooks();

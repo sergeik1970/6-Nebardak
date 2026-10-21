@@ -1,5 +1,5 @@
 import { INestApplication } from "@nestjs/common";
-import { json, urlencoded } from "express";
+import { json, urlencoded, type Response } from "express";
 
 interface ExpressSettings {
     set(setting: string, value: unknown): unknown;
@@ -26,4 +26,18 @@ export function configureBodyParsers(app: INestApplication): void {
     app.use("/api/projects", json({ limit: PROJECT_BODY_LIMIT }));
     app.use(json({ limit: DEFAULT_BODY_LIMIT }));
     app.use(urlencoded({ extended: false, limit: DEFAULT_BODY_LIMIT }));
+}
+
+/**
+ * API answers carry sessions, profiles and project documents: no browser or
+ * intermediary cache may keep them, and logging out must not leave a copy.
+ */
+export function configureNoStore(app: INestApplication): void {
+    app.use(
+        "/api",
+        (_request: unknown, response: Response, next: () => void) => {
+            response.setHeader("Cache-Control", "no-store");
+            next();
+        },
+    );
 }

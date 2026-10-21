@@ -8,9 +8,12 @@
 
 Кодовые критерии спецификации закрыты и повторно проверены:
 
-- frontend: `191/191` unit и `34/34` применимых browser E2E; `18` browser cases
-  намеренно пропущены в проектах, для которых они не предназначены;
-- backend: `64/64` unit и `7/7` HTTP security E2E;
+- frontend: `463/463` unit и `133/133` применимых browser E2E; `81` browser case
+  намеренно пропущен в проектах, для которых он не предназначен;
+- аккаунты: `9/9` сквозных сценариев с настоящими API, PostgreSQL и Mailpit
+  (`npm run test:e2e:accounts`);
+- backend: `160/160` unit, `32/32` HTTP security E2E и `11/11` SQL-тестов на
+  PostgreSQL 16;
 - frontend и backend проходят format, lint, typecheck и production build;
 - production dependency audit обоих приложений сообщает `0 vulnerabilities`;
 - чистый production-like Docker-контур проходит миграции, повторное назначение
@@ -413,6 +416,9 @@ Hard-проверка строит конфигурационное простр
 - `/health/live` и `/health/ready`;
 - off-site backup и проверка восстановления;
 - structured logs, error tracking и uptime monitor;
+- ответы API с `Cache-Control: no-store`;
+- фоновая очистка удаляет только неподтверждённые аккаунты, зарегистрированные
+  с согласием, и никогда — аккаунты, созданные до появления подтверждения почты;
 - политика конфиденциальности до повторного включения аккаунтов.
 
 ## 16. Автоматические тесты
@@ -457,7 +463,12 @@ Hard-проверка строит конфигурационное простр
 - мобильный planner;
 - keyboard-only сценарий;
 - отсутствие hydration и console errors;
-- accessibility smoke через axe.
+- accessibility smoke через axe;
+- аккаунты (отдельный набор с API, PostgreSQL и Mailpit): гость → регистрация →
+  проект в аккаунте и на втором устройстве; письмо подтверждения; сброс пароля
+  с выходом на других устройствах; офлайн-правка; две вкладки; конфликт двух
+  устройств; чужой проект недоступен; удаление аккаунта; телефон без
+  горизонтальной прокрутки.
 
 ## 17. CI и качество
 
@@ -467,7 +478,7 @@ Hard-проверка строит конфигурационное простр
 - lint без автоматического изменения файлов;
 - frontend и backend typecheck;
 - unit/property tests;
-- E2E smoke;
+- E2E smoke и сквозные сценарии аккаунтов;
 - production build;
 - dependency audit с явной политикой severity;
 - Docker image scan;
