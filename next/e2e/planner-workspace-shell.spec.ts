@@ -363,3 +363,24 @@ test("desktop fitted plan contains the room and edit controls without an interna
     await page.getByRole("button", { name: "Вместить план по ширине" }).click();
     await expectFittedCanvas(5);
 });
+
+test("resetting the demo planner returns to the uncalculated room without a solver error", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Reset is covered once on desktop");
+    await page.goto("/planner", { waitUntil: "networkidle" });
+
+    const width = page.getByRole("textbox", { name: "Ширина м" });
+    await page.getByRole("button", { name: /Просторная/ }).click();
+    await expect(width).toHaveValue("7,2");
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Сбросить", exact: true }).click();
+
+    await expect(width).toHaveValue("6");
+    await expect(page.locator("[data-planner-app-bar='true']")).toContainText("Комната готова");
+    await expect(
+        page.getByRole("status").filter({ hasText: "Расстановка не рассчитана" }),
+    ).toBeVisible();
+    await expect(page.getByText("Лимит расчёта исчерпан")).toHaveCount(0);
+});

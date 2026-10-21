@@ -10,8 +10,8 @@
             "expectedFileCount": 330,
             "contentDigestSha256": "49b1a60ad456254c9166903b893b37856fd98729171018d4818301583f710900",
             "source": "designer-supplied",
-            "rightsStatus": "unverified",
-            "rightsEvidence": "pending"
+            "rightsStatus": "cleared",
+            "rightsEvidence": "record:docs/image-rights/2026-10-20-owner-attestation"
         },
         {
             "id": "planner-furniture",
@@ -20,8 +20,8 @@
             "expectedFileCount": 30,
             "contentDigestSha256": "0e3a97817f90c3b0a3fa1ffdd2bc6995852c68b6e91fe8ad05f6f3f223bbd85c",
             "source": "designer-supplied",
-            "rightsStatus": "unverified",
-            "rightsEvidence": "pending"
+            "rightsStatus": "cleared",
+            "rightsEvidence": "record:docs/image-rights/2026-10-20-owner-attestation"
         },
         {
             "id": "style-results",
@@ -30,8 +30,8 @@
             "expectedFileCount": 72,
             "contentDigestSha256": "1e06bc68b993ca3f644fa802fb17607b5a0e9c830e2a585fca06cedb0e33c88c",
             "source": "designer-supplied",
-            "rightsStatus": "unverified",
-            "rightsEvidence": "pending"
+            "rightsStatus": "cleared",
+            "rightsEvidence": "record:docs/image-rights/2026-10-20-owner-attestation"
         },
         {
             "id": "home-static",
@@ -40,8 +40,8 @@
             "expectedFileCount": 19,
             "contentDigestSha256": "1857155c39f38004b4b66daa054a945fbac7ff986fcff6da2ec9dd20bb0d2cf6",
             "source": "designer-supplied",
-            "rightsStatus": "unverified",
-            "rightsEvidence": "pending"
+            "rightsStatus": "cleared",
+            "rightsEvidence": "record:docs/image-rights/2026-10-20-owner-attestation"
         },
         {
             "id": "planner-furniture-photos",
@@ -49,9 +49,9 @@
             "excludePrefixes": [],
             "expectedFileCount": 27,
             "contentDigestSha256": "971a8a03cfbf29914037888396fcfb06446c97c8716b32be1eee87806e31c0df",
-            "source": "unrecorded",
-            "rightsStatus": "unverified",
-            "rightsEvidence": "pending"
+            "source": "designer-supplied",
+            "rightsStatus": "cleared",
+            "rightsEvidence": "record:docs/image-rights/2026-10-20-owner-attestation"
         }
     ]
 }
