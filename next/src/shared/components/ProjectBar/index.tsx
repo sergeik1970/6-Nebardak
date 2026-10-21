@@ -12,9 +12,11 @@ interface Action {
 
 interface ProjectBarProps {
     title: ReactNode;
-    status: string;
-    tone: Tone;
+    /** Save state; omitted where nothing is synced (accounts switched off). */
+    status?: string;
+    tone?: Tone;
     action?: Action;
+    steps?: ReactNode;
 }
 
 /**
@@ -22,7 +24,7 @@ interface ProjectBarProps {
  * saved. Its height is published as `--sf-project-bar-height` so full-screen
  * pages (the room editor) can subtract it instead of overflowing.
  */
-const ProjectBar: React.FC<ProjectBarProps> = ({ title, status, tone, action }) => {
+const ProjectBar: React.FC<ProjectBarProps> = ({ title, status, tone = "ok", action, steps }) => {
     const ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -43,9 +45,12 @@ const ProjectBar: React.FC<ProjectBarProps> = ({ title, status, tone, action }) 
     return (
         <div className={styles.bar} data-project-bar="true" ref={ref}>
             <span className={styles.title}>{title}</span>
-            <span className={styles.status} data-tone={tone} role="status" aria-live="polite">
-                {status}
-            </span>
+            {steps}
+            {status ? (
+                <span className={styles.status} data-tone={tone} role="status" aria-live="polite">
+                    {status}
+                </span>
+            ) : null}
             {action ? (
                 <button
                     className={styles.action}

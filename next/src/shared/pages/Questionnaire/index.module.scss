@@ -24,80 +24,6 @@
     padding: 30px 24px 72px;
 }
 
-.progressRail {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
-    background: rgba(251, 248, 241, 0.72);
-}
-
-.progressRail > * {
-    min-width: 0;
-    min-height: 68px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 11px 16px;
-    border-right: 1px solid var(--line);
-    color: var(--muted);
-    text-decoration: none;
-}
-
-.progressRail > *:last-child {
-    border-right: 0;
-}
-
-.progressRail > * > span:first-child {
-    width: 30px;
-    height: 30px;
-    flex: 0 0 30px;
-    display: grid;
-    place-items: center;
-    border: 1px solid currentColor;
-    font-size: 12px;
-    font-weight: 800;
-}
-
-.progressRail strong,
-.progressRail small {
-    display: block;
-}
-
-.progressRail strong {
-    color: var(--ink);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-}
-
-.progressRail small {
-    margin-top: 1px;
-    overflow: hidden;
-    color: var(--muted);
-    font-size: 12px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.progressRail a:hover,
-.progressRail a:focus-visible {
-    background: var(--sf-color-brand-soft);
-}
-
-.progressRail a:focus-visible,
-.progressRail input:focus-visible,
-.progressRail button:focus-visible {
-    outline: 3px solid var(--sf-color-focus);
-    outline-offset: 2px;
-}
-
-.activeStep {
-    color: var(--brand-dark) !important;
-    box-shadow: inset 0 -3px 0 var(--brand);
-    background: var(--sf-color-brand-soft);
-}
-
 .projectBar,
 .draftWarning {
     min-height: 52px;
@@ -107,7 +33,6 @@
     gap: 16px;
     padding: 8px 14px;
     border: 1px solid var(--line);
-    border-top: 0;
     color: var(--muted);
     background: rgba(251, 248, 241, 0.82);
     font-size: 12px;
@@ -115,7 +40,11 @@
 }
 
 .projectBar {
-    justify-content: flex-end;
+    justify-content: space-between;
+}
+
+.draftWarning {
+    border-top: 0;
 }
 
 .projectBar button,
@@ -829,26 +758,6 @@
         padding: 16px 14px 48px;
     }
 
-    .progressRail > * {
-        min-height: 58px;
-        gap: 7px;
-        padding: 8px;
-    }
-
-    .progressRail > * > span:first-child {
-        width: 25px;
-        height: 25px;
-        flex-basis: 25px;
-    }
-
-    .progressRail strong {
-        font-size: 12px;
-    }
-
-    .progressRail small {
-        display: none;
-    }
-
     .projectBar,
     .draftWarning {
         align-items: stretch;
@@ -960,22 +869,6 @@
 
     .priorityChoices button {
         min-height: 44px;
-    }
-}
-
-@media (max-width: 480px) {
-    .progressRail > * {
-        min-height: 76px;
-        flex-direction: column;
-        align-items: flex-start;
-        justify-content: center;
-        gap: 4px;
-        padding: 7px 6px;
-    }
-
-    .progressRail strong {
-        line-height: 1.15;
-        letter-spacing: 0.025em;
     }
 }
 

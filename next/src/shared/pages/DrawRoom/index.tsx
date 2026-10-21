@@ -41,6 +41,10 @@ import {
     getDrawWallRun,
     resizeDrawWallRun,
     findMovedDrawWallContourEdge,
+    getRoomVertices,
+    isQuestionnairePlannerHandoffId,
+    readDrawRoomDraft,
+    readProjectDraft,
     type DrawWallSegment,
     type DoorKind,
     type DoorOpening,
@@ -53,6 +57,8 @@ import styles from "./index.module.scss";
 import FurnitureEditor from "./FurnitureEditor";
 import MeasureTool from "./MeasureTool";
 import { readFurniture, type DrawFurniture } from "./furniture";
+import Dialog from "@/shared/components/Dialog";
+import { RECT_TEMPLATE_LIMITS, createRectTemplateRoom, roomToDrawingScene } from "./room-template";
 
 import ProjectTools, { DEFAULT_DRAWING_LAYERS } from "./ProjectTools";
 import { useProjectHref } from "@/shared/lib/project-scope/ProjectScope";
@@ -913,6 +919,77 @@ const bindLegacyOpenings = (scene: Scene): Scene => {
         windows: scene.windows.map(bind),
     };
 };
+const roomShapeKey = (room: Room) =>
+    JSON.stringify({
+        vertices: getRoomVertices(room).map(({ x, y }) => [x, y]),
+        partitions: (room.partitions ?? []).map(({ start, end }) => [start, end]),
+    });
+
+const openingsKey = (room: Pick<Room, "doors" | "windows">) =>
+    JSON.stringify(
+        [...room.doors, ...room.windows].map((item) =>
+            Object.entries(item).sort(([a], [b]) => a.localeCompare(b)),
+        ),
+    );
+
+/**
+ * Doors and windows are still fine-tuned on the layout step. When they changed
+ * there since this editor last handed the room over, and the walls are still
+ * exactly the drawn ones, the drawing takes them over instead of putting the
+ * old positions back on the next hand-off.
+ */
+const takePlannerOpenings = (scene: Scene, plannerRoom: Room): Scene => {
+    const handedOver = readDrawRoomDraft();
+    if (
+        handedOver.status !== "success" ||
+        openingsKey(handedOver.value) === openingsKey(plannerRoom)
+    ) {
+        return scene;
+    }
+    const previews = getRoomPreviews(scene);
+    const host = previews.find(
+        (preview) => roomShapeKey(preview.room) === roomShapeKey(plannerRoom),
+    );
+    const hostId = host?.wallIds?.[0];
+    if (!host || !hostId) return scene;
+    const elsewhere = <T extends DoorOpening | WindowOpening>(item: T) =>
+        openingOwner(previews, item) !== host;
+    const hosted = <T extends DoorOpening | WindowOpening>(item: T): T => ({
+        ...item,
+        drawingHostId: item.drawingHostId ?? hostId,
+    });
+    return {
+        ...scene,
+        doors: [...scene.doors.filter(elsewhere), ...plannerRoom.doors.map(hosted)],
+        windows: [...scene.windows.filter(elsewhere), ...plannerRoom.windows.map(hosted)],
+    };
+};
+
+/**
+ * The planner's walls when they were changed there after this editor last
+ * handed the room over, so the drawing no longer shows them.
+ */
+const getNewerPlannerRoom = (scene: Scene, plannerRoom: Room): Room | null => {
+    const handedOver = readDrawRoomDraft();
+    if (handedOver.status !== "success") return null;
+    const plannerShape = roomShapeKey(plannerRoom);
+    if (roomShapeKey(handedOver.value) === plannerShape) return null;
+    return getRoomPreviews(scene).some((preview) => roomShapeKey(preview.room) === plannerShape)
+        ? null
+        : plannerRoom;
+};
+
+/** The planner's room, for a project whose room was set before the editor existed. */
+const readPlannerRoom = (): Room | null => {
+    const draft = readProjectDraft();
+    return draft.status === "success" ? draft.value.planner?.room ?? null : null;
+};
+
+const parseMeters = (value: string): number | null => {
+    const meters = Number(value.trim().replace(",", "."));
+    return Number.isFinite(meters) ? Math.round(meters * 100) * 10 : null;
+};
+
 const openingTarget = (previews: RoomPreview[], point: Point) => {
     const targets = previews.flatMap((preview) => {
         const target = getWallAtPoint(
@@ -3803,6 +3880,11 @@ const DrawRoom: React.FC = () => {
     const [toolSheetCollapsed, setToolSheetCollapsed] = useState(false);
     const [toolSheetOverlaysCanvas, setToolSheetOverlaysCanvas] = useState(false);
     const autoFitPendingRef = useRef(false);
+    // Set when a whole room appears at once (template, converted room).
+    const fitAfterSceneChangeRef = useRef(false);
+    const [templateOpen, setTemplateOpen] = useState(false);
+    const [templateError, setTemplateError] = useState("");
+    const [newerPlannerRoom, setNewerPlannerRoom] = useState<Room | null>(null);
     const [selectedDoorKind, setSelectedDoorKind] = useState<DoorKind>("room");
     const [slidingMount, setSlidingMount] =
         useState<NonNullable<DoorOpening["slidingMount"]>>("inward");
@@ -4596,13 +4678,26 @@ const DrawRoom: React.FC = () => {
 
     useEffect(() => {
         const saved = readEditorSession();
+        const plannerRoom = readPlannerRoom();
         if (saved) {
-            sceneForInteractionRef.current = saved;
-            setHistory({ past: [], present: saved, future: [] });
-            if (getRoomPreview(saved)) setTool("select");
+            const restored = plannerRoom ? takePlannerOpenings(saved, plannerRoom) : saved;
+            if (plannerRoom) setNewerPlannerRoom(getNewerPlannerRoom(restored, plannerRoom));
+            sceneForInteractionRef.current = restored;
+            setHistory({ past: [], present: restored, future: [] });
+            if (getRoomPreview(restored)) setTool("select");
             setNotice(
                 "Восстановлен сохранённый чертёж. Имена помещений и проёмы можно продолжать редактировать.",
             );
+        } else if (plannerRoom) {
+            const converted = roomToDrawingScene(plannerRoom);
+            if (converted) {
+                const scene = bindLegacyOpenings(cloneScene(converted));
+                sceneForInteractionRef.current = scene;
+                setHistory({ past: [], present: scene, future: [] });
+                setTool("select");
+                fitAfterSceneChangeRef.current = true;
+                setNotice("Комната перенесена с шага расстановки. Её стены и проёмы можно менять.");
+            }
         }
         setEditorSessionReady(true);
     }, []);
@@ -6210,6 +6305,72 @@ const DrawRoom: React.FC = () => {
         scene.segments,
     ]);
 
+    useEffect(() => {
+        if (!fitAfterSceneChangeRef.current || !preview || !canvasSize.width) return;
+        fitAfterSceneChangeRef.current = false;
+        fitDrawingToView();
+    }, [canvasSize.width, fitDrawingToView, preview]);
+
+    const applyRectTemplate = useCallback(
+        (event: React.FormEvent<HTMLFormElement>) => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            const width = parseMeters(String(data.get("width") ?? ""));
+            const depth = parseMeters(String(data.get("depth") ?? ""));
+            const inRange = (value: number | null): value is number =>
+                value !== null &&
+                value >= RECT_TEMPLATE_LIMITS.min &&
+                value <= RECT_TEMPLATE_LIMITS.max;
+            if (!inRange(width) || !inRange(depth)) {
+                setTemplateError(
+                    `Ширина и глубина — от ${formatMeters(RECT_TEMPLATE_LIMITS.min)} до ${formatMeters(RECT_TEMPLATE_LIMITS.max)}.`,
+                );
+                return;
+            }
+            const current = sceneForInteractionRef.current;
+            const templateRoom = createRectTemplateRoom(width, depth, current.wallThickness);
+            const template = roomToDrawingScene(templateRoom);
+            if (!template) {
+                setTemplateError("Не удалось построить комнату с такими размерами.");
+                return;
+            }
+            const hadDrawing = current.segments.length > 0;
+            setMeasuring(false);
+            stopWallDrawing();
+            commitScene(bindLegacyOpenings(cloneScene(template)));
+            setSelectedOpening(null);
+            setSelectedContourWallEdge(null);
+            setSelectedSegmentWallId(null);
+            setTool("select");
+            setActiveToolGroup("openings");
+            setTemplateOpen(false);
+            setTemplateError("");
+            fitAfterSceneChangeRef.current = true;
+            setNotice(
+                `Комната ${formatMeters(templateRoom.width)} × ${formatMeters(templateRoom.depth)} построена с дверью и окном — передвиньте их на свои места.` +
+                    (hadDrawing ? " Прежний чертёж вернёт кнопка «Отменить»." : ""),
+            );
+        },
+        [commitScene, stopWallDrawing],
+    );
+
+    const takeNewerPlannerRoom = useCallback(() => {
+        const converted = newerPlannerRoom && roomToDrawingScene(newerPlannerRoom);
+        setNewerPlannerRoom(null);
+        if (!converted) {
+            setNotice("Не удалось перенести комнату с шага расстановки.");
+            return;
+        }
+        stopWallDrawing();
+        commitScene(bindLegacyOpenings(cloneScene(converted)));
+        setSelectedOpening(null);
+        setSelectedContourWallEdge(null);
+        setSelectedSegmentWallId(null);
+        setTool("select");
+        fitAfterSceneChangeRef.current = true;
+        setNotice("Стены взяты с шага расстановки. Прежний чертёж вернёт кнопка «Отменить».");
+    }, [commitScene, newerPlannerRoom, stopWallDrawing]);
+
     // A phone shows the whole 16 m sheet, so a freshly closed room is a small
     // sketch with its dimensions hidden. Frame it once the cards around the
     // canvas have settled; the camera stays the person's after that.
@@ -6318,7 +6479,11 @@ const DrawRoom: React.FC = () => {
             );
             return;
         }
-        void router.push(withProjectParam("/planner?drawRoom=1"));
+        // A questionnaire hand-off passes through this step to the layout.
+        const questionnaireHandoff = isQuestionnairePlannerHandoffId(router.query.handoff)
+            ? `&handoff=${router.query.handoff}`
+            : "";
+        void router.push(withProjectParam(`/planner?drawRoom=1${questionnaireHandoff}`));
     }, [plannerEligibilityError, plannerGridSnap, plannerPreview, router, scene.furniture]);
 
     useEffect(() => {
@@ -6617,6 +6782,27 @@ const DrawRoom: React.FC = () => {
                         </button>
                         <button
                             type="button"
+                            className={`${styles.resetButton} ${styles.templateButton}`}
+                            data-draw-room-tool="rect-template"
+                            onClick={() => setTemplateOpen(true)}
+                            aria-haspopup="dialog"
+                            aria-label="Прямоугольная комната по размерам"
+                            title="Прямоугольная комната по размерам"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                            >
+                                <rect x="4" y="6" width="16" height="12" />
+                                <path d="M4 3v2M20 3v2M4 4h16" />
+                            </svg>
+                            <span>Комната по размерам</span>
+                        </button>
+                        <button
+                            type="button"
                             className={styles.resetButton}
                             onClick={requestResetToOriginal}
                             aria-haspopup="dialog"
@@ -6723,6 +6909,77 @@ const DrawRoom: React.FC = () => {
                     }}
                 />
 
+                <Dialog
+                    open={templateOpen}
+                    title="Прямоугольная комната"
+                    onCancel={() => {
+                        setTemplateOpen(false);
+                        setTemplateError("");
+                    }}
+                    actions={
+                        <>
+                            <button data-variant="primary" form="draw-room-template" type="submit">
+                                Построить
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setTemplateOpen(false);
+                                    setTemplateError("");
+                                }}
+                            >
+                                Отмена
+                            </button>
+                        </>
+                    }
+                >
+                    {templateOpen ? (
+                        <form
+                            id="draw-room-template"
+                            className={styles.templateForm}
+                            onSubmit={applyRectTemplate}
+                            noValidate
+                        >
+                            <p>
+                                Размеры внутри комнаты, от стены до стены. Стены, двери и окна можно
+                                поправить после.
+                            </p>
+                            <label>
+                                Ширина, м
+                                <input
+                                    name="width"
+                                    inputMode="decimal"
+                                    defaultValue={
+                                        preview
+                                            ? String(preview.room.width / 1000).replace(".", ",")
+                                            : "3,6"
+                                    }
+                                    required
+                                />
+                            </label>
+                            <label>
+                                Глубина, м
+                                <input
+                                    name="depth"
+                                    inputMode="decimal"
+                                    defaultValue={
+                                        preview
+                                            ? String(preview.room.depth / 1000).replace(".", ",")
+                                            : "4,2"
+                                    }
+                                    required
+                                />
+                            </label>
+                            {templateError ? <p role="alert">{templateError}</p> : null}
+                            {scene.segments.length > 0 ? (
+                                <p>
+                                    Текущий чертёж заменится; вернуть его можно кнопкой «Отменить».
+                                </p>
+                            ) : null}
+                        </form>
+                    ) : null}
+                </Dialog>
+
                 {resetConfirmationOpen && (
                     <div
                         className={styles.resetDialogBackdrop}
@@ -6793,6 +7050,17 @@ const DrawRoom: React.FC = () => {
                     <span className={styles.canvasNotice} data-draw-room-notice="true">
                         {visibleNotice}
                     </span>
+                    {newerPlannerRoom && (
+                        <span
+                            className={styles.plannerRoomOffer}
+                            data-draw-room-planner-room="newer"
+                        >
+                            Размеры комнаты меняли на шаге расстановки, здесь — прежние стены.{" "}
+                            <button type="button" onClick={takeNewerPlannerRoom}>
+                                Взять комнату оттуда
+                            </button>
+                        </span>
+                    )}
                     <button
                         type="button"
                         className={styles.keyboardEntryTrigger}
@@ -6858,34 +7126,37 @@ const DrawRoom: React.FC = () => {
                     }
                 >
                     <aside className={styles.toolRail} aria-label="Инструменты чертежа">
-                        <button
-                            type="button"
-                            className={styles.toolGroupButton}
-                            aria-label="Мебель"
-                            aria-expanded={activeToolGroup === "furniture"}
-                            onClick={() => {
-                                setActiveToolGroup(
-                                    activeToolGroup === "furniture" ? "walls" : "furniture",
-                                );
-                                setTool("select");
-                                setSelectedOpening(null);
-                                setRoomInspectorDismissed(true);
-                            }}
-                        >
-                            <svg
-                                viewBox="0 0 24 24"
-                                aria-hidden="true"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.7"
+                        {/* Furniture is placed on the layout step; older drawings keep theirs editable. */}
+                        {(scene.furniture?.length ?? 0) > 0 && (
+                            <button
+                                type="button"
+                                className={styles.toolGroupButton}
+                                aria-label="Мебель"
+                                aria-expanded={activeToolGroup === "furniture"}
+                                onClick={() => {
+                                    setActiveToolGroup(
+                                        activeToolGroup === "furniture" ? "walls" : "furniture",
+                                    );
+                                    setTool("select");
+                                    setSelectedOpening(null);
+                                    setRoomInspectorDismissed(true);
+                                }}
                             >
-                                <path d="M5 11V5h14v6M3 11h18v8H3zM6 19v3m12-3v3M3 15h18" />
-                            </svg>
-                            <span>
-                                <b>Мебель</b>
-                                <small>Добавить и переместить</small>
-                            </span>
-                        </button>
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.7"
+                                >
+                                    <path d="M5 11V5h14v6M3 11h18v8H3zM6 19v3m12-3v3M3 15h18" />
+                                </svg>
+                                <span>
+                                    <b>Мебель</b>
+                                    <small>Добавить и переместить</small>
+                                </span>
+                            </button>
+                        )}
                         <div className={styles.toolRailIntro}>
                             <span>КОНСТРУКЦИЯ</span>
                         </div>

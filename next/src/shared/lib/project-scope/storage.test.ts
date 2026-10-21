@@ -6,6 +6,7 @@ import {
     getProjectStorage,
     parseProjectId,
     projectStorageNamespace,
+    subscribeProjectStorage,
     withProjectParam,
     withProjectQuery,
 } from "./storage";
@@ -52,10 +53,25 @@ describe("project storage scope", () => {
         const custom = new MemoryStorage();
         activateProjectScope(ID, custom);
         expect(getActiveProjectId()).toBe(ID);
-        expect(getProjectStorage()).toBe(custom);
+        getProjectStorage()?.setItem("key", "value");
+        expect(custom.getItem("key")).toBe("value");
 
         activateProjectScope(null);
         expect(getActiveProjectId()).toBeNull();
+    });
+
+    it("tells subscribers about writes through the active store", () => {
+        const custom = new MemoryStorage();
+        activateProjectScope(ID, custom);
+        let calls = 0;
+        const unsubscribe = subscribeProjectStorage(() => {
+            calls += 1;
+        });
+        getProjectStorage()?.setItem("key", "value");
+        getProjectStorage()?.removeItem("key");
+        unsubscribe();
+        getProjectStorage()?.setItem("key", "value");
+        expect(calls).toBe(2);
     });
 
     it("adds the project to links without losing their own query or hash", () => {

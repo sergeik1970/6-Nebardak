@@ -56,6 +56,30 @@ export const flushProjectSync = async (): Promise<void> => {
     await current?.flush().catch(() => undefined);
 };
 
+const removeKeys = (prefix: string): void => {
+    const storage = typeof window === "undefined" ? null : window.localStorage;
+    if (!storage) return;
+    try {
+        const keys: string[] = [];
+        for (let index = 0; index < storage.length; index += 1) {
+            const key = storage.key(index);
+            if (key?.startsWith(prefix)) keys.push(key);
+        }
+        keys.forEach((key) => storage.removeItem(key));
+    } catch {
+        // Blocked storage has nothing cached to remove.
+    }
+};
+
+/** Drops the local copy of a project that was deleted from the account. */
+export const forgetProjectCache = (projectId: string): void => {
+    if (current?.projectId === projectId) {
+        current.dispose();
+        current = null;
+    }
+    removeKeys(projectStorageNamespace(projectId));
+};
+
 /**
  * Forgets every cached project on this device — on sign-out, so the next
  * person at a shared computer cannot open them from the local copy.
@@ -63,16 +87,5 @@ export const flushProjectSync = async (): Promise<void> => {
 export const purgeProjectCaches = (): void => {
     current?.dispose();
     current = null;
-    const storage = typeof window === "undefined" ? null : window.localStorage;
-    if (!storage) return;
-    try {
-        const keys: string[] = [];
-        for (let index = 0; index < storage.length; index += 1) {
-            const key = storage.key(index);
-            if (key?.startsWith(PROJECT_STORAGE_PREFIX)) keys.push(key);
-        }
-        keys.forEach((key) => storage.removeItem(key));
-    } catch {
-        // Blocked storage has nothing cached to remove.
-    }
+    removeKeys(PROJECT_STORAGE_PREFIX);
 };

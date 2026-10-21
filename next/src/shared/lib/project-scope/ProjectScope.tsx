@@ -15,6 +15,7 @@ import { useAuthModal } from "@/contexts/AuthModalContext";
 import { projectsService } from "@/services/projectsService";
 import Dialog from "@/shared/components/Dialog";
 import ProjectBar, { describeSyncState } from "@/shared/components/ProjectBar";
+import ProjectStepper from "@/shared/components/ProjectStepper";
 import { isAuthEnabled } from "@/shared/config/runtime";
 import { importGuestDraft } from "@/shared/lib/project-sync/guest-import";
 import type { ProjectSync, SyncState } from "@/shared/lib/project-sync/ProjectSync";
@@ -140,8 +141,9 @@ const GuestBar: React.FC = () => {
     const { user } = useAuth();
     const { openAuthModal } = useAuthModal();
     const [state, setState] = useState<"idle" | "saving" | "empty" | "error">("idle");
+    const steps = <ProjectStepper projectId={null} />;
 
-    if (!isAuthEnabled) return null;
+    if (!isAuthEnabled) return <ProjectBar title="Черновик" steps={steps} />;
 
     const saveToAccount = async () => {
         setState("saving");
@@ -160,6 +162,7 @@ const GuestBar: React.FC = () => {
     return (
         <ProjectBar
             title="Черновик"
+            steps={steps}
             status={
                 state === "empty"
                     ? "Пока нечего сохранять — начните проект"
@@ -318,6 +321,7 @@ const ProjectScope: React.FC<{ children: ReactNode }> = ({ children }) => {
         <>
             <ProjectBar
                 title={state.name ?? "Проект"}
+                steps={<ProjectStepper projectId={linkProjectId} />}
                 status={status}
                 tone={tone}
                 action={action}

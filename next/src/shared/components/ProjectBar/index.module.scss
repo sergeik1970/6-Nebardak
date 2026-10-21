@@ -15,7 +15,7 @@
 }
 
 .title {
-    max-width: 50%;
+    max-width: 30%;
     overflow: hidden;
     font-weight: 700;
     text-overflow: ellipsis;
@@ -56,7 +56,6 @@
 
 .action {
     min-height: 32px;
-    margin-left: auto;
     padding: 2px var(--sf-space-3);
     border: 1px solid var(--sf-color-line-strong);
     border-radius: var(--sf-radius-md);
@@ -77,5 +76,17 @@
     &:disabled {
         cursor: progress;
         opacity: 0.6;
+    }
+}
+
+@media (max-width: 720px) {
+    // Title and save state share the first line; the steps get their own.
+    .bar > nav {
+        order: 3;
+        flex-basis: 100%;
+    }
+
+    .title {
+        max-width: 45%;
     }
 }

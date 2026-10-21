@@ -61,6 +61,16 @@
             opacity: 0.6;
         }
 
+        &[data-variant="danger"] {
+            border-color: var(--sf-color-error);
+            background: var(--sf-color-error);
+            color: #fff;
+
+            &:hover:not(:disabled) {
+                background: #861f19;
+            }
+        }
+
         &[data-variant="primary"] {
             border-color: var(--sf-color-brand);
             background: var(--sf-color-brand);

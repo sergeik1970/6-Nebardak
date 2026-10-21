@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { continueThroughRoomStep } from "./project-flow";
 
 const activateWithKeyboard = async (
     page: Page,
@@ -44,10 +45,7 @@ const swipeScrollableViewport = async (page: Page, viewport: Locator) => {
 const openSingleBedPlanner = async (page: Page) => {
     await page.goto("/questionnaire", { waitUntil: "networkidle" });
     await page.getByRole("radio", { name: "Односпальная", exact: true }).check();
-    await Promise.all([
-        page.waitForURL(/\/planner\?handoff=/, { timeout: 60_000, waitUntil: "commit" }),
-        page.getByRole("button", { name: "Перейти к расстановке" }).click(),
-    ]);
+    await continueThroughRoomStep(page);
 };
 
 test("planner change-answers round trip keeps the questionnaire prefilled", async ({
@@ -61,10 +59,7 @@ test("planner change-answers round trip keeps the questionnaire prefilled", asyn
     );
     await page.getByRole("radio", { name: "Односпальная", exact: true }).check();
     await page.getByRole("checkbox", { name: /Книжный шкаф/ }).check();
-    await Promise.all([
-        page.waitForURL(/\/planner\?handoff=/, { timeout: 60_000, waitUntil: "commit" }),
-        page.getByRole("button", { name: "Перейти к расстановке" }).click(),
-    ]);
+    await continueThroughRoomStep(page);
 
     await expect(page.getByText(/Набор получен из анкеты/)).toBeVisible();
     await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
@@ -327,12 +322,31 @@ test("keyboard-only workflow generates, edits, undoes and exports without mouse 
     await activateWithKeyboard(page, singleBed, "Space");
     await expect(singleBed).toBeChecked();
 
-    const openPlanner = page.getByRole("button", { name: "Перейти к расстановке" });
-    await openPlanner.focus();
-    await expect(openPlanner).toBeFocused();
+    const openRoomStep = page.getByRole("button", { name: "Дальше: комната" });
+    await openRoomStep.focus();
+    await expect(openRoomStep).toBeFocused();
     await Promise.all([
-        page.waitForURL(/\/planner\?handoff=/, { timeout: 60_000, waitUntil: "commit" }),
+        page.waitForURL(/\/planner\/draw\?handoff=/, { timeout: 60_000, waitUntil: "commit" }),
         page.keyboard.press("Enter"),
+    ]);
+
+    // The room step by keyboard: the rectangle template and its dialog.
+    await activateWithKeyboard(
+        page,
+        page.getByRole("button", { name: "Прямоугольная комната по размерам" }),
+    );
+    const template = page.getByRole("dialog", { name: "Прямоугольная комната" });
+    await expect(template.getByLabel("Ширина, м")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(template).toBeHidden();
+    const openPlanner = page.getByRole("button", { name: "Продолжить с комнатой" });
+    await expect(openPlanner).toBeEnabled();
+    await Promise.all([
+        page.waitForURL(/\/planner\?(?:drawRoom=1&)?handoff=/, {
+            timeout: 60_000,
+            waitUntil: "commit",
+        }),
+        activateWithKeyboard(page, openPlanner),
     ]);
 
     const generate = page.getByRole("button", { name: "Уместить всё" });
@@ -385,10 +399,7 @@ test("manual removal is confirmed, undoable, redoable and restored after reload"
     await page.goto("/questionnaire", { waitUntil: "networkidle" });
     await page.getByRole("radio", { name: "Односпальная", exact: true }).check();
     await page.getByRole("checkbox", { name: /Книжный шкаф/ }).check();
-    await Promise.all([
-        page.waitForURL(/\/planner\?handoff=/, { timeout: 60_000, waitUntil: "commit" }),
-        page.getByRole("button", { name: "Перейти к расстановке" }).click(),
-    ]);
+    await continueThroughRoomStep(page);
 
     await page.getByRole("button", { name: "Уместить всё" }).click();
     await expect(page.getByRole("heading", { name: "Итоговая спецификация" })).toBeVisible({

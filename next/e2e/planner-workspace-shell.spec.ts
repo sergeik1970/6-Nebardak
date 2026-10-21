@@ -258,8 +258,7 @@ test("mobile room controls expose 44px targets without changing visible opening 
     }
 
     const steppers = [
-        page.getByRole("button", { name: "Уменьшить ширину комнаты на 0,05 м" }),
-        page.getByRole("button", { name: "Увеличить глубину комнаты на 0,05 м" }),
+        page.getByRole("link", { name: "Изменить комнату в чертеже" }),
         page.getByRole("button", { name: /Изменить ширину комнаты/ }),
         page.getByRole("button", { name: "Начать вручную" }),
     ];
@@ -370,14 +369,15 @@ test("resetting the demo planner returns to the uncalculated room without a solv
     test.skip(testInfo.project.name !== "desktop-chromium", "Reset is covered once on desktop");
     await page.goto("/planner", { waitUntil: "networkidle" });
 
-    const width = page.getByRole("textbox", { name: "Ширина м" });
-    await page.getByRole("button", { name: /Просторная/ }).click();
-    await expect(width).toHaveValue("7,2");
+    const size = page.locator("[data-room-summary] [data-room-width]");
+    await page.getByRole("button", { name: "Править комнату", exact: true }).click();
+    await page.getByRole("button", { name: /Изменить ширину комнаты/ }).press("ArrowRight");
+    await expect(size).toHaveAttribute("data-room-width", "6050");
 
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Сбросить", exact: true }).click();
 
-    await expect(width).toHaveValue("6");
+    await expect(size).toHaveAttribute("data-room-width", "6000");
     await expect(page.locator("[data-planner-app-bar='true']")).toContainText("Комната готова");
     await expect(
         page.getByRole("status").filter({ hasText: "Расстановка не рассчитана" }),

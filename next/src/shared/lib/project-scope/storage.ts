@@ -60,12 +60,46 @@ interface ActiveScope {
 
 let activeScope: ActiveScope | null = null;
 
+const storageListeners = new Set<() => void>();
+const observedStores = new WeakMap<KeyValueStorage, KeyValueStorage>();
+
+const notifyStorageListeners = () => storageListeners.forEach((listener) => listener());
+
+/** Passes every call through and tells subscribers that the project changed. */
+const observe = (storage: KeyValueStorage | null): KeyValueStorage | null => {
+    if (!storage) return null;
+    let observed = observedStores.get(storage);
+    if (!observed) {
+        observed = {
+            getItem: (key) => storage.getItem(key),
+            setItem: (key, value) => {
+                storage.setItem(key, value);
+                notifyStorageListeners();
+            },
+            removeItem: (key) => {
+                storage.removeItem(key);
+                notifyStorageListeners();
+            },
+        };
+        observedStores.set(storage, observed);
+    }
+    return observed;
+};
+
 /**
  * The store for the project currently on screen. Without an explicit scope
  * (tests, pages outside the project flow) it is the guest store.
  */
 export const getProjectStorage = (): KeyValueStorage | null =>
-    activeScope ? activeScope.storage : browserLocalStorage();
+    observe(activeScope ? activeScope.storage : browserLocalStorage());
+
+/** Called after any page writes to the project through `getProjectStorage()`. */
+export const subscribeProjectStorage = (listener: () => void): (() => void) => {
+    storageListeners.add(listener);
+    return () => {
+        storageListeners.delete(listener);
+    };
+};
 
 export const getActiveProjectId = (): string | null => activeScope?.projectId ?? null;
 

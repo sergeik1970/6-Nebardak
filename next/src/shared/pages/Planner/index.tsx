@@ -52,7 +52,6 @@ import {
     canUndoPlacementHistory,
     alignStarterOpeningsToRoom,
     createDefaultRoom,
-    createLRoomGeometry,
     applyRoomGeometry,
     createPlacementHistory,
     createRemovalRecord,
@@ -212,12 +211,6 @@ const DEFAULT_PRIORITIES: Record<string, FurniturePriority> = {
 const DEFAULT_PREFERENCES: LayoutPreferences = {};
 
 const DEFAULT_ROOM = createDefaultRoom(6000, 4600);
-const PRESETS = [
-    { label: "Компактная", width: 4200, depth: 3400 },
-    { label: "Стандарт", width: 6000, depth: 4600 },
-    { label: "Просторная", width: 7200, depth: 5200 },
-];
-
 const BED_IDS = ["single-bed", "double-bed"];
 const SOFA_IDS = ["sofa-two", "sofa-three", "sofa-four-left"];
 const WARDROBE_IDS = ["wardrobe-small", "wardrobe-medium", "wardrobe-large"];
@@ -580,7 +573,6 @@ const getRadiatorBoundsIssue = (radiator: RadiatorObstacle, room: Room): string 
     return null;
 };
 
-const millimetersFromMeters = (value: number) => snapToGrid(value * 1000);
 const millimetersFromCentimeters = (value: number) => snapToGrid(value * 10);
 
 const baselineFromHandoff = (input: QuestionnairePlannerInputV1): HandoffBaseline => ({
@@ -2671,6 +2663,8 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
     const handledHandoffId = useRef<string | null>(null);
     const draftRead = useRef(false);
     const drawRoomHandoffRead = useRef(false);
+    // Set when a new room from the editor is what made the current layout stale.
+    const roomReplacedRef = useRef(false);
     const draftingBoardRef = useRef<HTMLDivElement | null>(null);
     const planPanViewportRef = useRef<HTMLDivElement | null>(null);
     const rectangleEditFitReferenceRef = useRef<RectangleEditFitReference | null>(null);
@@ -3008,7 +3002,12 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
         setUnplacedPreferredInstanceIds([]);
         // A fresh room or questionnaire hand-off has no earlier layout to hide.
         if (generatedSignature === null) return;
-        setResultNotice("Параметры изменены. Прежняя расстановка скрыта — уместите набор заново.");
+        setResultNotice(
+            roomReplacedRef.current
+                ? "Комната изменилась — прежняя расстановка устарела. Нажмите «Уместить всё», чтобы пересчитать её."
+                : "Параметры изменены. Прежняя расстановка скрыта — уместите набор заново.",
+        );
+        roomReplacedRef.current = false;
     }, [generatedSignature, isStale, placements]);
     const displayedPlacements = useMemo(() => {
         if (!shouldShowPlannerLayout({ isStale, result: lastResult })) return [];
@@ -3205,6 +3204,16 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
     useEffect(() => {
         setExportStatus("");
     }, [generatedAt]);
+
+    // «Итог» in the project steps links here; the section appears only after
+    // the saved layout is restored, too late for the browser's own jump.
+    const resultScrollDone = useRef(false);
+    useEffect(() => {
+        if (!resultSpecification || resultScrollDone.current) return;
+        resultScrollDone.current = true;
+        if (window.location.hash !== "#plan-result") return;
+        document.getElementById("plan-result")?.scrollIntoView({ block: "start" });
+    }, [resultSpecification]);
 
     useEffect(() => {
         const board = draftingBoardRef.current;
@@ -3406,22 +3415,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
         );
     }, []);
 
-    const updateRoomDimension = useCallback((dimension: "width" | "depth", value: number) => {
-        setRoom((current) => {
-            const result = tryResizeRoomWithDefaultOpenings(
-                current,
-                dimension === "width" ? value : current.width,
-                dimension === "depth" ? value : current.depth,
-            );
-            if (result.status === "invalid") {
-                setResultNotice(`Размер не применён: ${result.message}`);
-                return current;
-            }
-            setResultNotice("");
-            return result.room;
-        });
-    }, []);
-
     const resizeRoomDirectly = useCallback((width: number, depth: number) => {
         setRoom((current) => {
             const result = tryResizeRoomWithDefaultOpenings(current, width, depth);
@@ -3520,27 +3513,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
         },
         [],
     );
-
-    const updateRoomShape = useCallback((shape: "rect" | "l-left" | "l-right") => {
-        setRoom((current) =>
-            applyRoomGeometry(
-                current,
-                shape === "rect"
-                    ? { version: 1, kind: "rect" }
-                    : createLRoomGeometry(
-                          current.width,
-                          current.depth,
-                          shape === "l-left" ? "left" : "right",
-                      ),
-            ),
-        );
-        setIsRoomEditing(true);
-        setResultNotice(
-            shape === "rect"
-                ? "Прямоугольная форма применена."
-                : "Г-образная форма применена. Проверьте сегменты проёмов и пересчитайте план.",
-        );
-    }, []);
 
     const updateDoor = useCallback((doorId: string, patch: Partial<DoorOpening>) => {
         setRoom((current) => ({
@@ -4046,7 +4018,30 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
             return;
         }
 
+        // Keeps a questionnaire hand-off in the address: dropping it would reset the set.
+        const plannerHref = withProjectParam(
+            handoffId ? `/planner?handoff=${encodeURIComponent(handoffId)}` : "/planner",
+        );
         const imported = result.placements;
+        // Radiators are placed only here; keep them while they still fit the new walls.
+        const nextRoom = (current: Room): Room => {
+            const withRadiators = { ...result.value, radiators: current.radiators ?? [] };
+            return validateRoomGeometry(withRadiators) ? result.value : withRadiators;
+        };
+
+        if (!imported.length && placements.length > 0) {
+            // The layout stays: it becomes stale only if the walls really changed,
+            // and the person decides when to recalculate it.
+            const replaced = nextRoom(room);
+            roomReplacedRef.current =
+                selectionSignature(room, {}, {}, {}) !== selectionSignature(replaced, {}, {}, {});
+            setRoom(replaced);
+            setIsRoomEditing(false);
+            setDraftNotice("Контур комнаты сохранён в черновике.");
+            void router.replace(plannerHref, undefined, { shallow: true });
+            return;
+        }
+
         setIsDrawingLayout(imported.length > 0);
         const nextSelection: Selection = {};
         const nextPriorities: Record<string, FurniturePriority> = {};
@@ -4072,7 +4067,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
         } else {
             setGeneratedSignature(null);
         }
-        setRoom(result.value);
+        setRoom(nextRoom);
         setVariants([]);
         setActiveVariantId(null);
         setEditedVariantIds(new Set());
@@ -4098,8 +4093,10 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                 : "Контур из отдельного редактора перенесён. Добавьте мебель или рассчитайте план.",
         );
         setDraftNotice("Контур комнаты сохранён в локальном черновике.");
-        void router.replace(withProjectParam("/planner"), undefined, { shallow: true });
-    }, [drawRoomDraft, draftReady, router]);
+        void router.replace(plannerHref, undefined, { shallow: true });
+        // Runs once per hand-off; `room` and `placements` are read for that moment only.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [drawRoomDraft, draftReady, handoffId, router]);
 
     useEffect(() => {
         if (!draftReady || !draftWritable || phase === "solving" || isRoomEditGestureActive) {
@@ -4823,18 +4820,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
         },
         [activeValidationMessages, instances, placements, room],
     );
-
-    const applyPreset = useCallback((width: number, depth: number) => {
-        setRoom((current) => {
-            const result = tryResizeRoomWithDefaultOpenings(current, width, depth);
-            if (result.status === "invalid") {
-                setResultNotice(`Размер не применён: ${result.message}`);
-                return current;
-            }
-            setResultNotice("");
-            return result.room;
-        });
-    }, []);
 
     const resetPlanner = useCallback(() => {
         cancelActiveSolver();
@@ -5835,166 +5820,41 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                             <span>01</span>
                             <div>
                                 <h2>Комната</h2>
-                                <p>Размеры в метрах</p>
+                                <p>Контур, проёмы и отопление</p>
                             </div>
                         </div>
 
-                        <div className={styles.roomShapeControl}>
-                            <span>Форма комнаты</span>
-                            <div role="group" aria-label="Форма комнаты">
-                                <button
-                                    type="button"
-                                    aria-pressed={room.geometry?.kind !== "orthogonal"}
-                                    onClick={() => updateRoomShape("rect")}
-                                >
-                                    Прямоугольная
-                                </button>
-                                <button
-                                    type="button"
-                                    aria-pressed={
-                                        room.geometry?.kind === "orthogonal" &&
-                                        room.geometry.vertices[0]?.x > 0
-                                    }
-                                    onClick={() => updateRoomShape("l-left")}
-                                >
-                                    Г слева
-                                </button>
-                                <button
-                                    type="button"
-                                    aria-pressed={
-                                        room.geometry?.kind === "orthogonal" &&
-                                        room.geometry.vertices[0]?.x === 0
-                                    }
-                                    onClick={() => updateRoomShape("l-right")}
-                                >
-                                    Г справа
-                                </button>
-                                <button
-                                    type="button"
-                                    aria-label="Открыть отдельный редактор контура комнаты"
-                                    onClick={() =>
-                                        void router.push(withProjectParam("/planner/draw"))
-                                    }
-                                >
-                                    Нарисовать
-                                </button>
-                            </div>
+                        <div className={styles.roomSummary} data-room-summary="true">
+                            <dl>
+                                <div>
+                                    <dt>Размер</dt>
+                                    <dd data-room-width={room.width} data-room-depth={room.depth}>
+                                        {formatMeters(room.width)} × {formatMeters(room.depth)}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Площадь</dt>
+                                    <dd>{formatArea(room)} м²</dd>
+                                </div>
+                                <div>
+                                    <dt>Форма</dt>
+                                    <dd>
+                                        {room.geometry?.kind === "orthogonal"
+                                            ? "Сложный контур"
+                                            : "Прямоугольная"}
+                                    </dd>
+                                </div>
+                            </dl>
+                            <Link
+                                className={styles.roomSummaryEdit}
+                                href={projectHref("/planner/draw")}
+                            >
+                                Изменить комнату в чертеже
+                            </Link>
                             <small>
-                                Откройте большой редактор: он сохраняет совместимый контур и вернёт
-                                вас сюда.
+                                Стены, двери и окна рисуются на шаге «Комната». Здесь можно
+                                подвинуть проёмы и радиаторы.
                             </small>
-                        </div>
-
-                        <div className={styles.dimensionFields}>
-                            <div className={styles.dimensionField}>
-                                <span>Ширина</span>
-                                <span className={styles.dimensionStepper}>
-                                    <button
-                                        type="button"
-                                        aria-label="Уменьшить ширину комнаты на 0,05 м"
-                                        onClick={() =>
-                                            updateRoomDimension("width", room.width - 50)
-                                        }
-                                        disabled={room.width <= 2400}
-                                    >
-                                        −
-                                    </button>
-                                    <span className={styles.inputWithUnit}>
-                                        <DraftNumberInput
-                                            name="room-width"
-                                            aria-label="Ширина м"
-                                            min={2.4}
-                                            max={10}
-                                            step={0.05}
-                                            value={room.width / 1000}
-                                            onCommit={(value) =>
-                                                updateRoomDimension(
-                                                    "width",
-                                                    millimetersFromMeters(value),
-                                                )
-                                            }
-                                            aria-describedby="room-range"
-                                        />
-                                        <span>м</span>
-                                    </span>
-                                    <button
-                                        type="button"
-                                        aria-label="Увеличить ширину комнаты на 0,05 м"
-                                        onClick={() =>
-                                            updateRoomDimension("width", room.width + 50)
-                                        }
-                                        disabled={room.width >= 10_000}
-                                    >
-                                        +
-                                    </button>
-                                </span>
-                            </div>
-                            <div className={styles.dimensionField}>
-                                <span>Глубина</span>
-                                <span className={styles.dimensionStepper}>
-                                    <button
-                                        type="button"
-                                        aria-label="Уменьшить глубину комнаты на 0,05 м"
-                                        onClick={() =>
-                                            updateRoomDimension("depth", room.depth - 50)
-                                        }
-                                        disabled={room.depth <= 2400}
-                                    >
-                                        −
-                                    </button>
-                                    <span className={styles.inputWithUnit}>
-                                        <DraftNumberInput
-                                            name="room-depth"
-                                            aria-label="Глубина м"
-                                            min={2.4}
-                                            max={10}
-                                            step={0.05}
-                                            value={room.depth / 1000}
-                                            onCommit={(value) =>
-                                                updateRoomDimension(
-                                                    "depth",
-                                                    millimetersFromMeters(value),
-                                                )
-                                            }
-                                            aria-describedby="room-range"
-                                        />
-                                        <span>м</span>
-                                    </span>
-                                    <button
-                                        type="button"
-                                        aria-label="Увеличить глубину комнаты на 0,05 м"
-                                        onClick={() =>
-                                            updateRoomDimension("depth", room.depth + 50)
-                                        }
-                                        disabled={room.depth >= 10_000}
-                                    >
-                                        +
-                                    </button>
-                                </span>
-                            </div>
-                        </div>
-                        <p id="room-range" className={styles.fieldHint}>
-                            От 2,4 до 10 м, шаг 0,05 м.
-                        </p>
-
-                        <div className={styles.presets} aria-label="Готовые размеры комнаты">
-                            {PRESETS.map((preset) => (
-                                <button
-                                    key={preset.label}
-                                    type="button"
-                                    className={
-                                        room.width === preset.width && room.depth === preset.depth
-                                            ? styles.activePreset
-                                            : ""
-                                    }
-                                    onClick={() => applyPreset(preset.width, preset.depth)}
-                                >
-                                    <span>{preset.label}</span>
-                                    <small>
-                                        {preset.width / 1000} × {preset.depth / 1000} м
-                                    </small>
-                                </button>
-                            ))}
                         </div>
 
                         <details className={styles.openingsDetails}>
@@ -7608,6 +7468,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                             <section
                                 className={styles.resultSpecification}
                                 aria-labelledby="result-specification-heading"
+                                id="plan-result"
                             >
                                 <header className={styles.resultSpecificationHeader}>
                                     <div>

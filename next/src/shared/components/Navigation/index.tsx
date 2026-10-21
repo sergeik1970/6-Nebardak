@@ -184,6 +184,9 @@ const Navigation: React.FC = () => {
                         {navigationLinks}
                         {authEnabled && isAuthenticated ? (
                             <div className={styles["user-menu"]}>
+                                <Link className={styles["nav-link"]} href="/projects">
+                                    Мои проекты
+                                </Link>
                                 <Link
                                     aria-label={`Личный кабинет: ${user?.name ?? ""}`}
                                     className={styles["user-name"]}
@@ -266,6 +269,13 @@ const Navigation: React.FC = () => {
                                 <div className={styles["mobile-user-info"]}>
                                     Привет, {user?.name}!
                                 </div>
+                                <Link
+                                    className={styles["mobile-nav-link"]}
+                                    href="/projects"
+                                    onClick={closeMenu}
+                                >
+                                    Мои проекты
+                                </Link>
                                 <Link
                                     className={styles["mobile-nav-link"]}
                                     href="/account"

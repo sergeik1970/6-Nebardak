@@ -1,5 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 import sharp from "sharp";
+import { readRoomSize } from "./project-flow";
+
+// These tests measure the drawing canvas in screen pixels; the project steps
+// above it are covered in project-path.spec.ts, so they keep the old canvas.
+test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+        const style = document.createElement("style");
+        style.textContent = "[data-project-bar] { display: none !important; }";
+        document.addEventListener("DOMContentLoaded", () => document.head.append(style));
+    });
+});
 
 const BOARD_WIDTH_MM = 16_000;
 const BOARD_HEIGHT_MM = 10_000;
@@ -1896,15 +1907,12 @@ test("separate room drawing route makes the gridded field primary and creates a 
     await page.getByRole("button", { name: "Продолжить с комнатой" }).click();
     // The planner drops `?drawRoom=1` once imported, so a refresh cannot re-import over edits.
     await expect(page).toHaveURL(/\/planner(\?drawRoom=1)?$/);
-    await expect(page.locator('input[name="room-width"]')).toBeVisible();
-    const transferredSize = await Promise.all([
-        page.locator('input[name="room-width"]').inputValue(),
-        page.locator('input[name="room-depth"]').inputValue(),
-    ]);
-    expect(Number(transferredSize[0].replace(",", "."))).toBeGreaterThanOrEqual(5);
-    expect(Number(transferredSize[0].replace(",", "."))).toBeLessThanOrEqual(10);
-    expect(Number(transferredSize[1].replace(",", "."))).toBeGreaterThanOrEqual(3);
-    expect(Number(transferredSize[1].replace(",", "."))).toBeLessThanOrEqual(10);
+    await expect(page.locator("[data-room-summary]")).toBeVisible();
+    const transferredSize = await readRoomSize(page);
+    expect(transferredSize.width).toBeGreaterThanOrEqual(5000);
+    expect(transferredSize.width).toBeLessThanOrEqual(10_000);
+    expect(transferredSize.depth).toBeGreaterThanOrEqual(3000);
+    expect(transferredSize.depth).toBeLessThanOrEqual(10_000);
 });
 
 test("selection grips move a complete wall and keep its opening attached", async ({
@@ -3074,19 +3082,15 @@ test("an L contour off the 50 mm lattice is rounded on its way into the planner"
     await page.getByRole("button", { name: "Продолжить с комнатой" }).click();
     await expect(page).toHaveURL(/\/planner/);
 
-    const width = Number(
-        (await page.locator('input[name="room-width"]').inputValue()).replace(",", "."),
-    );
-    const depth = Number(
-        (await page.locator('input[name="room-depth"]').inputValue()).replace(",", "."),
-    );
-    expect(width).toBeGreaterThanOrEqual(7.8);
-    expect(width).toBeLessThanOrEqual(8.0);
-    expect(depth).toBeGreaterThanOrEqual(4.35);
-    expect(depth).toBeLessThanOrEqual(4.5);
-    expect(Math.round(width * 1000) % 50).toBe(0);
-    expect(Math.round(depth * 1000) % 50).toBe(0);
-    await expect(page.getByRole("group", { name: "Форма комнаты" })).toBeVisible();
+    await expect(page.locator("[data-room-summary]")).toBeVisible();
+    const { width, depth } = await readRoomSize(page);
+    expect(width).toBeGreaterThanOrEqual(7800);
+    expect(width).toBeLessThanOrEqual(8000);
+    expect(depth).toBeGreaterThanOrEqual(4350);
+    expect(depth).toBeLessThanOrEqual(4500);
+    expect(width % 50).toBe(0);
+    expect(depth % 50).toBe(0);
+    await expect(page.locator("[data-room-summary]")).toContainText("Сложный контур");
 });
 
 test("closed rectangle and L-room keep dimension chains and the area card collision-free", async ({
@@ -3818,7 +3822,7 @@ test("every visible grid point remains drawable outside the former 16 by 10 m ar
 
 test("planner's draw entry opens the separate room editor", async ({ page }) => {
     await page.goto("/planner", { waitUntil: "networkidle" });
-    await page.getByRole("button", { name: "Открыть отдельный редактор контура комнаты" }).click();
+    await page.getByRole("link", { name: "Изменить комнату в чертеже" }).click();
     await expect(page).toHaveURL(/\/planner\/draw$/);
     await expect(page.locator("[data-draw-room-board='true']")).toBeVisible();
 });

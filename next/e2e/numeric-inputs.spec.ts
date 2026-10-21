@@ -7,25 +7,15 @@ test("planner number fields allow an empty draft and reject values above their m
 
     await page.goto("/planner", { waitUntil: "networkidle" });
 
-    const width = page.locator('input[name="room-width"]');
-    const depth = page.locator('input[name="room-depth"]');
-    const [widthBox, depthBox] = await Promise.all([width.boundingBox(), depth.boundingBox()]);
-    expect(widthBox?.width).toBeGreaterThanOrEqual(72);
-    expect(depthBox?.width).toBeGreaterThanOrEqual(72);
-    await page.getByRole("button", { name: "Увеличить ширину комнаты на 0,05 м" }).click();
-    await expect(width).toHaveValue("6,05");
-    await page.getByRole("button", { name: "Уменьшить ширину комнаты на 0,05 м" }).click();
-    await expect(width).toHaveValue("6");
-    await width.fill("");
-    await expect(width).toHaveValue("");
-    await width.fill("0");
-    await expect(width).toHaveValue("0");
-
-    await width.fill("10,1");
-    await expect(width).toHaveValue("0");
-    await width.fill("7,25");
-    await width.blur();
-    await expect(width).toHaveValue("7,25");
+    // Room sizes come from the drawing step; the planner only reports them.
+    await expect(page.locator("[data-room-summary] [data-room-width]")).toHaveAttribute(
+        "data-room-width",
+        "6000",
+    );
+    await expect(page.getByRole("link", { name: "Изменить комнату в чертеже" })).toHaveAttribute(
+        "href",
+        "/planner/draw",
+    );
 
     await page.locator("summary").filter({ hasText: "Проёмы и отопление" }).click();
     const doorOffset = page.locator('input[name="door-door-main-offset"]');
@@ -63,9 +53,14 @@ test("shrinking a room keeps an oversized opening visible and offers an explicit
     await doorWidth.blur();
     await expect(doorWidth).toHaveValue("400");
 
-    const roomDepth = page.locator('input[name="room-depth"]');
-    await roomDepth.fill("2,4");
-    await roomDepth.blur();
+    // Shrink the room to its 2.4 m minimum depth with the plan's own wall handle.
+    await page.getByRole("button", { name: "Править комнату", exact: true }).click();
+    const depthHandle = page.getByRole("button", { name: /Изменить глубину комнаты/ });
+    for (let step = 0; step < 50; step += 1) await depthHandle.press("ArrowUp");
+    await expect(page.locator("[data-room-summary] [data-room-width]")).toHaveAttribute(
+        "data-room-depth",
+        "2400",
+    );
 
     await expect(page.getByText(/Дверь шире доступной глубины комнаты/)).toBeVisible();
     await expect(doorWidth).toHaveValue("400");
@@ -184,8 +179,9 @@ test("planner edits room items directly and Escape restores an unfinished gestur
     await page.mouse.up();
     await expect(radiatorOffset).not.toHaveValue(initialRadiatorOffset);
 
-    const roomWidth = page.locator('input[name="room-width"]');
-    const initialWidth = await roomWidth.inputValue();
+    const roomSize = page.locator("[data-room-summary] [data-room-width]");
+    const readWidth = async () => (await roomSize.getAttribute("data-room-width")) ?? "";
+    const initialWidth = await readWidth();
     const widthHandle = room.getByRole("button", { name: /Изменить ширину комнаты/ });
     await widthHandle.scrollIntoViewIfNeeded();
     const handleBox = await widthHandle.boundingBox();
@@ -193,8 +189,8 @@ test("planner edits room items directly and Escape restores an unfinished gestur
     if (!handleBox) throw new Error("Room width handle is not visible on the plan");
 
     await widthHandle.press("ArrowRight");
-    await expect(roomWidth).not.toHaveValue(initialWidth);
-    const keyboardWidth = await roomWidth.inputValue();
+    await expect(roomSize).not.toHaveAttribute("data-room-width", initialWidth);
+    const keyboardWidth = await readWidth();
 
     await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
     await page.mouse.down();
@@ -206,8 +202,8 @@ test("planner edits room items directly and Escape restores an unfinished gestur
         },
     );
     await page.mouse.up();
-    await expect(roomWidth).not.toHaveValue(keyboardWidth);
-    const committedWidth = await roomWidth.inputValue();
+    await expect(roomSize).not.toHaveAttribute("data-room-width", keyboardWidth);
+    const committedWidth = await readWidth();
 
     const resizedHandleBox = await widthHandle.boundingBox();
     expect(resizedHandleBox).not.toBeNull();
@@ -226,5 +222,5 @@ test("planner edits room items directly and Escape restores an unfinished gestur
     await page.keyboard.press("Escape");
     await page.mouse.up();
 
-    await expect(roomWidth).toHaveValue(committedWidth);
+    await expect(roomSize).toHaveAttribute("data-room-width", committedWidth);
 });
