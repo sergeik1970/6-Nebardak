@@ -206,7 +206,11 @@ jobs:
           curl --fail --silent --show-error --head http://127.0.0.1/images/Home/logo.79c74b88fecb.jpg >"$home_headers"
           grep -Eqi '^cache-control:.*max-age=31536000.*immutable' "$home_headers"
           test "$(grep -Eci '^cache-control:' "$home_headers")" = "1"
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data '{"email":"ci@example.test","password":"private-password"}' http://127.0.0.1/api/auth/login)" = "404"
+          # Accounts are off in this topology: a same-origin request gets 404;
+          # without the CSRF marker the API refuses before routing (403).
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'X-Requested-With: stylefinder' --data '{"email":"ci@example.test","password":"private-password"}' http://127.0.0.1/api/auth/login)" = "404"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data '{"email":"ci@example.test","password":"private-password"}' http://127.0.0.1/api/auth/login)" = "403"
+          curl --fail --silent --show-error --dump-header - --output /dev/null http://127.0.0.1/api/health/live | grep -qi '^cache-control: no-store'
           next_id="$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml ps -q next)"
           nest_id="$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml ps -q nest)"
           db_id="$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml ps -q db)"
