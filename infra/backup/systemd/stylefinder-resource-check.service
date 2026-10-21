@@ -1,0 +1,8 @@
+[Unit]
+Description=StyleFinder disk and memory check
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/srv/stylefinder/infra/backup/resource-check.sh

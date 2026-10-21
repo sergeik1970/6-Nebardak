@@ -262,14 +262,89 @@ sudo docker run --rm \
   pg_restore --list "/backup/$(basename "$BACKUP_FILE")" | head
 ```
 
-Сам файл на том же VPS не является backup. После каждого дампа передавайте его
-в зашифрованное внешнее хранилище с политикой retention, например daily 7,
-weekly 4, monthly 6. Не отправляйте незашифрованный дамп в публичный bucket.
+Сам файл на том же VPS не является backup. Ежедневную внешнюю копию делает
+`infra/backup/backup.sh` по systemd-таймеру:
 
-Минимум раз в месяц восстанавливайте свежий dump на отдельном тестовом сервере
-или в изолированном PostgreSQL-контейнере и проверяйте авторизацию и чтение
-данных. Не проводите restore drill поверх production-базы. Непроверенный backup
-нельзя считать рабочим.
+1. `pg_dump -Fc` из контейнера `db` и проверка `pg_restore --list`;
+2. шифрование [age](https://github.com/FiloSottile/age) на публичный ключ:
+   приватный ключ на сервере не хранится;
+3. загрузка в S3-совместимое хранилище в РФ ключом, который может только
+   загружать: прочитать или удалить копии с сервера нельзя;
+4. сигнал в Healthchecks.io: `/start`, затем успех или `/fail` с номером строки.
+
+Сроки хранения задают lifecycle-правила bucket: каждая копия попадает в
+`daily/`, по воскресеньям (UTC) ещё и в `weekly/`, первого числа — в `monthly/`.
+
+### 5.1. Подготовка (один раз)
+
+На своей машине, не на сервере, создайте ключ шифрования:
+
+```bash
+age-keygen -o stylefinder-backup.key   # строка "Public key: age1..." — публичный ключ
+```
+
+Храните `stylefinder-backup.key` в менеджере паролей и в офлайн-копии. Без него
+backup не расшифровать.
+
+В хранилище (Yandex Object Storage или Selectel S3):
+
+- приватный bucket, например `stylefinder-backups`;
+- lifecycle-правила: `daily/` удалять через 8 дней, `weekly/` через 29,
+  `monthly/` через 186;
+- ключ для сервера только с правом загрузки в этот bucket (в Yandex Cloud —
+  сервисный аккаунт с ролью `storage.uploader` на bucket);
+- отдельный ключ только на чтение для restore drill, на сервер его не класть.
+
+В Healthchecks.io создайте три проверки:
+
+| Проверка | Период | Grace |
+| --- | --- | --- |
+| `stylefinder-backup` | 1 день | 2 часа |
+| `stylefinder-resources` | 10 минут | 20 минут |
+| `stylefinder-restore-drill` | 31 день | 3 дня |
+
+### 5.2. Установка на сервере
+
+```bash
+sudo apt-get install -y age curl
+sudo install -d -m 700 /etc/stylefinder
+sudo install -m 600 infra/backup/backup.env.example /etc/stylefinder/backup.env
+sudoedit /etc/stylefinder/backup.env   # APP_DIR, AGE_RECIPIENT, S3_*, HC_*
+sudo install -m 644 infra/backup/systemd/*.service infra/backup/systemd/*.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start stylefinder-backup.service
+sudo journalctl -u stylefinder-backup.service -n 20   # ожидается "uploaded stylefinder-....dump.age"
+sudo systemctl enable --now stylefinder-backup.timer stylefinder-resource-check.timer
+```
+
+Unit-файлы запускают скрипты из `/srv/stylefinder`. Если checkout лежит в
+другом каталоге, исправьте `ExecStart` и `APP_DIR`.
+
+### 5.3. Проверка восстановления
+
+Минимум раз в месяц и обязательно до включения аккаунтов восстанавливайте
+свежую копию на отдельной машине с Docker (не на production-сервере):
+
+```bash
+mkdir -p ~/.config/stylefinder
+cat > ~/.config/stylefinder/drill.env <<'EOF'
+AGE_IDENTITY=/path/to/stylefinder-backup.key
+S3_ENDPOINT=https://storage.yandexcloud.net
+S3_REGION=ru-central1
+S3_BUCKET=stylefinder-backups
+S3_ACCESS_KEY_ID=...        # ключ только на чтение
+S3_SECRET_ACCESS_KEY=...
+HC_DRILL_PING_URL=https://hc-ping.com/...
+EOF
+chmod 600 ~/.config/stylefinder/drill.env
+bash infra/backup/restore-drill.sh
+```
+
+Скрипт скачивает последнюю копию из `daily/`, расшифровывает её и
+восстанавливает в одноразовый PostgreSQL-контейнер без сети. Затем проверяет
+таблицу `migrations` и печатает число строк в каждой таблице. Последняя строка
+`restore drill OK <дата> source=… migrations=N` — это запись о проверке:
+добавьте её в журнал релизов. Непроверенный backup нельзя считать рабочим.
 
 ## 6. Rollback
 
@@ -387,12 +462,21 @@ npm run assets:rights:release
 
 Минимальные проверки production:
 
-- внешний uptime-check для `/`;
-- отдельные checks `/api/health/live` и `/api/health/ready`;
-- оповещение об истечении TLS-сертификата;
-- контроль заполнения диска и памяти;
-- контроль последнего успешного off-site backup;
+- UptimeRobot, HTTP(S)-мониторы с интервалом 5 минут на
+  `https://stylefinder.design/`, `/api/health/live` и `/api/health/ready`
+  (для ready — keyword `"ok"`); у монитора `/` включить SSL-оповещение об
+  истечении сертификата;
+- диск (`/`, `/var/lib/docker` от 80 %) и доступная память (меньше 10 %):
+  `infra/backup/resource-check.sh` каждые 10 минут, проверка
+  `stylefinder-resources` в Healthchecks.io (§5.1);
+- свежесть off-site backup: проверка `stylefinder-backup` поднимает тревогу,
+  если за сутки не было успешной загрузки;
+- ежемесячный restore drill: проверка `stylefinder-restore-drill`;
 - сбор ошибок браузера и API без паролей и токенов.
+
+Оповещения UptimeRobot и Healthchecks.io направьте на почту или в Telegram
+владельца. Эти сервисы получают только адреса проверок и тексты сигналов, без
+персональных данных пользователей.
 
 `/api/health/live` подтверждает, что процесс отвечает. `/api/health/ready`
 дополнительно выполняет безопасный `SELECT 1` и подтверждает доступность
