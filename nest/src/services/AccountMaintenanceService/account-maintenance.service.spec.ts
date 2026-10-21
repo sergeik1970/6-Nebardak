@@ -31,6 +31,8 @@ describe("AccountMaintenanceService", () => {
         const [sql, parameters] = query.mock.calls[0];
         expect(sql).toMatch(/"emailVerifiedAt" IS NULL/);
         expect(sql).toMatch(/"role" <> 'admin'/);
+        // Accounts created before sign-up consent existed are never removed.
+        expect(sql).toMatch(/"consentAt" IS NOT NULL/);
         expect(sql).toMatch(/NOT EXISTS[\s\S]*"last_seen_at" >= \$1/);
         expect(parameters).toEqual([
             new Date(now.getTime() - UNVERIFIED_ACCOUNT_RETENTION_MS),

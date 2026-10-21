@@ -17,6 +17,9 @@ const FIRST_RUN_DELAY_MS = 60_000;
  * Housekeeping for the single API instance: expired sessions, spent email
  * links, and unverified accounts nobody has used for 30 days (their data
  * cascades away with them, as promised in the verification letter).
+ * Only accounts that signed up under that promise qualify: older accounts
+ * predate both the letter and server sessions, so for them "unverified and
+ * no recent session" would mean everyone.
  */
 @Injectable()
 export class AccountMaintenanceService
@@ -75,6 +78,7 @@ export class AccountMaintenanceService
         const result: unknown = await this.dataSource.query(
             `DELETE FROM "user" u
              WHERE u."emailVerifiedAt" IS NULL
+               AND u."consentAt" IS NOT NULL
                AND u."role" <> 'admin'
                AND u."createdAt" < $1
                AND NOT EXISTS (
