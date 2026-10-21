@@ -1,0 +1,110 @@
+.stepper {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+
+    ol {
+        display: flex;
+        gap: 2px;
+        align-items: center;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    li {
+        display: flex;
+        flex: none;
+        align-items: center;
+
+        &:not(:last-child)::after {
+            content: "";
+            width: 12px;
+            height: 1px;
+            margin: 0 2px;
+            background: var(--sf-color-line-strong);
+        }
+    }
+}
+
+.step {
+    min-height: 32px;
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    padding: 2px var(--sf-space-2);
+    border-radius: var(--sf-radius-md);
+    color: var(--sf-color-ink-muted);
+    font: 600 13px / 1.2 var(--font-primary);
+    text-decoration: none;
+    white-space: nowrap;
+
+    &:is(a):hover {
+        background: var(--sf-color-brand-soft);
+        color: var(--sf-color-ink);
+    }
+
+    &:focus-visible {
+        outline: 3px solid var(--sf-color-focus);
+        outline-offset: 1px;
+    }
+}
+
+.marker {
+    width: 20px;
+    height: 20px;
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    border: 1px solid var(--sf-color-line-strong);
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+[data-status="done"] .marker {
+    border-color: var(--sf-color-success);
+    background: var(--sf-color-success-surface);
+    color: var(--sf-color-success);
+}
+
+[data-status="current"] .step {
+    color: var(--sf-color-ink);
+
+    .marker {
+        border-color: var(--sf-color-brand);
+        background: var(--sf-color-brand);
+        color: #fff;
+    }
+}
+
+[data-status="locked"] .step {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+    // Only the current step keeps its name on a phone; the rest are numbers.
+    li:not([data-status="current"]) .label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+    }
+}

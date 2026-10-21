@@ -1,120 +1,113 @@
 import { AuthResponse, RegisterData, LoginData, User } from "../types/auth";
-import { AUTH_API_URL, isAuthEnabled, isAuthRegistrationEnabled } from "@/shared/config/runtime";
+import { isAuthEnabled, isAuthRegistrationEnabled } from "@/shared/config/runtime";
+import { apiRequest } from "./apiClient";
 
-const AUTH_DISABLED_MESSAGE =
-    "Авторизация временно недоступна: сайт запущен без подключенного API.";
+/** Bearer-era keys. Sessions now live only in an HttpOnly cookie. */
+const LEGACY_STORAGE_KEYS = ["token", "user"] as const;
 
 class AuthService {
-    private assertAuthEnabled() {
-        if (!isAuthEnabled) {
-            throw new Error(AUTH_DISABLED_MESSAGE);
-        }
-    }
-
-    private getApiUrl() {
-        this.assertAuthEnabled();
-        if (!AUTH_API_URL) {
-            throw new Error(AUTH_DISABLED_MESSAGE);
-        }
-        return AUTH_API_URL;
-    }
-
-    private getAuthHeaders() {
-        const token = localStorage.getItem("token");
-        return {
-            "Content-Type": "application/json",
-            ...(token && { Authorization: `Bearer ${token}` }),
-        };
-    }
-
     async register(data: RegisterData): Promise<AuthResponse> {
         if (!isAuthRegistrationEnabled) {
             throw new Error("Регистрация сейчас отключена");
         }
 
-        const response = await fetch(`${this.getApiUrl()}/auth/register`, {
+        return apiRequest<AuthResponse>("/auth/register", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(data),
+            body: data,
+            fallbackMessage: "Ошибка при регистрации",
         });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || "Ошибка при регистрации");
-        }
-
-        const result = await response.json();
-
-        // Сохраняем токен в localStorage
-        localStorage.setItem("token", result.token);
-        localStorage.setItem("user", JSON.stringify(result.user));
-
-        return result;
     }
 
     async login(data: LoginData): Promise<AuthResponse> {
-        const response = await fetch(`${this.getApiUrl()}/auth/login`, {
+        return apiRequest<AuthResponse>("/auth/login", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(data),
+            body: data,
+            fallbackMessage: "Ошибка при входе",
         });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || "Ошибка при входе");
-        }
-
-        const result = await response.json();
-
-        // Сохраняем токен в localStorage
-        localStorage.setItem("token", result.token);
-        localStorage.setItem("user", JSON.stringify(result.user));
-
-        return result;
     }
 
-    async getProfile(): Promise<{ user: User }> {
-        const response = await fetch(`${this.getApiUrl()}/auth/me`, {
-            method: "GET",
-            headers: this.getAuthHeaders(),
+    /** The current user, or null for a guest. */
+    async getSession(): Promise<User | null> {
+        const response = await apiRequest<{ user: User | null }>("/auth/session", {
+            fallbackMessage: "Ошибка при получении профиля",
         });
-
-        if (!response.ok) {
-            throw new Error("Ошибка при получении профиля");
-        }
-
-        return response.json();
+        return response.user;
     }
 
-    logout(): void {
+    async verifyEmail(token: string): Promise<User> {
+        const response = await apiRequest<{ user: User }>("/auth/verify-email", {
+            method: "POST",
+            body: { token },
+            fallbackMessage: "Не удалось подтвердить почту",
+        });
+        return response.user;
+    }
+
+    async resendVerification(): Promise<void> {
+        await apiRequest<void>("/auth/resend-verification", {
+            method: "POST",
+            fallbackMessage: "Не удалось отправить письмо",
+        });
+    }
+
+    /** The server answers the same way whether or not the address is known. */
+    async requestPasswordReset(email: string): Promise<void> {
+        await apiRequest<void>("/auth/forgot-password", {
+            method: "POST",
+            body: { email },
+            fallbackMessage: "Не удалось отправить письмо",
+        });
+    }
+
+    async resetPassword(token: string, password: string): Promise<User> {
+        const response = await apiRequest<{ user: User }>("/auth/reset-password", {
+            method: "POST",
+            body: { token, password },
+            fallbackMessage: "Не удалось сменить пароль",
+        });
+        return response.user;
+    }
+
+    async updateProfile(name: string): Promise<User> {
+        const response = await apiRequest<{ user: User }>("/account/profile", {
+            method: "PATCH",
+            body: { name },
+            fallbackMessage: "Не удалось сохранить имя",
+        });
+        return response.user;
+    }
+
+    async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+        await apiRequest<void>("/account/password", {
+            method: "POST",
+            body: { currentPassword, newPassword },
+            fallbackMessage: "Не удалось сменить пароль",
+        });
+    }
+
+    async deleteAccount(password: string): Promise<void> {
+        await apiRequest<void>("/account/delete", {
+            method: "POST",
+            body: { password },
+            fallbackMessage: "Не удалось удалить аккаунт",
+        });
+    }
+
+    async logout(): Promise<void> {
+        await apiRequest<void>("/auth/logout", { method: "POST" });
+    }
+
+    async logoutEverywhere(): Promise<void> {
+        await apiRequest<void>("/auth/logout-all", { method: "POST" });
+    }
+
+    clearLegacyStorage(): void {
         if (typeof window === "undefined") return;
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-    }
-
-    getToken(): string | null {
-        if (typeof window === "undefined") return null;
-        return localStorage.getItem("token");
-    }
-
-    getUser(): User | null {
-        if (typeof window === "undefined") return null;
-        const userStr = localStorage.getItem("user");
-        if (!userStr) return null;
         try {
-            return JSON.parse(userStr);
+            LEGACY_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
         } catch {
-            localStorage.removeItem("user");
-            return null;
+            // Storage can be blocked; there is nothing left to clean then.
         }
-    }
-
-    isAuthenticated(): boolean {
-        return !!this.getToken();
     }
 
     isAvailable(): boolean {

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { continueThroughRoomStep } from "./project-flow";
 
 test("preference first screen keeps its image preload budget", async ({ page }) => {
     await page.goto("/test", { waitUntil: "networkidle" });
@@ -68,16 +69,22 @@ test("desktop golden path reaches an editable and exportable plan", async ({ pag
     await expect(page).toHaveURL(/\/questionnaire\?/);
     await page.getByLabel("Односпальная").check();
     await page.getByRole("checkbox", { name: /Книжный шкаф/ }).check();
-    await Promise.all([
-        page.waitForURL(/\/planner\?handoff=/, { timeout: 60_000, waitUntil: "commit" }),
-        page.getByRole("button", { name: "Перейти к расстановке" }).click(),
-    ]);
+    await continueThroughRoomStep(page);
     await expect(page.getByText(/Набор получен из анкеты/)).toBeVisible();
+    const steps = page.getByRole("navigation", { name: "Шаги проекта" });
+    await expect(steps.locator('[data-step="questionnaire"]')).toHaveAttribute(
+        "data-status",
+        "done",
+    );
+    await expect(steps.locator('[data-step="room"]')).toHaveAttribute("data-status", "done");
+    await expect(steps.locator('[data-step="layout"]')).toHaveAttribute("data-status", "current");
+    await expect(steps.locator('[data-step="result"]')).toHaveAttribute("data-status", "locked");
     await page.getByRole("button", { name: "Уместить всё" }).click();
 
     await expect(page.getByRole("heading", { name: "Итоговая спецификация" })).toBeVisible({
         timeout: 60_000,
     });
+    await expect(steps.locator('[data-step="result"]')).toHaveAttribute("data-status", "done");
 
     const furniture = page
         .getByRole("button", { name: /^Односпальная кровать(?: · \d+)?,/ })

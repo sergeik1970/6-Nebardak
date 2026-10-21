@@ -30,6 +30,18 @@ export class OperationalLogger {
         this.logger.debug(payload);
     }
 
+    /**
+     * Account and mail events. Callers pass ids and outcome codes only —
+     * never email addresses, names, tokens or project contents.
+     */
+    event(
+        event: string,
+        details: LogDetails = {},
+        level: "log" | "warn" | "error" = "log",
+    ): void {
+        this.logger[level](this.payload(event, details));
+    }
+
     private payload(event: string, details: LogDetails): LogDetails {
         return {
             event,

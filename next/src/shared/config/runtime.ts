@@ -1,5 +1,3 @@
-const devApiUrl = "http://localhost:3001/api";
-
 export const readPublicFlag = (value: string | undefined, fallback: boolean): boolean => {
     if (value === undefined || value.trim() === "") return fallback;
 
@@ -16,9 +14,11 @@ export const resolveAuthUiMode = (
     return registrationEnabled ? "login-registration" : "login";
 };
 
-export const AUTH_API_URL =
-    process.env.NEXT_PUBLIC_API_URL?.trim() ||
-    (process.env.NODE_ENV === "development" ? devApiUrl : "");
+/**
+ * Same-origin by design: session cookies are HttpOnly and SameSite, so the API
+ * is served under the site's own `/api` (Caddy in production, a rewrite in dev).
+ */
+export const AUTH_API_URL = process.env.NEXT_PUBLIC_API_URL?.trim() || "/api";
 
 export const isAuthEnabled = readPublicFlag(process.env.NEXT_PUBLIC_AUTH_ENABLED, false);
 

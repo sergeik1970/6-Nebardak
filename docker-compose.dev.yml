@@ -23,5 +23,17 @@ services:
                 max-size: "10m"
                 max-file: "3"
 
+    # Catches every letter the local API sends: UI on http://localhost:8025.
+    mailpit:
+        image: axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
+        environment:
+            MP_MAX_MESSAGES: 500
+        ports:
+            - "127.0.0.1:1025:1025"
+            - "127.0.0.1:8025:8025"
+        security_opt:
+            - no-new-privileges:true
+        restart: unless-stopped
+
 volumes:
     database_dev:

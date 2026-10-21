@@ -14,7 +14,7 @@
         "assets:rights:inventory": "node scripts/verify-image-rights.mjs",
         "assets:rights:policy-test": "node --test scripts/image-rights-policy.test.mjs",
         "assets:rights:release": "node scripts/verify-image-rights.mjs --require-cleared",
-        "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{js,jsx,ts,tsx,scss}\" \"e2e/**/*.ts\" \"scripts/**/*.mjs\" \"*.{js,ts,json}\"",
+        "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{js,jsx,ts,tsx,scss}\" \"e2e/**/*.ts\" \"e2e-accounts/**/*.ts\" \"scripts/**/*.mjs\" \"*.{js,ts,json}\"",
         "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings=0",
         "planner:lab:check": "PLANNER_LAB_WRITE_REPORT=1 vitest run src/shared/lib/furniture-planner/room-lab.test.ts --reporter=verbose",
         "planner:lab:render": "PLANNER_LAB_WRITE_REPORT=1 PLANNER_LAB_RENDER=1 vitest run src/shared/lib/furniture-planner/room-lab.test.ts --reporter=verbose",
@@ -22,7 +22,8 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "test:e2e": "playwright test",
-        "test:e2e:headed": "playwright test --headed"
+        "test:e2e:headed": "playwright test --headed",
+        "test:e2e:accounts": "sh scripts/e2e-accounts.sh"
     },
     "dependencies": {
         "clsx": "^2.1.0",

@@ -4,6 +4,7 @@ import { normalizeRoomRegionsState } from "./room-regions";
 import { getMaximumFurnitureCount } from "./catalog";
 import { getFurniturePhoto } from "./furniture-photos";
 import type { Room, Placement } from "./types";
+import { getProjectStorage, type KeyValueStorage } from "@/shared/lib/project-scope/storage";
 
 /**
  * A small hand-off cache for the standalone room editor.  The project draft
@@ -54,14 +55,7 @@ const normalizeRoomMetadata = (room: Room): Room => {
     };
 };
 
-const getStorage = (): Storage | null => {
-    if (typeof window === "undefined") return null;
-    try {
-        return window.localStorage;
-    } catch {
-        return null;
-    }
-};
+const getStorage = (): KeyValueStorage | null => getProjectStorage();
 
 export const saveDrawRoomDraft = (
     room: Room,

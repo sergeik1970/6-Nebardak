@@ -2,6 +2,7 @@ import React from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import Planner from "@/shared/pages/Planner";
+import ProjectScope from "@/shared/lib/project-scope/ProjectScope";
 
 const PlannerPage: React.FC = () => {
     const router = useRouter();
@@ -24,7 +25,9 @@ const PlannerPage: React.FC = () => {
                 />
                 <meta name="robots" content="noindex,follow" />
             </Head>
-            <Planner handoffId={handoffId} drawRoomDraft={drawRoomDraft} />
+            <ProjectScope>
+                <Planner handoffId={handoffId} drawRoomDraft={drawRoomDraft} />
+            </ProjectScope>
         </>
     );
 };

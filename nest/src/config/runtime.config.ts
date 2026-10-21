@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-
 export type NodeEnvironment = "development" | "dev" | "test" | "production";
 
 export interface DatabaseRuntimeConfig {
@@ -20,17 +18,30 @@ export interface RuntimeConfig {
     trustProxyHops: number;
     authEnabled: boolean;
     registrationEnabled: boolean;
-    jwtSecret?: string;
-    jwtIssuer: string;
-    jwtAudience: string;
+    /** The browser origin that serves both the site and `/api`. */
+    publicOrigin: string;
+    session: SessionRuntimeConfig;
+    mail: MailRuntimeConfig;
     database: DatabaseRuntimeConfig;
 }
 
-const insecureJwtSecrets = new Set([
-    "change_this_secret_in_production",
-    "replace_with_at_least_32_random_bytes",
-    "REPLACE_WITH_AT_LEAST_32_RANDOM_BYTES",
-]);
+export interface MailRuntimeConfig {
+    host: string;
+    port: number;
+    /** Implicit TLS (usually port 465); otherwise STARTTLS is required in production. */
+    secure: boolean;
+    username?: string;
+    password?: string;
+    /** RFC 5322 sender, e.g. `StyleFinder <no-reply@example.com>`. */
+    from: string;
+}
+
+export interface SessionRuntimeConfig {
+    cookieName: string;
+    secureCookie: boolean;
+}
+
+const defaultLocalPublicOrigin = "http://localhost:3000";
 
 const minimumProductionDatabasePasswordLength = 16;
 const insecureDatabasePasswords = new Set([
@@ -119,6 +130,109 @@ function parseBoolean(name: string, fallback: boolean): boolean {
     if (rawValue === "true") return true;
     if (rawValue === "false") return false;
     throw new Error(`${name} must be either true or false`);
+}
+
+function parsePublicOrigin(
+    isProduction: boolean,
+    authEnabled: boolean,
+): string {
+    // Compose passes an unset optional variable as an empty string.
+    const rawValue = process.env.PUBLIC_ORIGIN?.trim();
+    if (!rawValue) {
+        if (isProduction && authEnabled) {
+            throw new Error("PUBLIC_ORIGIN is required in production");
+        }
+        return defaultLocalPublicOrigin;
+    }
+
+    let url: URL;
+    try {
+        url = new URL(rawValue);
+    } catch {
+        throw new Error("PUBLIC_ORIGIN must be an absolute http(s) origin");
+    }
+    if (
+        (url.protocol !== "https:" && url.protocol !== "http:") ||
+        url.origin !== rawValue.replace(/\/$/, "") ||
+        url.username ||
+        url.password
+    ) {
+        throw new Error("PUBLIC_ORIGIN must be an absolute http(s) origin");
+    }
+    if (isProduction && authEnabled && url.protocol !== "https:") {
+        throw new Error("PUBLIC_ORIGIN must use https in production");
+    }
+
+    return url.origin;
+}
+
+/**
+ * Compose forwards an unset optional variable as an empty string; for these
+ * settings that means "not configured" rather than an invalid value.
+ */
+function parseBlankableString(
+    name: string,
+    fallback: string | undefined,
+    required: boolean,
+    maximumLength = 255,
+): string | undefined {
+    if (!process.env[name]?.trim()) {
+        if (required) throw new Error(`${name} is required in production`);
+        return fallback;
+    }
+    return parseOptionalString(name, fallback, maximumLength);
+}
+
+function parseMailConfig(
+    isProduction: boolean,
+    authEnabled: boolean,
+): MailRuntimeConfig {
+    const requireForAccounts = isProduction && authEnabled;
+    // Locally, Mailpit from docker-compose.dev.yml catches every letter.
+    const host = parseBlankableString(
+        "SMTP_HOST",
+        "127.0.0.1",
+        requireForAccounts,
+        253,
+    )!;
+    if (/\s|\//.test(host)) {
+        throw new Error("SMTP_HOST must be a hostname or IP address");
+    }
+
+    const port = parseInteger(
+        "SMTP_PORT",
+        isProduction ? 587 : 1025,
+        1,
+        65_535,
+    );
+    const from = parseBlankableString(
+        "SMTP_FROM",
+        "StyleFinder <no-reply@stylefinder.local>",
+        requireForAccounts,
+    )!;
+    if (!/^[^<>@]*<[^<>@\s]+@[^<>@\s]+>$|^[^<>@\s]+@[^<>@\s]+$/.test(from)) {
+        throw new Error("SMTP_FROM must be an address or `Name <address>`");
+    }
+
+    const username = parseBlankableString("SMTP_USER", undefined, false);
+    const password = parseBlankableString(
+        "SMTP_PASSWORD",
+        undefined,
+        false,
+        1_024,
+    );
+    if (Boolean(username) !== Boolean(password)) {
+        throw new Error("SMTP_USER and SMTP_PASSWORD must be set together");
+    }
+
+    return {
+        host,
+        port,
+        secure: parseBoolean("SMTP_SECURE", port === 465),
+        username,
+        password,
+        from,
+    };
 }
 
 function parseNodeEnvironment(): NodeEnvironment {
@@ -211,26 +325,9 @@ export function getRuntimeConfig(): RuntimeConfig {
         assertProductionDatabasePassword(database.username, database.password);
     }
 
-    let jwtSecret = parseOptionalString("JWT_SECRET", undefined, 4_096);
-    if (authEnabled) {
-        if (isProduction) {
-            jwtSecret = requireProductionValue("JWT_SECRET");
-        } else if (nodeEnv === "dev" && !jwtSecret) {
-            // A local test session can work without persisting a signing key.
-            // The key exists only in the Nest process and invalidates all
-            // sessions on restart; production can never use this path.
-            jwtSecret = randomBytes(48).toString("base64url");
-        }
-        if (
-            !jwtSecret ||
-            jwtSecret.length < 32 ||
-            insecureJwtSecrets.has(jwtSecret)
-        ) {
-            throw new Error(
-                "JWT_SECRET must be a non-default value with at least 32 characters when authentication is enabled",
-            );
-        }
-    }
+    const publicOrigin = parsePublicOrigin(isProduction, authEnabled);
+    const mail = parseMailConfig(isProduction, authEnabled);
+    const secureCookie = publicOrigin.startsWith("https:");
 
     return {
         nodeEnv,
@@ -243,9 +340,13 @@ export function getRuntimeConfig(): RuntimeConfig {
         ),
         authEnabled,
         registrationEnabled,
-        jwtSecret,
-        jwtIssuer: parseOptionalString("JWT_ISSUER", "stylefinder-api")!,
-        jwtAudience: parseOptionalString("JWT_AUDIENCE", "stylefinder-web")!,
+        publicOrigin,
+        session: {
+            // `__Host-` binds the cookie to this exact origin over HTTPS only.
+            cookieName: secureCookie ? "__Host-sf_session" : "sf_session",
+            secureCookie,
+        },
+        mail,
         database,
     };
 }

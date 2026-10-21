@@ -2,6 +2,7 @@ import { BadRequestException } from "@nestjs/common";
 import { RegisterDto } from "./register.dto";
 import { LoginDto } from "./login.dto";
 import { createGlobalValidationPipe } from "../../config/validation";
+import { CURRENT_CONSENT_VERSION } from "../../legal/consent";
 
 const bodyMetadata = <T>(metatype: new () => T) => ({
     type: "body" as const,
@@ -18,6 +19,7 @@ describe("auth DTO validation", () => {
                 name: "  Мария  ",
                 email: "  MARIA@EXAMPLE.COM ",
                 password: "a-secure-password",
+                consentVersion: CURRENT_CONSENT_VERSION,
             },
             bodyMetadata(RegisterDto),
         );
@@ -27,8 +29,31 @@ describe("auth DTO validation", () => {
             name: "Мария",
             email: "maria@example.com",
             password: "a-secure-password",
+            consentVersion: CURRENT_CONSENT_VERSION,
         });
     });
+
+    it.each([undefined, "", "2020-01-01", true])(
+        "requires the current consent edition, not %p",
+        async (consentVersion) => {
+            const error = await pipe
+                .transform(
+                    {
+                        name: "Мария",
+                        email: "maria@example.com",
+                        password: "a-secure-password",
+                        ...(consentVersion === undefined
+                            ? {}
+                            : { consentVersion }),
+                    },
+                    bodyMetadata(RegisterDto),
+                )
+                .catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(BadRequestException);
+            expect(JSON.stringify(error)).toContain("согласие");
+        },
+    );
 
     it("rejects unknown properties and does not echo password values", async () => {
         expect.assertions(2);
@@ -87,7 +112,12 @@ describe("auth DTO validation", () => {
         async (Dto, password) => {
             const body =
                 Dto === RegisterDto
-                    ? { name: "Мария", email: "maria@example.com", password }
+                    ? {
+                          name: "Мария",
+                          email: "maria@example.com",
+                          password,
+                          consentVersion: CURRENT_CONSENT_VERSION,
+                      }
                     : { email: "maria@example.com", password };
 
             await expect(

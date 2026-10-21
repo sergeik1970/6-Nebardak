@@ -7,29 +7,31 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { User } from "../../entities/User/user.entity";
 import { QueryFailedError, Repository } from "typeorm";
 import * as bcrypt from "bcryptjs";
-import * as jwt from "jsonwebtoken";
 import { RegisterDto } from "../../dto/auth/register.dto";
 import { LoginDto } from "../../dto/auth/login.dto";
-import { getRuntimeConfig } from "../../config/runtime.config";
 import { assertBcryptPasswordLength } from "../../security/bcrypt-password.policy";
 import { UserRole } from "../../entities/User/user.entity";
 
-export interface AuthResponse {
-    user: {
-        id: number;
-        name: string;
-        email: string;
-        role: UserRole;
+export interface PublicUser {
+    id: number;
+    name: string;
+    email: string;
+    role: UserRole;
+    emailVerified: boolean;
+}
+
+export function toPublicUser(user: User): PublicUser {
+    return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        emailVerified: Boolean(user.emailVerifiedAt),
     };
-    token: string;
 }
 
 @Injectable()
 export class AuthService {
-    private readonly jwtSecret?: string;
-    private readonly jwtIssuer: string;
-    private readonly jwtAudience: string;
-    private readonly jwtExpiresIn: jwt.SignOptions["expiresIn"] = "24h";
     private readonly passwordHashCost = 12;
     private readonly dummyPasswordHash =
         "$2b$12$YrfZoa2evRXChcix.a9odus2MkdPhEopc5Ycq6Q0A6G7nURa9VGde";
@@ -37,20 +39,12 @@ export class AuthService {
     constructor(
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
-    ) {
-        const runtime = getRuntimeConfig();
-        if (runtime.authEnabled && !runtime.jwtSecret) {
-            throw new Error("JWT_SECRET is required for the auth service");
-        }
-        this.jwtSecret = runtime.jwtSecret;
-        this.jwtIssuer = runtime.jwtIssuer;
-        this.jwtAudience = runtime.jwtAudience;
-    }
+    ) {}
 
-    async register(registerDto: RegisterDto): Promise<AuthResponse> {
+    /** Creates the account; the controller then opens its first session. */
+    async register(registerDto: RegisterDto): Promise<User> {
         const { name, password } = registerDto;
         assertBcryptPasswordLength(password);
-        const jwtSecret = this.requireSigningSecret();
         const email = this.normalizeEmail(registerDto.email);
 
         const existingUser = await this.findByEmail(email);
@@ -70,6 +64,8 @@ export class AuthService {
             email,
             password: hashedPassword,
             role: "designer",
+            consentVersion: registerDto.consentVersion,
+            consentAt: new Date(),
         });
 
         let savedUser: User;
@@ -84,23 +80,13 @@ export class AuthService {
             throw error;
         }
 
-        const token = this.signToken(savedUser, jwtSecret);
-
-        return {
-            user: {
-                id: savedUser.id,
-                name: savedUser.name,
-                email: savedUser.email,
-                role: savedUser.role,
-            },
-            token,
-        };
+        return savedUser;
     }
 
-    async login(loginDto: LoginDto): Promise<AuthResponse> {
+    /** Verifies credentials; the controller then opens a session. */
+    async login(loginDto: LoginDto): Promise<User> {
         const { password } = loginDto;
         assertBcryptPasswordLength(password);
-        const jwtSecret = this.requireSigningSecret();
         const email = this.normalizeEmail(loginDto.email);
 
         const user = await this.findByEmail(email, true);
@@ -122,62 +108,67 @@ export class AuthService {
             throw this.invalidCredentials();
         }
 
-        const token = this.signToken(user, jwtSecret);
-
-        return {
-            user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-            },
-            token,
-        };
-    }
-
-    async validateToken(token: string): Promise<User | null> {
-        if (!this.jwtSecret) return null;
-
-        try {
-            const decoded = jwt.verify(token, this.jwtSecret, {
-                algorithms: ["HS256"],
-                issuer: this.jwtIssuer,
-                audience: this.jwtAudience,
-            }) as jwt.JwtPayload;
-            const userId = Number(decoded.sub ?? decoded.userId);
-            if (!Number.isSafeInteger(userId) || userId <= 0) return null;
-
-            const user = await this.userRepository.findOne({
-                where: { id: userId },
-            });
-            return user;
-        } catch {
-            return null;
-        }
+        return user;
     }
 
     async getUserById(id: number): Promise<User | null> {
         return this.userRepository.findOne({ where: { id } });
     }
 
+    findUserByEmail(email: string): Promise<User | null> {
+        return this.findByEmail(this.normalizeEmail(email));
+    }
+
+    async setPassword(userId: number, password: string): Promise<void> {
+        assertBcryptPasswordLength(password);
+        await this.userRepository.update(
+            { id: userId },
+            { password: await bcrypt.hash(password, this.passwordHashCost) },
+        );
+    }
+
+    /**
+     * Re-authentication for sensitive account actions. Same cost-12 work
+     * whether or not the hash is usable, like login.
+     */
+    async verifyPassword(userId: number, password: string): Promise<boolean> {
+        assertBcryptPasswordLength(password);
+        const user = await this.userRepository
+            .createQueryBuilder("user")
+            .addSelect("user.password")
+            .where("user.id = :userId", { userId })
+            .getOne();
+
+        if (!user || !this.hasAcceptedPasswordCost(user.password)) {
+            await this.performDummyPasswordCheck(password);
+            return false;
+        }
+        return bcrypt.compare(password, user.password);
+    }
+
+    async updateName(userId: number, name: string): Promise<User | null> {
+        await this.userRepository.update({ id: userId }, { name });
+        return this.getUserById(userId);
+    }
+
+    /** Sessions, links, observations and projects cascade in the database. */
+    async deleteUser(userId: number): Promise<void> {
+        await this.userRepository.delete({ id: userId });
+    }
+
+    /** Idempotent: the first confirmation time is kept. */
+    async markEmailVerified(userId: number, now = new Date()): Promise<void> {
+        await this.userRepository
+            .createQueryBuilder()
+            .update(User)
+            .set({ emailVerifiedAt: now })
+            .where("id = :userId", { userId })
+            .andWhere('"emailVerifiedAt" IS NULL')
+            .execute();
+    }
+
     private normalizeEmail(email: string): string {
         return email.trim().toLowerCase();
-    }
-
-    private requireSigningSecret(): string {
-        if (!this.jwtSecret) {
-            throw new Error("JWT_SECRET is required for the auth service");
-        }
-        return this.jwtSecret;
-    }
-
-    private signToken(user: User, secret: string): string {
-        return jwt.sign({ sub: user.id, email: user.email }, secret, {
-            algorithm: "HS256",
-            expiresIn: this.jwtExpiresIn,
-            issuer: this.jwtIssuer,
-            audience: this.jwtAudience,
-        });
     }
 
     private hasAcceptedPasswordCost(hash: string): boolean {

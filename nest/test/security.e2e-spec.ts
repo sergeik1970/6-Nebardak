@@ -7,11 +7,17 @@ import { DataSource } from "typeorm";
 import { configureTrustedProxy } from "../src/config/http-runtime";
 import { createGlobalValidationPipe } from "../src/config/validation";
 import { AuthController } from "../src/controllers/AuthController/auth.controller";
+import { AccountController } from "../src/controllers/AccountController/account.controller";
+import { EmailTokenService } from "../src/services/EmailTokenService/email-token.service";
+import { CURRENT_CONSENT_VERSION } from "../src/legal/consent";
 import { HealthController } from "../src/controllers/HealthController/health.controller";
 import { AuthEnabledGuard } from "../src/guards/auth-enabled.guard";
 import { AuthGuard } from "../src/guards/auth.guard";
 import { RegistrationEnabledGuard } from "../src/guards/registration-enabled.guard";
+import { CsrfGuard } from "../src/guards/csrf.guard";
 import { AuthService } from "../src/services/AuthService/auth.service";
+import { SessionService } from "../src/services/SessionService/session.service";
+import { AccountRecoveryService } from "../src/services/AccountRecoveryService/account-recovery.service";
 import { OperationalLogger } from "../src/services/OperationalLogger/operational-logger.service";
 
 interface HarnessOptions {
@@ -27,17 +33,35 @@ interface Harness {
     authService: {
         register: jest.Mock;
         login: jest.Mock;
-        validateToken: jest.Mock;
+        verifyPassword: jest.Mock;
+        setPassword: jest.Mock;
+        updateName: jest.Mock;
+        deleteUser: jest.Mock;
+    };
+    sessionService: {
+        create: jest.Mock;
+        authenticate: jest.Mock;
+        revoke: jest.Mock;
+        revokeAll: jest.Mock;
+        revokeOthers: jest.Mock;
+    };
+    recovery: {
+        sendVerification: jest.Mock;
+        verifyEmail: jest.Mock;
+        requestPasswordReset: jest.Mock;
+        resetPassword: jest.Mock;
     };
     databaseQuery: jest.Mock;
 }
 
 const activeApps: INestApplication[] = [];
+const SESSION_TOKEN = "s".repeat(43);
+const VALID_LINK_TOKEN = "v".repeat(43);
 const originalEnvironment = {
     NODE_ENV: process.env.NODE_ENV,
     AUTH_ENABLED: process.env.AUTH_ENABLED,
     AUTH_REGISTRATION_ENABLED: process.env.AUTH_REGISTRATION_ENABLED,
-    JWT_SECRET: process.env.JWT_SECRET,
+    PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN,
 };
 
 describe("Nest 11 / Express 5 security HTTP behavior", () => {
@@ -52,7 +76,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
             "AUTH_REGISTRATION_ENABLED",
             originalEnvironment.AUTH_REGISTRATION_ENABLED,
         );
-        restoreEnvironment("JWT_SECRET", originalEnvironment.JWT_SECRET);
+        restoreEnvironment("PUBLIC_ORIGIN", originalEnvironment.PUBLIC_ORIGIN);
     });
 
     it("does not expose a legacy API root endpoint", async () => {
@@ -66,21 +90,24 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
 
         await request(harness.baseUrl)
             .post("/api/auth/login")
+            .set("X-Requested-With", "stylefinder")
             .send({ email: "maria@example.com", password: "safe-password" })
             .expect(404);
         await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .send({
                 name: "Мария",
                 email: "maria@example.com",
                 password: "safe-password",
+                consentVersion: CURRENT_CONSENT_VERSION,
             })
             .expect(404);
         await request(harness.baseUrl).get("/api/auth/me").expect(404);
 
         expect(harness.authService.login).not.toHaveBeenCalled();
         expect(harness.authService.register).not.toHaveBeenCalled();
-        expect(harness.authService.validateToken).not.toHaveBeenCalled();
+        expect(harness.sessionService.authenticate).not.toHaveBeenCalled();
     });
 
     it("applies global DTO validation without echoing rejected passwords", async () => {
@@ -91,6 +118,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
 
         const unknownProperty = await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .send({
                 name: "Мария",
                 email: "maria@example.com",
@@ -101,6 +129,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
         const oversizedPassword = "я".repeat(37);
         const oversized = await request(harness.baseUrl)
             .post("/api/auth/login")
+            .set("X-Requested-With", "stylefinder")
             .send({
                 email: "maria@example.com",
                 password: oversizedPassword,
@@ -124,16 +153,19 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
             name: "Мария",
             email: "maria@example.com",
             password: "safe-password",
+            consentVersion: CURRENT_CONSENT_VERSION,
         };
 
         for (let index = 0; index < 3; index += 1) {
             await request(harness.baseUrl)
                 .post("/api/auth/register")
+                .set("X-Requested-With", "stylefinder")
                 .send(payload)
                 .expect(201);
         }
         await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .send(payload)
             .expect(429);
 
@@ -150,17 +182,20 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
             name: "Мария",
             email: "maria@example.com",
             password: "safe-password",
+            consentVersion: CURRENT_CONSENT_VERSION,
         };
 
         for (let index = 0; index < 3; index += 1) {
             await request(harness.baseUrl)
                 .post("/api/auth/register")
+                .set("X-Requested-With", "stylefinder")
                 .set("X-Forwarded-For", `198.51.100.${index + 1}`)
                 .send(payload)
                 .expect(201);
         }
         await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .set("X-Forwarded-For", "203.0.113.200")
             .send(payload)
             .expect(429);
@@ -178,28 +213,326 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
             name: "Мария",
             email: "maria@example.com",
             password: "safe-password",
+            consentVersion: CURRENT_CONSENT_VERSION,
         };
 
         for (let index = 0; index < 3; index += 1) {
             await request(harness.baseUrl)
                 .post("/api/auth/register")
+                .set("X-Requested-With", "stylefinder")
                 .set("X-Forwarded-For", "198.51.100.70")
                 .send(payload)
                 .expect(201);
         }
         await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .set("X-Forwarded-For", "198.51.100.70")
             .send(payload)
             .expect(429);
 
         await request(harness.baseUrl)
             .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
             .set("X-Forwarded-For", "203.0.113.80")
             .send(payload)
             .expect(201);
 
         expect(harness.authService.register).toHaveBeenCalledTimes(4);
+    });
+
+    it("rejects state changes without the same-origin marker before any auth work", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .post("/api/auth/login")
+            .send({ email: "maria@example.com", password: "safe-password" })
+            .expect(403);
+        await request(harness.baseUrl)
+            .post("/api/auth/login")
+            .set("X-Requested-With", "stylefinder")
+            .set("Origin", "https://evil.example")
+            .send({ email: "maria@example.com", password: "safe-password" })
+            .expect(403);
+
+        expect(harness.authService.login).not.toHaveBeenCalled();
+    });
+
+    it("signs in with an HttpOnly SameSite cookie and never returns a token", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        const response = await request(harness.baseUrl)
+            .post("/api/auth/login")
+            .set("X-Requested-With", "stylefinder")
+            .set("Origin", "http://localhost:3000")
+            .send({ email: "maria@example.com", password: "safe-password" })
+            .expect(200);
+
+        const cookie = String(response.headers["set-cookie"]);
+        expect(cookie).toContain(`sf_session=${SESSION_TOKEN}`);
+        expect(cookie).toMatch(/HttpOnly/);
+        expect(cookie).toMatch(/SameSite=Lax/);
+        expect(cookie).toMatch(/Path=\//);
+        expect(response.body).toEqual({
+            user: {
+                id: 1,
+                name: "Мария",
+                email: "maria@example.com",
+                role: "designer",
+                emailVerified: false,
+            },
+        });
+        expect(JSON.stringify(response.body)).not.toContain(SESSION_TOKEN);
+    });
+
+    it("resolves the profile only from the session cookie", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .get("/api/auth/me")
+            .set("Authorization", `Bearer ${SESSION_TOKEN}`)
+            .expect(401);
+        const profile = await request(harness.baseUrl)
+            .get("/api/auth/me")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .expect(200);
+
+        expect(profile.body.user).toMatchObject({ id: 1, role: "designer" });
+        expect(profile.body.user.password).toBeUndefined();
+    });
+
+    it("answers the page-load probe without an error for guests", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .get("/api/auth/session")
+            .expect(200, { user: null });
+        const signedIn = await request(harness.baseUrl)
+            .get("/api/auth/session")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .expect(200);
+
+        expect(signedIn.body.user).toMatchObject({ id: 1, role: "designer" });
+    });
+
+    it("revokes the session and expires the cookie on logout", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        const response = await request(harness.baseUrl)
+            .post("/api/auth/logout")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .expect(204);
+
+        expect(harness.sessionService.revoke).toHaveBeenCalledWith(
+            SESSION_TOKEN,
+        );
+        expect(String(response.headers["set-cookie"])).toMatch(
+            /sf_session=;.*Expires=Thu, 01 Jan 1970/,
+        );
+    });
+
+    it("sends the verification letter after sign-up without blocking it", async () => {
+        const harness = await createHarness({
+            authEnabled: true,
+            registrationEnabled: true,
+        });
+
+        await request(harness.baseUrl)
+            .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
+            .send({
+                name: "Мария",
+                email: "maria@example.com",
+                password: "safe-password",
+                consentVersion: CURRENT_CONSENT_VERSION,
+            })
+            .expect(201);
+
+        expect(harness.recovery.sendVerification).toHaveBeenCalledTimes(1);
+    });
+
+    it("answers forgot-password identically for known and unknown addresses", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        const responses = [];
+        for (const email of ["maria@example.com", "nobody@example.com"]) {
+            responses.push(
+                await request(harness.baseUrl)
+                    .post("/api/auth/forgot-password")
+                    .set("X-Requested-With", "stylefinder")
+                    .send({ email })
+                    .expect(202),
+            );
+        }
+
+        expect(responses[0].body).toEqual({ accepted: true });
+        expect(responses[1].body).toEqual(responses[0].body);
+        expect(responses[0].headers["set-cookie"]).toBeUndefined();
+        expect(harness.recovery.requestPasswordReset).toHaveBeenCalledTimes(2);
+    });
+
+    it("rejects an unknown verification link with a generic 400", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        const rejected = await request(harness.baseUrl)
+            .post("/api/auth/verify-email")
+            .set("X-Requested-With", "stylefinder")
+            .send({ token: "u".repeat(43) })
+            .expect(400);
+        const accepted = await request(harness.baseUrl)
+            .post("/api/auth/verify-email")
+            .set("X-Requested-With", "stylefinder")
+            .send({ token: VALID_LINK_TOKEN })
+            .expect(200);
+
+        expect(rejected.body.message).toMatch(/Ссылка недействительна/);
+        expect(accepted.body.user.emailVerified).toBe(true);
+    });
+
+    it("signs in with a fresh session after a successful password reset", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .post("/api/auth/reset-password")
+            .set("X-Requested-With", "stylefinder")
+            .send({ token: "u".repeat(43), password: "new-password-1" })
+            .expect(400);
+        const reset = await request(harness.baseUrl)
+            .post("/api/auth/reset-password")
+            .set("X-Requested-With", "stylefinder")
+            .send({ token: VALID_LINK_TOKEN, password: "new-password-1" })
+            .expect(200);
+
+        expect(String(reset.headers["set-cookie"])).toContain(
+            `sf_session=${SESSION_TOKEN}`,
+        );
+        expect(JSON.stringify(reset.body)).not.toContain("new-password-1");
+    });
+
+    it("lets only a signed-in user request another verification letter", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .post("/api/auth/resend-verification")
+            .set("X-Requested-With", "stylefinder")
+            .expect(401);
+        await request(harness.baseUrl)
+            .post("/api/auth/resend-verification")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .expect(204);
+
+        expect(harness.recovery.sendVerification).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects sign-up without the current personal-data consent", async () => {
+        const harness = await createHarness({
+            authEnabled: true,
+            registrationEnabled: true,
+        });
+
+        const response = await request(harness.baseUrl)
+            .post("/api/auth/register")
+            .set("X-Requested-With", "stylefinder")
+            .send({
+                name: "Мария",
+                email: "maria@example.com",
+                password: "safe-password",
+                consentVersion: "2000-01-01",
+            })
+            .expect(400);
+
+        expect(JSON.stringify(response.body)).toContain("согласие");
+        expect(harness.authService.register).not.toHaveBeenCalled();
+    });
+
+    it("keeps every account action behind the session cookie", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .patch("/api/account/profile")
+            .set("X-Requested-With", "stylefinder")
+            .send({ name: "Мария" })
+            .expect(401);
+        await request(harness.baseUrl)
+            .post("/api/account/delete")
+            .set("X-Requested-With", "stylefinder")
+            .send({ password: "safe-password" })
+            .expect(401);
+        await request(harness.baseUrl)
+            .post("/api/account/delete")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .send({ password: "safe-password" })
+            .expect(403);
+
+        expect(harness.authService.deleteUser).not.toHaveBeenCalled();
+    });
+
+    it("renames the account with the same rules as sign-up", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .patch("/api/account/profile")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .send({ name: "М" })
+            .expect(400);
+        const renamed = await request(harness.baseUrl)
+            .patch("/api/account/profile")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .send({ name: "  Мария Иванова " })
+            .expect(200);
+
+        expect(renamed.body.user.name).toBe("Мария Иванова");
+    });
+
+    it("changes the password only with the current one and ends other sessions", async () => {
+        const harness = await createHarness({ authEnabled: true });
+        const send = (currentPassword: string) =>
+            request(harness.baseUrl)
+                .post("/api/account/password")
+                .set("X-Requested-With", "stylefinder")
+                .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+                .send({ currentPassword, newPassword: "brand-new-password" });
+
+        await send("wrong-password").expect(403);
+        expect(harness.authService.setPassword).not.toHaveBeenCalled();
+
+        await send("safe-password").expect(204);
+        expect(harness.authService.setPassword).toHaveBeenCalledWith(
+            1,
+            "brand-new-password",
+        );
+        expect(harness.sessionService.revokeOthers).toHaveBeenCalledWith(
+            1,
+            "session-1",
+        );
+    });
+
+    it("deletes the account only with the password and clears the cookie", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .post("/api/account/delete")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .send({ password: "wrong-password" })
+            .expect(403);
+        expect(harness.authService.deleteUser).not.toHaveBeenCalled();
+
+        const deleted = await request(harness.baseUrl)
+            .post("/api/account/delete")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_session=${SESSION_TOKEN}`)
+            .send({ password: "safe-password" })
+            .expect(204);
+
+        expect(harness.authService.deleteUser).toHaveBeenCalledWith(1);
+        expect(String(deleted.headers["set-cookie"])).toMatch(
+            /sf_session=;.*Expires=Thu, 01 Jan 1970/,
+        );
     });
 
     it("serves live/ready and maps database failures to a bounded 503", async () => {
@@ -233,12 +566,55 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
     process.env.AUTH_REGISTRATION_ENABLED = String(
         options.registrationEnabled ?? false,
     );
-    process.env.JWT_SECRET = "test-only-e2e-jwt-secret-long-enough-2026";
+    process.env.PUBLIC_ORIGIN = "http://localhost:3000";
 
+    const user = {
+        id: 1,
+        name: "Мария",
+        email: "maria@example.com",
+        role: "designer",
+        password: "$2b$12$never-returned",
+        emailVerifiedAt: null,
+    };
+    const recovery = {
+        sendVerification: jest.fn().mockResolvedValue(true),
+        verifyEmail: jest.fn(async (token: string) =>
+            token === VALID_LINK_TOKEN
+                ? { ...user, emailVerifiedAt: new Date() }
+                : null,
+        ),
+        requestPasswordReset: jest.fn().mockResolvedValue(undefined),
+        resetPassword: jest.fn(async (token: string) =>
+            token === VALID_LINK_TOKEN ? user : null,
+        ),
+    };
     const authService = {
-        register: jest.fn().mockResolvedValue({ user: { id: 1 }, token: "t" }),
-        login: jest.fn().mockResolvedValue({ user: { id: 1 }, token: "t" }),
-        validateToken: jest.fn().mockResolvedValue(null),
+        register: jest.fn().mockResolvedValue(user),
+        login: jest.fn().mockResolvedValue(user),
+        verifyPassword: jest.fn(
+            async (_userId: number, password: string) =>
+                password === "safe-password",
+        ),
+        setPassword: jest.fn().mockResolvedValue(undefined),
+        updateName: jest.fn(async (_userId: number, name: string) => ({
+            ...user,
+            name,
+        })),
+        deleteUser: jest.fn().mockResolvedValue(undefined),
+    };
+    const sessionService = {
+        create: jest.fn().mockResolvedValue({
+            token: SESSION_TOKEN,
+            session: { id: "session-1" },
+        }),
+        authenticate: jest.fn(async (token?: string) =>
+            token === SESSION_TOKEN
+                ? { user, session: { id: "session-1" } }
+                : null,
+        ),
+        revoke: jest.fn().mockResolvedValue(undefined),
+        revokeAll: jest.fn().mockResolvedValue(undefined),
+        revokeOthers: jest.fn().mockResolvedValue(undefined),
     };
     const databaseQuery =
         options.databaseQuery ?? jest.fn().mockResolvedValue([{ ok: 1 }]);
@@ -248,6 +624,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
     };
     const operationalLogger = {
         health: jest.fn(),
+        event: jest.fn(),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -256,14 +633,21 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
                 { ttl: 60_000, limit: 120, blockDuration: 60_000 },
             ]),
         ],
-        controllers: [AuthController, HealthController],
+        controllers: [AuthController, AccountController, HealthController],
         providers: [
             AuthEnabledGuard,
             AuthGuard,
             RegistrationEnabledGuard,
             { provide: AuthService, useValue: authService },
+            { provide: SessionService, useValue: sessionService },
+            { provide: AccountRecoveryService, useValue: recovery },
+            {
+                provide: EmailTokenService,
+                useValue: { revoke: jest.fn() },
+            },
             { provide: DataSource, useValue: dataSource },
             { provide: OperationalLogger, useValue: operationalLogger },
+            { provide: APP_GUARD, useClass: CsrfGuard },
             { provide: APP_GUARD, useClass: ThrottlerGuard },
         ],
     }).compile();
@@ -283,6 +667,8 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
         app,
         baseUrl: `http://127.0.0.1:${address.port}`,
         authService,
+        sessionService,
+        recovery,
         databaseQuery,
     };
 }

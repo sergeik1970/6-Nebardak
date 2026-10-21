@@ -1,5 +1,4 @@
-import { AUTH_API_URL, isAuthEnabled } from "@/shared/config/runtime";
-import { authService } from "./authService";
+import { apiRequest } from "./apiClient";
 
 export type PlannerObservationVerdict = "good" | "questionable" | "needs-fix";
 
@@ -28,46 +27,12 @@ export interface PlannerObservationResponse {
     updatedAt: string;
 }
 
-const UNAVAILABLE_MESSAGE = "Войдите, чтобы сохранить наблюдение в базе данных.";
-
-const readErrorMessage = async (response: Response): Promise<string> => {
-    try {
-        const payload = (await response.json()) as { message?: unknown };
-        if (typeof payload.message === "string" && payload.message.trim()) {
-            return payload.message;
-        }
-    } catch {
-        // Keep the safe generic message below when an intermediary returns HTML.
-    }
-
-    return "Не удалось сохранить наблюдение в базе данных.";
-};
-
-const getApiUrl = (): string => {
-    if (!isAuthEnabled || !AUTH_API_URL) throw new Error(UNAVAILABLE_MESSAGE);
-    return AUTH_API_URL;
-};
-
-const getHeaders = (): Record<string, string> => {
-    const token = authService.getToken();
-    if (!token) throw new Error(UNAVAILABLE_MESSAGE);
-
-    return {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-    };
-};
-
-const request = async <T>(path: string, method: "POST" | "PATCH", body: unknown): Promise<T> => {
-    const response = await fetch(`${getApiUrl()}${path}`, {
+const request = <T>(path: string, method: "POST" | "PATCH", body: unknown): Promise<T> =>
+    apiRequest<T>(path, {
         method,
-        headers: getHeaders(),
-        body: JSON.stringify(body),
+        body,
+        fallbackMessage: "Не удалось сохранить наблюдение в базе данных.",
     });
-
-    if (!response.ok) throw new Error(await readErrorMessage(response));
-    return response.json() as Promise<T>;
-};
 
 export const plannerObservationService = {
     create: (input: PlannerObservationCreateInput): Promise<PlannerObservationResponse> =>

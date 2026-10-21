@@ -5,17 +5,19 @@ export interface User {
     name: string;
     email: string;
     role: UserRole;
+    emailVerified: boolean;
 }
 
 export interface AuthResponse {
     user: User;
-    token: string;
 }
 
 export interface RegisterData {
     name: string;
     email: string;
     password: string;
+    /** Edition of the personal-data consent the person accepted. */
+    consentVersion: string;
 }
 
 export interface LoginData {

@@ -1,3 +1,4 @@
+import { getProjectStorage } from "@/shared/lib/project-scope/storage";
 import { drawingBlockingIssues } from "./draw-furniture-handoff";
 import { getFurniturePhotos } from "./furniture-photos";
 import { normalizeVisualTestSession, type VisualTestSession } from "@/shared/lib/visual-preference";
@@ -1089,12 +1090,8 @@ export const validateProjectDraftLayout = (
 
 const resolveStorage = (options: ProjectDraftStorageOptions): ProjectDraftStorage | null => {
     if (Object.prototype.hasOwnProperty.call(options, "storage")) return options.storage ?? null;
-    if (typeof window === "undefined") return null;
-    try {
-        return window.localStorage;
-    } catch {
-        return null;
-    }
+    // The guest store, or the open project's scoped copy of the same keys.
+    return getProjectStorage();
 };
 
 const removeLegacyProjectDrafts = (storage: ProjectDraftStorage) => {

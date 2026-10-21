@@ -9,6 +9,10 @@ const PUBLIC_ROUTES = [
         name: "анкета",
     },
     { path: "/planner", name: "планировщик" },
+    { path: "/privacy", name: "политика обработки данных" },
+    { path: "/consent", name: "согласие на обработку данных" },
+    { path: "/account", name: "личный кабинет" },
+    { path: "/auth/forgot", name: "восстановление пароля" },
 ] as const;
 
 const captureRuntimeErrors = (page: Page) => {

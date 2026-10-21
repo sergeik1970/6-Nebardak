@@ -211,3 +211,35 @@
         }
     }
 }
+
+.forgotLink {
+    align-self: flex-end;
+    min-height: var(--sf-control-height);
+    display: inline-flex;
+    align-items: center;
+    margin-top: calc(-1 * var(--sf-space-2));
+    color: var(--sf-color-brand-active);
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+
+    &:hover {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+    }
+
+    &:focus-visible {
+        outline: 3px solid var(--sf-color-focus);
+        outline-offset: 2px;
+    }
+}
+
+.consent {
+    font-size: 14px;
+
+    a {
+        color: var(--sf-color-brand-active);
+        font-weight: 700;
+        text-underline-offset: 3px;
+    }
+}

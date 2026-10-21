@@ -1,0 +1,45 @@
+.banner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sf-space-2) var(--sf-space-4);
+    align-items: center;
+    justify-content: center;
+    padding: var(--sf-space-2) var(--sf-space-4);
+    border-bottom: 1px solid var(--sf-color-line);
+    background: var(--sf-color-warning-surface);
+    color: var(--sf-color-warning);
+    font-size: 14px;
+    line-height: 1.45;
+    text-align: center;
+}
+
+.text {
+    margin: 0;
+    max-width: 52rem;
+    overflow-wrap: anywhere;
+}
+
+.action {
+    min-height: 36px;
+    padding: var(--sf-space-1) var(--sf-space-3);
+    border: 1px solid currentColor;
+    border-radius: var(--sf-radius-md);
+    background: transparent;
+    color: inherit;
+    font: 700 14px / 1.2 var(--font-primary);
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+        background: rgb(255 255 255 / 55%);
+    }
+
+    &:focus-visible {
+        outline: 3px solid var(--sf-color-focus);
+        outline-offset: 2px;
+    }
+
+    &:disabled {
+        cursor: progress;
+        opacity: 0.7;
+    }
+}

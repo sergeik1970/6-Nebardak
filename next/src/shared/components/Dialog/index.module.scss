@@ -1,0 +1,84 @@
+.dialog {
+    width: min(calc(100vw - 32px), 30rem);
+    max-height: calc(100dvh - 32px);
+    padding: var(--sf-space-6);
+    border: 1px solid var(--sf-color-line);
+    border-radius: var(--sf-radius-lg);
+    background: var(--sf-color-surface);
+    color: var(--sf-color-ink);
+    box-shadow: var(--sf-shadow-md);
+
+    &::backdrop {
+        background: rgb(20 18 15 / 60%);
+    }
+}
+
+.title {
+    margin: 0 0 var(--sf-space-3);
+    font: 700 22px / 1.25 var(--font-primary);
+}
+
+.body {
+    color: var(--sf-color-ink-muted);
+    font-size: 15px;
+    line-height: 1.55;
+
+    p {
+        margin: 0 0 var(--sf-space-3);
+    }
+}
+
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sf-space-2);
+    margin-top: var(--sf-space-5);
+
+    button,
+    a {
+        min-height: var(--sf-control-height);
+        padding: var(--sf-space-2) var(--sf-space-4);
+        border: 1px solid var(--sf-color-line-strong);
+        border-radius: var(--sf-radius-md);
+        background: transparent;
+        color: var(--sf-color-ink);
+        font: 700 15px / 1.25 var(--font-primary);
+        text-align: center;
+        text-decoration: none;
+        cursor: pointer;
+
+        &:hover:not(:disabled) {
+            background: var(--sf-color-surface-strong);
+        }
+
+        &:focus-visible {
+            outline: 3px solid var(--sf-color-focus);
+            outline-offset: 2px;
+        }
+
+        &:disabled {
+            cursor: progress;
+            opacity: 0.6;
+        }
+
+        &[data-variant="danger"] {
+            border-color: var(--sf-color-error);
+            background: var(--sf-color-error);
+            color: #fff;
+
+            &:hover:not(:disabled) {
+                background: #861f19;
+            }
+        }
+
+        &[data-variant="primary"] {
+            border-color: var(--sf-color-brand);
+            background: var(--sf-color-brand);
+            color: #fff;
+
+            &:hover:not(:disabled) {
+                background: var(--sf-color-brand-hover);
+            }
+        }
+    }
+}

@@ -1,6 +1,7 @@
 import React from "react";
 import Head from "next/head";
 import Questionnaire from "@/shared/pages/Questionnaire";
+import ProjectScope from "@/shared/lib/project-scope/ProjectScope";
 
 const QuestionnairePage: React.FC = () => (
     <>
@@ -12,7 +13,9 @@ const QuestionnairePage: React.FC = () => (
             />
             <meta name="robots" content="noindex,follow" />
         </Head>
-        <Questionnaire />
+        <ProjectScope>
+            <Questionnaire />
+        </ProjectScope>
     </>
 );
 

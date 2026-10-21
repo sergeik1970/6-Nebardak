@@ -1,5 +1,6 @@
 import { Transform } from "class-transformer";
 import {
+    Equals,
     IsEmail,
     IsString,
     Length,
@@ -8,6 +9,7 @@ import {
     MinLength,
 } from "class-validator";
 import { MaxBcryptPasswordBytes } from "../../security/bcrypt-password.policy";
+import { CURRENT_CONSENT_VERSION } from "../../legal/consent";
 
 export class RegisterDto {
     @Transform(({ value }) =>
@@ -32,4 +34,11 @@ export class RegisterDto {
     @MaxLength(128)
     @MaxBcryptPasswordBytes()
     password: string;
+
+    /** The edition the person ticked; a stale page must be reloaded. */
+    @Equals(CURRENT_CONSENT_VERSION, {
+        message:
+            "Нужно согласие на обработку персональных данных в актуальной редакции. Обновите страницу.",
+    })
+    consentVersion: string;
 }

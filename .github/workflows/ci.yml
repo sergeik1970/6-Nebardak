@@ -66,6 +66,40 @@ jobs:
         continue-on-error: true
         run: npm audit --audit-level=high
 
+  accounts-e2e:
+    name: Accounts end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: next
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: npm
+          cache-dependency-path: |
+            next/package-lock.json
+            nest/package-lock.json
+      - run: npm ci
+      - run: npm ci
+        working-directory: nest
+      - run: npx playwright install --with-deps chromium
+      # Throwaway PostgreSQL and Mailpit in Docker, the real API, sign-up,
+      # mail links, cloud sync, conflicts, access control and deletion.
+      - run: npm run test:e2e:accounts
+      - name: Preserve Playwright diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-accounts-diagnostics
+          path: |
+            next/playwright-report/accounts
+            next/test-results/accounts
+          if-no-files-found: ignore
+          retention-days: 7
+
   backend:
     name: Backend quality gate
     runs-on: ubuntu-latest
@@ -87,6 +121,8 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run test:e2e
+      - name: SQL integration tests on PostgreSQL 16
+        run: npm run test:db
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high
       # Dev-only chains (braces via eslint-config-next / jest) have no patched
@@ -170,7 +206,11 @@ jobs:
           curl --fail --silent --show-error --head http://127.0.0.1/images/Home/logo.79c74b88fecb.jpg >"$home_headers"
           grep -Eqi '^cache-control:.*max-age=31536000.*immutable' "$home_headers"
           test "$(grep -Eci '^cache-control:' "$home_headers")" = "1"
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data '{"email":"ci@example.test","password":"private-password"}' http://127.0.0.1/api/auth/login)" = "404"
+          # Accounts are off in this topology: a same-origin request gets 404;
+          # without the CSRF marker the API refuses before routing (403).
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST -H 'content-type: application/json' -H 'X-Requested-With: stylefinder' --data '{"email":"ci@example.test","password":"private-password"}' http://127.0.0.1/api/auth/login)" = "404"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data '{"email":"ci@example.test","password":"private-password"}' http://127.0.0.1/api/auth/login)" = "403"
+          curl --fail --silent --show-error --dump-header - --output /dev/null http://127.0.0.1/api/health/live | grep -qi '^cache-control: no-store'
           next_id="$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml ps -q next)"
           nest_id="$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml ps -q nest)"
           db_id="$(docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml ps -q db)"

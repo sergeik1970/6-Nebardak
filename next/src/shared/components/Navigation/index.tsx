@@ -2,8 +2,9 @@ import Image from "next/image";
 import Link from "next/link";
 import React, { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../../contexts/AuthContext";
-import { authUiMode, isAuthRegistrationEnabled } from "@/shared/config/runtime";
-import AuthModal from "../AuthModal";
+import EmailVerificationBanner from "../EmailVerificationBanner";
+import { authUiMode } from "@/shared/config/runtime";
+import { useAuthModal } from "../../../contexts/AuthModalContext";
 import BetaBadge from "../BetaBadge";
 import styles from "./index.module.scss";
 
@@ -18,7 +19,7 @@ const focusableSelector = [
 
 const Navigation: React.FC = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    const { openAuthModal: showAuthModal } = useAuthModal();
     const triggerRef = useRef<HTMLButtonElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const { user, isAuthenticated, logout } = useAuth();
@@ -29,12 +30,12 @@ const Navigation: React.FC = () => {
 
     const openAuthModal = () => {
         setIsMenuOpen(false);
-        setIsAuthModalOpen(true);
+        showAuthModal();
     };
 
     const handleLogout = () => {
-        logout();
         closeMenu();
+        void logout();
     };
 
     useEffect(() => {
@@ -183,7 +184,16 @@ const Navigation: React.FC = () => {
                         {navigationLinks}
                         {authEnabled && isAuthenticated ? (
                             <div className={styles["user-menu"]}>
-                                <span className={styles["user-name"]}>Привет, {user?.name}!</span>
+                                <Link className={styles["nav-link"]} href="/projects">
+                                    Мои проекты
+                                </Link>
+                                <Link
+                                    aria-label={`Личный кабинет: ${user?.name ?? ""}`}
+                                    className={styles["user-name"]}
+                                    href="/account"
+                                >
+                                    Привет, {user?.name}!
+                                </Link>
                                 <button
                                     className={styles["nav-logout-btn"]}
                                     onClick={handleLogout}
@@ -259,6 +269,20 @@ const Navigation: React.FC = () => {
                                 <div className={styles["mobile-user-info"]}>
                                     Привет, {user?.name}!
                                 </div>
+                                <Link
+                                    className={styles["mobile-nav-link"]}
+                                    href="/projects"
+                                    onClick={closeMenu}
+                                >
+                                    Мои проекты
+                                </Link>
+                                <Link
+                                    className={styles["mobile-nav-link"]}
+                                    href="/account"
+                                    onClick={closeMenu}
+                                >
+                                    Личный кабинет
+                                </Link>
                                 <button
                                     className={styles["mobile-nav-link"]}
                                     onClick={handleLogout}
@@ -305,13 +329,7 @@ const Navigation: React.FC = () => {
                 </div>
             </nav>
 
-            {authEnabled ? (
-                <AuthModal
-                    isOpen={isAuthModalOpen}
-                    onClose={() => setIsAuthModalOpen(false)}
-                    registrationEnabled={isAuthRegistrationEnabled}
-                />
-            ) : null}
+            {authEnabled ? <EmailVerificationBanner /> : null}
         </Fragment>
     );
 };

@@ -9,7 +9,7 @@
     --draw-brown: #9a603c;
     --draw-green: #22856b;
     --draw-rose: #b54d40;
-    height: 100dvh;
+    height: calc(100dvh - var(--sf-project-bar-height, 0px));
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -177,6 +177,28 @@
     font-size: 12px;
     font-weight: 750;
     white-space: nowrap;
+}
+
+.topTools .templateButton {
+    color: var(--draw-graphite) !important;
+}
+
+.topTools .templateButton:hover:not(:disabled),
+.topTools .templateButton:focus-visible {
+    color: #8a4900 !important;
+    background: #fff0da;
+}
+
+// The header is crowded below a wide desktop: the template keeps its icon.
+@media (max-width: 1439px) {
+    .topTools .templateButton {
+        width: 44px;
+        padding: 0;
+
+        span {
+            display: none;
+        }
+    }
 }
 
 .topTools .resetButton:hover:not(:disabled),
@@ -2125,5 +2147,69 @@
     small {
         line-height: 1.4;
         color: #617171;
+    }
+}
+
+.templateForm {
+    display: grid;
+    gap: var(--sf-space-3);
+
+    p {
+        margin: 0;
+    }
+
+    label {
+        display: grid;
+        gap: var(--sf-space-1);
+        color: var(--sf-color-ink);
+        font-weight: 600;
+    }
+
+    input {
+        min-height: var(--sf-control-height);
+        padding: var(--sf-space-2) var(--sf-space-3);
+        border: 1px solid var(--sf-color-line-strong);
+        border-radius: var(--sf-radius-md);
+        background: var(--sf-color-paper);
+        color: var(--sf-color-ink);
+        font: 500 16px / 1.2 var(--font-primary);
+
+        &:focus-visible {
+            outline: 3px solid var(--sf-color-focus);
+            outline-offset: 1px;
+        }
+    }
+
+    [role="alert"] {
+        color: var(--sf-color-error);
+    }
+}
+
+.plannerRoomOffer {
+    display: inline-flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: center;
+    min-width: 0;
+    border-left: 2px solid #d48620;
+    padding-left: 8px;
+    color: #805915;
+    font-weight: 720;
+
+    button {
+        min-height: 32px;
+        padding: 2px 10px;
+        border: 1px solid #d48620;
+        border-radius: 6px;
+        background: #fff8ec;
+        color: #6b4a10;
+        font: inherit;
+        cursor: pointer;
+
+        &:focus-visible {
+            outline: 3px solid var(--sf-color-focus);
+            outline-offset: 2px;
+        }
     }
 }

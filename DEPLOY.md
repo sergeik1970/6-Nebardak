@@ -31,7 +31,7 @@ chmod 600 .env.server
 ```
 
 `.env.server` не входит в Git и не копируется в Docker image. Сгенерируйте три
-разных пароля БД длиной не менее 16 символов и JWT-секрет. DB-пароли в шаблоне
+разных пароля БД длиной не менее 16 символов. DB-пароли в шаблоне
 намеренно пустые: Compose остановится до создания volume, пока вы их не заполните.
 Production preflight также отклоняет старые placeholder-значения, одинаковые
 пароли ролей и пароль, совпадающий с именем роли:
@@ -45,15 +45,51 @@ APP_DB_USER=stylefinder_app
 APP_DB_PASSWORD=REPLACE_WITH_DIFFERENT_APP_PASSWORD
 MIGRATOR_DB_USER=stylefinder_migrator
 MIGRATOR_DB_PASSWORD=REPLACE_WITH_DIFFERENT_MIGRATOR_PASSWORD
-JWT_SECRET=REPLACE_WITH_AT_LEAST_32_RANDOM_BYTES
+PUBLIC_ORIGIN=https://stylefinder.design
 AUTH_ENABLED=false
 AUTH_REGISTRATION_ENABLED=false
 ```
 
-PostgreSQL получает только admin-переменные и не видит JWT. One-off сервис
+Аккаунты используют серверные сессии: браузер получает случайный токен только в
+cookie `__Host-sf_session` (`HttpOnly; Secure; SameSite=Lax`), а в таблице
+`user_session` хранится лишь его SHA-256. Подписывающего секрета нет. При
+`AUTH_ENABLED=true` обязателен `PUBLIC_ORIGIN` — точный https-origin сайта; API
+отклоняет изменяющие запросы с другим `Origin` или без заголовка
+`X-Requested-With: stylefinder`.
+
+Письма подтверждения почты и сброса пароля уходят через SMTP-релей. При
+`AUTH_ENABLED=true` обязательны `SMTP_HOST` и `SMTP_FROM` (например,
+`StyleFinder <no-reply@stylefinder.design>`); `SMTP_USER`/`SMTP_PASSWORD`
+задаются парой. На порту 465 используется TLS сразу (`SMTP_SECURE=true`), на
+587 production требует STARTTLS. До включения аккаунтов у домена отправителя
+должны быть SPF, DKIM и DMARC, выданные провайдером (Yandex Cloud Postbox,
+Unisender Go и т. п.), иначе письма попадут в спам. Зарубежный сервис получает
+адреса пользователей — это трансграничная передача по 152-ФЗ со своим
+уведомлением, поэтому предпочтителен российский. В логах фиксируются только
+`userId` и коды событий — без адресов и ссылок.
+
+Полный порядок запуска по шагам — в [`docs/launch-checklist.md`](docs/launch-checklist.md).
+
+Перед включением регистрации (152-ФЗ):
+
+- заполнить реквизиты оператора в `next/src/shared/legal/operator.ts`; пока там
+  есть значения в квадратных скобках, `/privacy` и `/consent` показывают плашку
+  «Черновик»;
+- согласовать тексты `/privacy` и `/consent` с юристом; при любом изменении
+  текста согласия поднять `CURRENT_CONSENT_VERSION` одновременно в
+  `nest/src/legal/consent.ts` и `next/src/shared/legal/consent.ts` (тест сверяет их);
+- подать уведомление об обработке персональных данных в Роскомнадзор;
+- разместить сервер, базу и резервные копии в РФ.
+
+Раз в 6 часов API удаляет истёкшие сессии, использованные ссылки и
+неподтверждённые аккаунты (кроме admin), у которых 30 дней не было активности.
+Это касается только аккаунтов, зарегистрированных с согласием на обработку
+данных; аккаунты, созданные до этого релиза, задача не трогает.
+
+PostgreSQL получает только admin-переменные. One-off сервис
 `db-roles` создаёт отдельного владельца миграций и runtime-роль без права менять
 схему. Сервис `nest` получает только runtime-реквизиты, `migrate` — только
-миграционные. Runtime-роль получает DML для таблицы `user`, `SELECT`, `INSERT`
+миграционные. Runtime-роль получает DML для таблиц `user`, `user_session`, `email_token` и `project`, `SELECT`, `INSERT`
 и `UPDATE` для `planner_observations` и `USAGE` только для `user_id_seq` и
 `planner_observations_id_seq`; доступ к migration history, созданию временных объектов
 и остальным sequence отсутствует. Все роли должны иметь разные имена и пароли.
@@ -226,14 +262,89 @@ sudo docker run --rm \
   pg_restore --list "/backup/$(basename "$BACKUP_FILE")" | head
 ```
 
-Сам файл на том же VPS не является backup. После каждого дампа передавайте его
-в зашифрованное внешнее хранилище с политикой retention, например daily 7,
-weekly 4, monthly 6. Не отправляйте незашифрованный дамп в публичный bucket.
+Сам файл на том же VPS не является backup. Ежедневную внешнюю копию делает
+`infra/backup/backup.sh` по systemd-таймеру:
 
-Минимум раз в месяц восстанавливайте свежий dump на отдельном тестовом сервере
-или в изолированном PostgreSQL-контейнере и проверяйте авторизацию и чтение
-данных. Не проводите restore drill поверх production-базы. Непроверенный backup
-нельзя считать рабочим.
+1. `pg_dump -Fc` из контейнера `db` и проверка `pg_restore --list`;
+2. шифрование [age](https://github.com/FiloSottile/age) на публичный ключ:
+   приватный ключ на сервере не хранится;
+3. загрузка в S3-совместимое хранилище в РФ ключом, который может только
+   загружать: прочитать или удалить копии с сервера нельзя;
+4. сигнал в Healthchecks.io: `/start`, затем успех или `/fail` с номером строки.
+
+Сроки хранения задают lifecycle-правила bucket: каждая копия попадает в
+`daily/`, по воскресеньям (UTC) ещё и в `weekly/`, первого числа — в `monthly/`.
+
+### 5.1. Подготовка (один раз)
+
+На своей машине, не на сервере, создайте ключ шифрования:
+
+```bash
+age-keygen -o stylefinder-backup.key   # строка "Public key: age1..." — публичный ключ
+```
+
+Храните `stylefinder-backup.key` в менеджере паролей и в офлайн-копии. Без него
+backup не расшифровать.
+
+В хранилище (Yandex Object Storage или Selectel S3):
+
+- приватный bucket, например `stylefinder-backups`;
+- lifecycle-правила: `daily/` удалять через 8 дней, `weekly/` через 29,
+  `monthly/` через 186;
+- ключ для сервера только с правом загрузки в этот bucket (в Yandex Cloud —
+  сервисный аккаунт с ролью `storage.uploader` на bucket);
+- отдельный ключ только на чтение для restore drill, на сервер его не класть.
+
+В Healthchecks.io создайте три проверки:
+
+| Проверка | Период | Grace |
+| --- | --- | --- |
+| `stylefinder-backup` | 1 день | 2 часа |
+| `stylefinder-resources` | 10 минут | 20 минут |
+| `stylefinder-restore-drill` | 31 день | 3 дня |
+
+### 5.2. Установка на сервере
+
+```bash
+sudo apt-get install -y age curl
+sudo install -d -m 700 /etc/stylefinder
+sudo install -m 600 infra/backup/backup.env.example /etc/stylefinder/backup.env
+sudoedit /etc/stylefinder/backup.env   # APP_DIR, AGE_RECIPIENT, S3_*, HC_*
+sudo install -m 644 infra/backup/systemd/*.service infra/backup/systemd/*.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start stylefinder-backup.service
+sudo journalctl -u stylefinder-backup.service -n 20   # ожидается "uploaded stylefinder-....dump.age"
+sudo systemctl enable --now stylefinder-backup.timer stylefinder-resource-check.timer
+```
+
+Unit-файлы запускают скрипты из `/srv/stylefinder`. Если checkout лежит в
+другом каталоге, исправьте `ExecStart` и `APP_DIR`.
+
+### 5.3. Проверка восстановления
+
+Минимум раз в месяц и обязательно до включения аккаунтов восстанавливайте
+свежую копию на отдельной машине с Docker (не на production-сервере):
+
+```bash
+mkdir -p ~/.config/stylefinder
+cat > ~/.config/stylefinder/drill.env <<'EOF'
+AGE_IDENTITY=/path/to/stylefinder-backup.key
+S3_ENDPOINT=https://storage.yandexcloud.net
+S3_REGION=ru-central1
+S3_BUCKET=stylefinder-backups
+S3_ACCESS_KEY_ID=...        # ключ только на чтение
+S3_SECRET_ACCESS_KEY=...
+HC_DRILL_PING_URL=https://hc-ping.com/...
+EOF
+chmod 600 ~/.config/stylefinder/drill.env
+bash infra/backup/restore-drill.sh
+```
+
+Скрипт скачивает последнюю копию из `daily/`, расшифровывает её и
+восстанавливает в одноразовый PostgreSQL-контейнер без сети. Затем проверяет
+таблицу `migrations` и печатает число строк в каждой таблице. Последняя строка
+`restore drill OK <дата> source=… migrations=N` — это запись о проверке:
+добавьте её в журнал релизов. Непроверенный backup нельзя считать рабочим.
 
 ## 6. Rollback
 
@@ -351,12 +462,21 @@ npm run assets:rights:release
 
 Минимальные проверки production:
 
-- внешний uptime-check для `/`;
-- отдельные checks `/api/health/live` и `/api/health/ready`;
-- оповещение об истечении TLS-сертификата;
-- контроль заполнения диска и памяти;
-- контроль последнего успешного off-site backup;
+- UptimeRobot, HTTP(S)-мониторы с интервалом 5 минут на
+  `https://stylefinder.design/`, `/api/health/live` и `/api/health/ready`
+  (для ready — keyword `"ok"`); у монитора `/` включить SSL-оповещение об
+  истечении сертификата;
+- диск (`/`, `/var/lib/docker` от 80 %) и доступная память (меньше 10 %):
+  `infra/backup/resource-check.sh` каждые 10 минут, проверка
+  `stylefinder-resources` в Healthchecks.io (§5.1);
+- свежесть off-site backup: проверка `stylefinder-backup` поднимает тревогу,
+  если за сутки не было успешной загрузки;
+- ежемесячный restore drill: проверка `stylefinder-restore-drill`;
 - сбор ошибок браузера и API без паролей и токенов.
+
+Оповещения UptimeRobot и Healthchecks.io направьте на почту или в Telegram
+владельца. Эти сервисы получают только адреса проверок и тексты сигналов, без
+персональных данных пользователей.
 
 `/api/health/live` подтверждает, что процесс отвечает. `/api/health/ready`
 дополнительно выполняет безопасный `SELECT 1` и подтверждает доступность
@@ -383,9 +503,14 @@ volumes получают корректного владельца при пер
 Текущий rate limiter хранит счётчики в памяти процесса Nest и рассчитан на
 один экземпляр API. Перед горизонтальным масштабированием вынесите счётчики в
 общий Redis-compatible storage, иначе каждый экземпляр будет применять лимит независимо.
-До повторного включения `AUTH_ENABLED` также нужен явный сценарий сброса пароля для
-старых аккаунтов с bcrypt cost ниже 12: такие хеши намеренно не проверяются и не
-обновляются во время входа.
+Старые аккаунты с bcrypt cost ниже 12 не могут войти по паролю: такие хеши
+намеренно не проверяются и не обновляются во время входа. Их владельцы входят
+через «Забыли пароль?» (`/auth/forgot`) — сброс по письму задаёт новый хеш с
+cost 12 и подтверждает почту. Сообщите им об этом до включения `AUTH_ENABLED`.
+
+Перед включением аккаунтов прогоните `npm run test:e2e:accounts` в `next/`
+(сквозные сценарии с настоящими API, PostgreSQL и Mailpit) и проверьте реальную
+доставку писем выбранного SMTP-провайдера на нескольких почтовых сервисах.
 
 ## 9. Локальная разработка
 

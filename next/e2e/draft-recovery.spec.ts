@@ -52,7 +52,10 @@ test("legacy v1 project is migrated and its inputs remain editable", async ({ pa
         page.getByText(/Черновик перенесён в новую версию/).filter({ visible: true }),
     ).toBeVisible();
     await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
-    await expect(page.getByRole("textbox", { name: "Ширина м" })).toHaveValue("6,2");
+    await expect(page.locator("[data-room-summary] [data-room-width]")).toHaveAttribute(
+        "data-room-width",
+        "6200",
+    );
     await expect
         .poll(() =>
             page.evaluate(
@@ -78,7 +81,10 @@ test("v2 project is migrated without losing room inputs", async ({ page }, testI
     await page.goto("/planner", { waitUntil: "networkidle" });
 
     await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
-    await expect(page.getByRole("textbox", { name: "Ширина м" })).toHaveValue("6,2");
+    await expect(page.locator("[data-room-summary] [data-room-width]")).toHaveAttribute(
+        "data-room-width",
+        "6200",
+    );
     await expect
         .poll(() =>
             page.evaluate(
@@ -170,7 +176,10 @@ test("invalid saved coordinates are dropped without losing room or furniture", a
         page.getByText(/Сохранённая расстановка больше не проходит проверку/),
     ).toBeVisible();
     await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
-    await expect(page.getByRole("textbox", { name: "Ширина м" })).toHaveValue("6,2");
+    await expect(page.locator("[data-room-summary] [data-room-width]")).toHaveAttribute(
+        "data-room-width",
+        "6200",
+    );
     await expect(page.locator("[data-plan-idle-guidance='true']")).toBeVisible();
     await expect
         .poll(() =>

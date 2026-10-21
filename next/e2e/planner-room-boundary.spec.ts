@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { L_ROOM_RIGHT, L_ROOM_RIGHT_10M, openPlannerWithRoom } from "./project-flow";
 
 test.describe.configure({ timeout: 60_000 });
 
 test("planner edits and restores an L-room boundary on desktop and mobile", async ({ page }) => {
-    await page.goto("/planner");
+    await openPlannerWithRoom(page, L_ROOM_RIGHT);
 
-    await page.getByRole("button", { name: "Г справа", exact: true }).click();
+    await page.getByRole("button", { name: "Править комнату", exact: true }).click();
     const room = page.getByRole("group", { name: /План комнаты/ });
     await expect(room).toHaveAttribute("data-room-shape", "orthogonal");
     await expect(room).toHaveAttribute("data-room-editing", "true");
@@ -80,16 +81,16 @@ test("planner edits and restores an L-room boundary on desktop and mobile", asyn
 test("planner keeps a custom boundary when dimensions change and grows a free wall by handles", async ({
     page,
 }) => {
-    await page.goto("/planner");
-    await page.getByRole("button", { name: "Г справа", exact: true }).click();
+    await openPlannerWithRoom(page, L_ROOM_RIGHT);
+    await page.getByRole("button", { name: "Править комнату", exact: true }).click();
     const room = page.getByRole("group", { name: /План комнаты/ });
     await expect(room).toHaveAttribute("data-room-shape", "orthogonal");
     await expect(room).toHaveAttribute("data-room-editing", "true");
 
-    const width = page.locator('input[name="room-width"]');
-    await expect(width).toHaveValue("6");
-    await page.getByRole("button", { name: "Увеличить ширину комнаты на 0,05 м" }).click();
-    await expect(width).toHaveValue("6,05");
+    const size = page.locator("[data-room-summary] [data-room-width]");
+    await expect(size).toHaveAttribute("data-room-width", "6000");
+    await room.getByRole("button", { name: /Изменить ширину комнаты/ }).press("ArrowRight");
+    await expect(size).toHaveAttribute("data-room-width", "6050");
     await expect(room).toHaveAttribute("data-room-shape", "orthogonal");
     await expect(room.locator("[data-room-segment]")).toHaveCount(6);
 
@@ -147,7 +148,7 @@ test("rectangle corner moves its own boundary and Escape restores the exact drag
     await page.getByRole("button", { name: "Править комнату", exact: true }).click();
 
     const room = page.getByRole("group", { name: /План комнаты/ });
-    const width = page.locator('input[name="room-width"]');
+    const size = page.locator("[data-room-summary] [data-room-width]");
     const topLeft = room.locator('[data-room-vertex="rect-top-left"]');
     const [beforeKey, beforeRoom] = await Promise.all([topLeft.boundingBox(), room.boundingBox()]);
     expect(beforeKey).not.toBeNull();
@@ -155,7 +156,7 @@ test("rectangle corner moves its own boundary and Escape restores the exact drag
     if (!beforeKey || !beforeRoom) throw new Error("Top-left rectangle handle is not visible");
 
     await topLeft.press("ArrowRight");
-    await expect(width).toHaveValue("5,95");
+    await expect(size).toHaveAttribute("data-room-width", "5950");
     const [afterKey, afterRoom] = await Promise.all([topLeft.boundingBox(), room.boundingBox()]);
     expect(afterKey).not.toBeNull();
     expect(afterRoom).not.toBeNull();
@@ -181,7 +182,7 @@ test("rectangle corner moves its own boundary and Escape restores the exact drag
     await page.keyboard.press("Escape");
     await page.mouse.up();
 
-    await expect(width).toHaveValue("5,95");
+    await expect(size).toHaveAttribute("data-room-width", "5950");
     const restored = await topLeft.boundingBox();
     expect(restored).not.toBeNull();
     if (!restored) throw new Error("Restored rectangle corner is not visible");
@@ -232,21 +233,14 @@ test("mobile fit recovers a lower long-page board and keeps a 10m custom room vi
     page,
 }, testInfo) => {
     test.skip(testInfo.project.name !== "mobile-chromium", "Mobile fit is covered once");
-    await page.goto("/planner");
-
-    const width = page.locator('input[name="room-width"]');
-    const depth = page.locator('input[name="room-depth"]');
-    await width.fill("10");
-    await width.blur();
-    await depth.fill("10");
-    await depth.blur();
+    await openPlannerWithRoom(page, L_ROOM_RIGHT_10M);
 
     // The furniture catalogue makes the planner a long document on a phone.
     // Start from its lower page position, then enter editing from the room
     // controls. The editor must position the plan itself before fitting; this
     // test deliberately does not scroll the canvas into view for it.
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-    await page.getByRole("button", { name: "Г справа", exact: true }).click();
+    await page.getByRole("button", { name: "Править комнату", exact: true }).click();
 
     const viewport = page.getByLabel("Прокручиваемая область плана");
     const room = page.getByRole("group", { name: /План комнаты/ });
@@ -297,12 +291,15 @@ test("mobile fit recovers a lower long-page board and keeps a 10m custom room vi
         .toBe(0);
 });
 
-test("planner sends custom contour drawing to the dedicated room editor", async ({ page }) => {
-    await page.goto("/planner", { waitUntil: "networkidle" });
-    await page
-        .getByRole("button", { name: "Открыть отдельный редактор контура комнаты", exact: true })
-        .click();
+test("planner sends room changes to the drawing step with the planner's room", async ({ page }) => {
+    await openPlannerWithRoom(page, L_ROOM_RIGHT);
+    await page.getByRole("link", { name: "Изменить комнату в чертеже" }).click();
 
     await expect(page).toHaveURL(/\/planner\/draw$/);
     await expect(page.locator("[data-draw-room-board='true']")).toBeVisible();
+    // A room set before the drawing step existed is turned into walls, not lost.
+    await expect(page.locator("[data-draw-room-notice='true']")).toContainText(
+        "Комната перенесена с шага расстановки",
+    );
+    await expect(page.getByRole("button", { name: "Продолжить с комнатой" })).toBeEnabled();
 });

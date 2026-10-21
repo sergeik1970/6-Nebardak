@@ -1,0 +1,92 @@
+.bar {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sf-space-1) var(--sf-space-3);
+    align-items: center;
+    min-height: 36px;
+    padding: var(--sf-space-1) var(--sf-space-4);
+    border-bottom: 1px solid var(--sf-color-line);
+    background: var(--sf-color-surface);
+    color: var(--sf-color-ink);
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.title {
+    max-width: 30%;
+    overflow: hidden;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.status {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    color: var(--sf-color-ink-muted);
+
+    &::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        flex: none;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    &[data-tone="ok"] {
+        color: var(--sf-color-success);
+    }
+
+    &[data-tone="busy"] {
+        color: var(--sf-color-ink-muted);
+    }
+
+    &[data-tone="warn"] {
+        color: var(--sf-color-warning);
+    }
+
+    &[data-tone="error"] {
+        color: var(--sf-color-error);
+    }
+}
+
+.action {
+    min-height: 32px;
+    padding: 2px var(--sf-space-3);
+    border: 1px solid var(--sf-color-line-strong);
+    border-radius: var(--sf-radius-md);
+    background: transparent;
+    color: var(--sf-color-brand-active);
+    font: 700 13px / 1.2 var(--font-primary);
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+        background: var(--sf-color-brand-soft);
+    }
+
+    &:focus-visible {
+        outline: 3px solid var(--sf-color-focus);
+        outline-offset: 2px;
+    }
+
+    &:disabled {
+        cursor: progress;
+        opacity: 0.6;
+    }
+}
+
+@media (max-width: 720px) {
+    // Title and save state share the first line; the steps get their own.
+    .bar > nav {
+        order: 3;
+        flex-basis: 100%;
+    }
+
+    .title {
+        max-width: 45%;
+    }
+}

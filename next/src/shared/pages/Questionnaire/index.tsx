@@ -40,8 +40,13 @@ import {
     WardrobeId,
 } from "./model";
 import styles from "./index.module.scss";
+import { useProjectHref } from "@/shared/lib/project-scope/ProjectScope";
+import { readProjectDocument } from "@/shared/lib/project-scope/document";
+import { hasProjectRoom } from "@/shared/lib/project-scope/progress";
+import { getProjectStorage, withProjectQuery } from "@/shared/lib/project-scope/storage";
 
 const Questionnaire: React.FC = () => {
+    const projectHref = useProjectHref();
     const router = useRouter();
     const [answers, setAnswers] = useState<QuestionnaireAnswers>(INITIAL_ANSWERS);
     const [priorities, setPriorities] = useState<PriorityMap>({});
@@ -54,6 +59,8 @@ const Questionnaire: React.FC = () => {
     > | null>(null);
     const [submitError, setSubmitError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    // With a room already drawn the next step is the layout itself.
+    const [hasRoom, setHasRoom] = useState(false);
     const [draftReady, setDraftReady] = useState(false);
     const [draftWritable, setDraftWritable] = useState(false);
     const [draftCanReset, setDraftCanReset] = useState(false);
@@ -125,6 +132,8 @@ const Questionnaire: React.FC = () => {
     useEffect(() => {
         if (!router.isReady || draftRead.current) return;
         draftRead.current = true;
+        const projectDocument = readProjectDocument(getProjectStorage());
+        setHasRoom(projectDocument.status === "success" && hasProjectRoom(projectDocument.value));
 
         const result = readProjectDraft();
         if (result.status === "success") {
@@ -259,7 +268,7 @@ const Questionnaire: React.FC = () => {
         setDraftWarning("");
         setDraftCanReset(false);
         setDraftWritable(true);
-        await router.replace({ pathname: "/questionnaire", query: { new: "1" } });
+        await router.replace({ pathname: "/questionnaire", query: withProjectQuery({ new: "1" }) });
     }, [router]);
 
     const updateBed = useCallback((bed: BedChoice) => {
@@ -353,8 +362,8 @@ const Questionnaire: React.FC = () => {
 
         try {
             const navigated = await router.push({
-                pathname: "/planner",
-                query: { handoff: result.id },
+                pathname: hasRoom ? "/planner" : "/planner/draw",
+                query: withProjectQuery({ handoff: result.id }),
             });
             if (!navigated) {
                 setSubmitError("Не удалось открыть планировщик. Попробуйте ещё раз.");
@@ -369,6 +378,7 @@ const Questionnaire: React.FC = () => {
         answers.tvTargetCategory,
         disabledReason,
         hasBed,
+        hasRoom,
         isSubmitting,
         router,
         selectedFurniture,
@@ -380,31 +390,8 @@ const Questionnaire: React.FC = () => {
         <div className={styles.page}>
             <Navigation />
             <main id="main-content" className={styles.main} tabIndex={-1}>
-                <nav className={styles.progressRail} aria-label="Этапы создания комнаты">
-                    <Link href="/test" data-state={styleLabel ? "done" : "available"}>
-                        <span>{styleLabel ? "✓" : "1"}</span>
-                        <span>
-                            <strong>Стиль</strong>
-                            <small>{styleLabel ?? "можно пройти отдельно"}</small>
-                        </span>
-                    </Link>
-                    <span className={styles.activeStep} aria-current="step">
-                        <span>2</span>
-                        <span>
-                            <strong>Потребности</strong>
-                            <small>собираем комплект</small>
-                        </span>
-                    </span>
-                    <span>
-                        <span>3</span>
-                        <span>
-                            <strong>Планировка</strong>
-                            <small>проверка размеров</small>
-                        </span>
-                    </span>
-                </nav>
-
                 <div className={styles.projectBar}>
+                    <span>{styleLabel ? `Стиль: ${styleLabel}` : ""}</span>
                     <button type="button" onClick={startNewProject}>
                         Новый проект
                     </button>
@@ -422,7 +409,7 @@ const Questionnaire: React.FC = () => {
                 )}
 
                 <header className={styles.header}>
-                    <span className={styles.eyebrow}>Спецификация комнаты · шаг 2 из 3</span>
+                    <span className={styles.eyebrow}>Шаг 2 · Анкета</span>
                     <h1>Что должно быть в комнате?</h1>
                     <p>
                         Выберите нужные функции — мы соберём поштучный комплект. Интерьерный стиль
@@ -730,7 +717,11 @@ const Questionnaire: React.FC = () => {
                             onClick={submit}
                             type="button"
                         >
-                            {isSubmitting ? "Открываем планировщик…" : "Перейти к расстановке"}
+                            {isSubmitting
+                                ? "Открываем следующий шаг…"
+                                : hasRoom
+                                  ? "Перейти к расстановке"
+                                  : "Дальше: комната"}
                         </button>
                         {disabledReason && (
                             <p

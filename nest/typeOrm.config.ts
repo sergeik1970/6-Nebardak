@@ -9,6 +9,7 @@ const sourceExtension = usesTypeScriptSources ? "ts" : "js";
 
 export default new DataSource({
     type: "postgres",
+    installExtensions: false,
     host: runtime.database.host,
     port: runtime.database.port,
     username: runtime.database.username,

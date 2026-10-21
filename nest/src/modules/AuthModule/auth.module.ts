@@ -1,21 +1,36 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { User } from "../../entities/User/user.entity";
+import { UserSession } from "../../entities/UserSession/user-session.entity";
+import { EmailToken } from "../../entities/EmailToken/email-token.entity";
+import { EmailTokenService } from "../../services/EmailTokenService/email-token.service";
+import { MailService } from "../../services/MailService/mail.service";
+import { AccountRecoveryService } from "../../services/AccountRecoveryService/account-recovery.service";
+import { AccountMaintenanceService } from "../../services/AccountMaintenanceService/account-maintenance.service";
+import { OperationalLogger } from "../../services/OperationalLogger/operational-logger.service";
 import { AuthService } from "../../services/AuthService/auth.service";
+import { SessionService } from "../../services/SessionService/session.service";
 import { AuthController } from "../../controllers/AuthController/auth.controller";
+import { AccountController } from "../../controllers/AccountController/account.controller";
 import { AuthGuard } from "../../guards/auth.guard";
 import { RegistrationEnabledGuard } from "../../guards/registration-enabled.guard";
 import { AuthEnabledGuard } from "../../guards/auth-enabled.guard";
 
 @Module({
-    imports: [TypeOrmModule.forFeature([User])],
-    controllers: [AuthController],
+    imports: [TypeOrmModule.forFeature([User, UserSession, EmailToken])],
+    controllers: [AuthController, AccountController],
     providers: [
         AuthService,
+        SessionService,
+        EmailTokenService,
+        MailService,
+        AccountRecoveryService,
+        AccountMaintenanceService,
+        OperationalLogger,
         AuthGuard,
         AuthEnabledGuard,
         RegistrationEnabledGuard,
     ],
-    exports: [AuthService, AuthGuard, AuthEnabledGuard],
+    exports: [AuthService, SessionService, AuthGuard, AuthEnabledGuard],
 })
 export class AuthModule {}
