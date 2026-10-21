@@ -62,9 +62,13 @@ cookie `__Host-sf_session` (`HttpOnly; Secure; SameSite=Lax`), а в табли�
 `StyleFinder <no-reply@stylefinder.design>`); `SMTP_USER`/`SMTP_PASSWORD`
 задаются парой. На порту 465 используется TLS сразу (`SMTP_SECURE=true`), на
 587 production требует STARTTLS. До включения аккаунтов у домена отправителя
-должны быть SPF, DKIM и DMARC, выданные провайдером (Yandex Postbox, Unisender Go,
-Mailgun и т. п.), иначе письма попадут в спам. В логах фиксируются только
+должны быть SPF, DKIM и DMARC, выданные провайдером (Yandex Cloud Postbox,
+Unisender Go и т. п.), иначе письма попадут в спам. Зарубежный сервис получает
+адреса пользователей — это трансграничная передача по 152-ФЗ со своим
+уведомлением, поэтому предпочтителен российский. В логах фиксируются только
 `userId` и коды событий — без адресов и ссылок.
+
+Полный порядок запуска по шагам — в [`docs/launch-checklist.md`](docs/launch-checklist.md).
 
 Перед включением регистрации (152-ФЗ):
 

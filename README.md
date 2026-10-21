@@ -125,4 +125,5 @@ Legacy Deals удалён из runtime и схемы прямой миграци
 
 Перед включением аккаунтов в production нужны: домен с HTTPS, SMTP-провайдер
 с SPF/DKIM/DMARC, сервер и резервные копии в РФ, уведомление РКН и
-проверенные юристом тексты `/privacy` и `/consent` (см. `DEPLOY.md`).
+проверенные юристом тексты `/privacy` и `/consent` — по шагам в
+[`docs/launch-checklist.md`](docs/launch-checklist.md), технически в `DEPLOY.md`.
