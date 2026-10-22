@@ -9,6 +9,7 @@ import {
     parseProdStatus,
 } from "./prod.js";
 import { DailySchedule, formatReport, Stats } from "./report.js";
+import { everyAligned } from "./schedule.js";
 import { Outbox, Telegram } from "./telegram.js";
 
 const config = loadConfig();
@@ -82,19 +83,6 @@ async function heartbeat() {
     }
 }
 
-// Runs a task, then waits the full interval before the next run, so slow checks never overlap.
-function every(intervalMs, name, task) {
-    const tick = async () => {
-        try {
-            await task();
-        } catch (error) {
-            console.error(`${name} failed: ${error.stack ?? error}`);
-        }
-        setTimeout(tick, intervalMs);
-    };
-    return tick();
-}
-
 const HELP = [
     "Мониторинг StyleFinder.",
     "/status — проверить всё сейчас и показать сводку",
@@ -108,7 +96,7 @@ async function handleCommands() {
         if (String(message.chat.id) !== config.chatId) continue;
         const command = message.text?.split(/[\s@]/)[0];
         if (command === "/status") {
-            await Promise.all([runHttp(), config.prod ? runProd() : null]);
+            await Promise.all([runHttp(), runTls(), config.prod ? runProd() : null]);
             outbox.push(alerts.summary());
         } else if (command === "/report") {
             outbox.push(formatReport(stats, alerts, config.timeZone));
@@ -122,12 +110,12 @@ process.on("SIGTERM", () => process.exit(0));
 process.on("SIGINT", () => process.exit(0));
 
 outbox.push("🟢 Мониторинг StyleFinder запущен. /status — сводка.");
-every(config.checkIntervalMs, "http", async () => {
+everyAligned(config.checkIntervalMs, "http", async () => {
     await runHttp();
     sendDailyReport();
     await outbox.flush();
     await heartbeat();
 });
-every(config.tls.intervalMs, "tls", runTls);
-if (config.prod) every(config.prod.intervalMs, "prod", runProd);
+everyAligned(config.tls.intervalMs, "tls", runTls);
+if (config.prod) everyAligned(config.prod.intervalMs, "prod", runProd);
 handleCommands();

@@ -50,7 +50,7 @@ export function loadConfig(env = process.env) {
         tls: {
             hosts: targets.tls ?? [],
             warnDays: number(env, "TLS_WARN_DAYS", 14),
-            intervalMs: number(env, "TLS_INTERVAL_HOURS", 6) * 3600_000,
+            intervalMs: number(env, "TLS_INTERVAL_SECONDS", 300) * 1000,
         },
         // Server internals over SSH with a key that can run only the status script.
         prod: prodTarget
