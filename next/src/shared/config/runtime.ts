@@ -28,3 +28,11 @@ export const isAuthRegistrationEnabled =
 export const authUiMode = resolveAuthUiMode(isAuthEnabled, isAuthRegistrationEnabled);
 
 export const isBetaBadgeEnabled = readPublicFlag(process.env.NEXT_PUBLIC_BETA_BADGE_ENABLED, true);
+
+export const readCounterId = (value: string | undefined): number | null => {
+    const trimmed = value?.trim();
+    return trimmed && /^\d+$/.test(trimmed) ? Number(trimmed) : null;
+};
+
+/** Yandex Metrika counter. Unset keeps analytics and its cookie banner off (dev, CI, e2e). */
+export const yandexMetrikaCounterId = readCounterId(process.env.NEXT_PUBLIC_YM_COUNTER_ID);

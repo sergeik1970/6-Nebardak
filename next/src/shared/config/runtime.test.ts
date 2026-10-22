@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readPublicFlag, resolveAuthUiMode } from "./runtime";
+import { readCounterId, readPublicFlag, resolveAuthUiMode } from "./runtime";
 
 describe("public runtime flags", () => {
     it("parses explicit public boolean values and uses the fallback only when absent", () => {
@@ -14,5 +14,13 @@ describe("public runtime flags", () => {
         expect(resolveAuthUiMode(false, true)).toBe("off");
         expect(resolveAuthUiMode(true, false)).toBe("login");
         expect(resolveAuthUiMode(true, true)).toBe("login-registration");
+    });
+
+    it("accepts only a numeric analytics counter id", () => {
+        expect(readCounterId(undefined)).toBeNull();
+        expect(readCounterId(" ")).toBeNull();
+        expect(readCounterId("113737739")).toBe(113737739);
+        expect(readCounterId("abc")).toBeNull();
+        expect(readCounterId("1e5")).toBeNull();
     });
 });

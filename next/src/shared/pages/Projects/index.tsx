@@ -10,6 +10,7 @@ import Footer from "@/shared/components/Footer";
 import InputText from "@/shared/components/InputText";
 import Navigation from "@/shared/components/Navigation";
 import { isAuthEnabled } from "@/shared/config/runtime";
+import { trackGoal } from "@/shared/lib/analytics";
 import { summarizeProjectDocument } from "@/shared/lib/project-scope/document";
 import { withProjectParam } from "@/shared/lib/project-scope/storage";
 import { importGuestDraft, readGuestDocument } from "@/shared/lib/project-sync/guest-import";
@@ -227,6 +228,7 @@ const ProjectList: React.FC = () => {
                 document,
                 summary: summarizeProjectDocument(document),
             });
+            trackGoal("project_created");
             await router.push(withProjectParam("/test", project.id));
         } catch (caught) {
             setActionError(errorText(caught, "Не удалось создать проект"));

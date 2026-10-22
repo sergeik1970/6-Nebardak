@@ -100,6 +100,8 @@ services:
                 NEXT_PUBLIC_AUTH_ENABLED: "${NEXT_PUBLIC_AUTH_ENABLED:-false}"
                 NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED: "${NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED:-false}"
                 NEXT_PUBLIC_BETA_BADGE_ENABLED: "${NEXT_PUBLIC_BETA_BADGE_ENABLED:-true}"
+                # stylefinder.online counter; set it empty to build without analytics.
+                NEXT_PUBLIC_YM_COUNTER_ID: "${NEXT_PUBLIC_YM_COUNTER_ID-113737739}"
         environment:
             NODE_ENV: production
         expose:

@@ -113,7 +113,13 @@ NEXT_PUBLIC_API_URL=/api
 NEXT_PUBLIC_AUTH_ENABLED=false
 NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED=false
 NEXT_PUBLIC_BETA_BADGE_ENABLED=true
+NEXT_PUBLIC_YM_COUNTER_ID=113737739
 ```
+
+`NEXT_PUBLIC_YM_COUNTER_ID` — счётчик Яндекс Метрики. Без переменной compose
+подставляет счётчик stylefinder.online; пустое значение собирает сайт без
+аналитики и без cookie-баннера. Метрика загружается только после согласия
+посетителя, а её домены разрешены в CSP (`infra/Caddyfile`).
 
 `NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED` действует только вместе с
 `NEXT_PUBLIC_AUTH_ENABLED`. Для login-only режима включите первый auth-флаг и

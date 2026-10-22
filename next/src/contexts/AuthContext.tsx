@@ -10,6 +10,7 @@ import React, {
 import { User, RegisterData, LoginData } from "../types/auth";
 import { authService } from "../services/authService";
 import { isAuthEnabled, isAuthRegistrationEnabled } from "@/shared/config/runtime";
+import { trackGoal } from "@/shared/lib/analytics";
 
 /**
  * Loaded on demand: the sync engine pulls in the planner's domain code, which
@@ -99,6 +100,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             const response = await authService.login(data);
             commitUser(response.user);
             setLastAuthEvent({ kind: "login", at: Date.now() });
+            trackGoal("login");
             // A save paused by an expired session can continue now.
             void loadProjectSync().then((sync) => sync.getCurrentProjectSync()?.resume());
         },
@@ -114,6 +116,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             const response = await authService.register(data);
             commitUser(response.user);
             setLastAuthEvent({ kind: "register", at: Date.now() });
+            trackGoal("signup");
         },
         [commitUser],
     );
