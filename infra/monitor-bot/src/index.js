@@ -1,19 +1,34 @@
 import { AlertState } from "./alerts.js";
 import { checkHttp, checkTls } from "./checks.js";
 import { loadConfig } from "./config.js";
-import { evaluateProd, fetchProdStatus, parseProdStatus } from "./prod.js";
+import {
+    detectRestarts,
+    evaluateProd,
+    fetchProdStatus,
+    formatRestarts,
+    parseProdStatus,
+} from "./prod.js";
+import { DailySchedule, formatReport, Stats } from "./report.js";
 import { Outbox, Telegram } from "./telegram.js";
 
 const config = loadConfig();
 const telegram = new Telegram(config.telegramToken);
 const outbox = new Outbox((text) => telegram.send(config.chatId, text));
 const alerts = new AlertState({ reminderMs: config.reminderMs, timeZone: config.timeZone });
+const stats = new Stats();
+const daily = config.dailyReportTime
+    ? new DailySchedule(config.dailyReportTime, config.timeZone)
+    : null;
+let lastContainers = new Map();
 
 async function runHttp() {
     const results = await Promise.all(
-        config.http.map((target) => checkHttp(target, config.requestTimeoutMs)),
+        config.http.map((target) =>
+            checkHttp(target, config.requestTimeoutMs, config.slowResponseMs),
+        ),
     );
     config.http.forEach((target, index) => {
+        stats.recordHttp(`http:${target.url}`, target.name, results[index]);
         outbox.push(
             alerts.record(
                 `http:${target.url}`,
@@ -42,9 +57,20 @@ async function runProd() {
         return;
     }
     outbox.push(alerts.record("prod:ssh", "Сервер (SSH)", { ok: true, detail: "отвечает" }, 1));
+    const restarts = detectRestarts(lastContainers, status.containers, config.prod.services);
+    lastContainers = status.containers;
+    stats.recordRestarts(restarts);
+    outbox.push(formatRestarts(restarts));
     for (const { key, label, ...result } of evaluateProd(status, config.prod)) {
         outbox.push(alerts.record(key, label, result, config.failureThreshold));
     }
+}
+
+function sendDailyReport() {
+    if (!daily?.due()) return;
+    outbox.push(formatReport(stats, alerts, config.timeZone));
+    alerts.incidents = [];
+    stats.reset();
 }
 
 async function heartbeat() {
@@ -72,6 +98,7 @@ function every(intervalMs, name, task) {
 const HELP = [
     "Мониторинг StyleFinder.",
     "/status — проверить всё сейчас и показать сводку",
+    "/report — сводка за период с последнего отчёта",
     "/help — эта справка",
 ].join("\n");
 
@@ -83,6 +110,8 @@ async function handleCommands() {
         if (command === "/status") {
             await Promise.all([runHttp(), config.prod ? runProd() : null]);
             outbox.push(alerts.summary());
+        } else if (command === "/report") {
+            outbox.push(formatReport(stats, alerts, config.timeZone));
         } else if (command === "/help" || command === "/start") {
             outbox.push(HELP);
         }
@@ -95,6 +124,7 @@ process.on("SIGINT", () => process.exit(0));
 outbox.push("🟢 Мониторинг StyleFinder запущен. /status — сводка.");
 every(config.checkIntervalMs, "http", async () => {
     await runHttp();
+    sendDailyReport();
     await outbox.flush();
     await heartbeat();
 });

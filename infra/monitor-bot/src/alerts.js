@@ -7,6 +7,7 @@ export class AlertState {
         this.reminderMs = reminderMs;
         this.timeZone = timeZone;
         this.checks = new Map();
+        this.incidents = [];
     }
 
     record(key, label, result, threshold, now = Date.now()) {
@@ -26,6 +27,7 @@ export class AlertState {
         if (check.failures === 1) check.failingSince = now;
         if (!check.down && check.failures >= threshold) {
             Object.assign(check, { down: true, alertedAt: now });
+            this.incidents.push({ label, at: now });
             return `🔴 ${label}: ${result.detail}`;
         }
         if (check.down && now - check.alertedAt >= this.reminderMs) {

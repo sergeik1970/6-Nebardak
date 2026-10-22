@@ -6,25 +6,40 @@ export function describeError(error, timeoutMs) {
     return code ? String(code) : String(error?.message ?? error);
 }
 
-export async function checkHttp(target, timeoutMs, fetchImpl = fetch) {
+// `reachable` means the right answer came back, however slowly; `ok` also requires speed.
+export async function checkHttp(target, timeoutMs, slowMs, fetchImpl = fetch) {
     const started = performance.now();
     try {
         const response = await fetchImpl(target.url, {
             headers: { "user-agent": "stylefinder-monitor" },
             signal: AbortSignal.timeout(timeoutMs),
         });
+        const body = await response.text();
         const ms = Math.round(performance.now() - started);
         const expected = target.status ?? 200;
-        const body = await response.text();
         if (response.status !== expected) {
-            return { ok: false, detail: `HTTP ${response.status}, ожидался ${expected}` };
+            return {
+                ok: false,
+                reachable: false,
+                ms,
+                detail: `HTTP ${response.status}, ожидался ${expected}`,
+            };
         }
         if (target.contains && !body.includes(target.contains)) {
-            return { ok: false, detail: `в ответе нет «${target.contains}»` };
+            return { ok: false, reachable: false, ms, detail: `в ответе нет «${target.contains}»` };
         }
-        return { ok: true, detail: `HTTP ${response.status}, ${ms} мс` };
+        const limit = target.slowMs ?? slowMs;
+        if (ms > limit) {
+            return {
+                ok: false,
+                reachable: true,
+                ms,
+                detail: `медленный ответ: ${ms} мс (порог ${limit} мс)`,
+            };
+        }
+        return { ok: true, reachable: true, ms, detail: `HTTP ${response.status}, ${ms} мс` };
     } catch (error) {
-        return { ok: false, detail: describeError(error, timeoutMs) };
+        return { ok: false, reachable: false, ms: null, detail: describeError(error, timeoutMs) };
     }
 }
 

@@ -39,10 +39,15 @@ export function parseProdStatus(text) {
         } else if (kind === "memory_available") {
             status.memoryAvailable = Number(fields[0]);
         } else if (kind === "container") {
-            const [service, state, health] = fields;
+            const [service, state, health, restartCount, startedAt] = fields;
             // A finished one-off container must not hide the running one of the same service.
             if (status.containers.get(service)?.state !== "running") {
-                status.containers.set(service, { state, health });
+                status.containers.set(service, {
+                    state,
+                    health,
+                    restartCount: restartCount === undefined ? null : Number(restartCount),
+                    startedAt: startedAt ?? null,
+                });
             }
         } else if (kind === "backup_last_success") {
             status.backup.lastSuccess = Number(fields[0]) * 1000;
@@ -52,6 +57,33 @@ export function parseProdStatus(text) {
         }
     }
     return status;
+}
+
+// Compares container start times between polls. Docker's RestartCount grows when it
+// revives a crashed container; a recreated container (deploy) starts again from zero.
+export function detectRestarts(previous, containers, services) {
+    const events = [];
+    for (const service of services) {
+        const current = containers.get(service);
+        const before = previous.get(service);
+        if (!current) continue;
+        if (!before?.startedAt || !current.startedAt || before.startedAt === current.startedAt) {
+            continue;
+        }
+        const crashes = current.restartCount - before.restartCount;
+        events.push(
+            crashes > 0
+                ? { service, crashes, detail: `упал, Docker перезапустил ×${crashes}` }
+                : { service, crashes: 0, detail: "запущен заново (деплой или ручной перезапуск)" },
+        );
+    }
+    return events;
+}
+
+export function formatRestarts(events) {
+    if (events.length === 0) return null;
+    const lines = events.map(({ service, detail }) => `• ${service}: ${detail}`);
+    return ["🔄 Перезапуски контейнеров:", ...lines].join("\n");
 }
 
 export function evaluateProd(status, prod, now = Date.now()) {
