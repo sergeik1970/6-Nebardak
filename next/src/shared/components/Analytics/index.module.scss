@@ -1,0 +1,91 @@
+.banner {
+    position: fixed;
+    right: var(--sf-space-5);
+    bottom: var(--sf-space-5);
+    // Above the sticky navigation, below the auth modal.
+    z-index: 1050;
+    display: grid;
+    gap: var(--sf-space-3);
+    width: min(380px, calc(100vw - 2 * var(--sf-space-5)));
+    padding: var(--sf-space-4);
+    border: 1px solid var(--sf-color-line);
+    border-radius: var(--sf-radius-lg);
+    background: var(--sf-color-surface);
+    box-shadow: var(--sf-shadow-md);
+    color: var(--sf-color-ink);
+}
+
+.text {
+    font-size: 14px;
+    line-height: 1.5;
+
+    a {
+        color: var(--sf-color-brand-hover);
+        font-weight: 600;
+    }
+}
+
+.actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sf-space-2);
+}
+
+.action {
+    min-height: var(--sf-control-height);
+    padding: 8px 14px;
+    border: 1px solid var(--sf-color-line-strong);
+    border-radius: var(--sf-radius-md);
+    background: var(--sf-color-surface);
+    color: var(--sf-color-ink);
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+        background-color 160ms ease,
+        border-color 160ms ease;
+
+    &:hover {
+        border-color: var(--sf-color-ink);
+        background: var(--sf-color-surface-strong);
+    }
+}
+
+.accept {
+    border-color: var(--sf-color-brand);
+    background: var(--sf-color-brand);
+    color: #fff;
+
+    &:hover {
+        border-color: var(--sf-color-brand-hover);
+        background: var(--sf-color-brand-hover);
+    }
+}
+
+@media (max-width: 599px) {
+    .banner {
+        right: 0;
+        bottom: 0;
+        left: 0;
+        width: auto;
+        padding: var(--sf-space-4) var(--sf-space-4)
+            calc(var(--sf-space-4) + env(safe-area-inset-bottom, 0px));
+        border-width: 1px 0 0;
+        border-radius: var(--sf-radius-lg) var(--sf-radius-lg) 0 0;
+    }
+}
+
+@media print {
+    .banner {
+        display: none;
+    }
+}
+
+.choice button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--sf-color-brand-hover);
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+}

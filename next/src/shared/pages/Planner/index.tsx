@@ -104,6 +104,7 @@ import type {
     SolverWorkerRequest,
     SolverWorkerResponse,
 } from "@/shared/lib/furniture-planner/solver.worker";
+import { trackGoal } from "@/shared/lib/analytics";
 import {
     buildPlannerSelectionSignature as selectionSignature,
     canApplyAutomaticRemovalProposal,
@@ -3264,6 +3265,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
             link.remove();
             window.setTimeout(() => URL.revokeObjectURL(url), 0);
             setExportStatus("PNG сохранён.");
+            trackGoal("plan_png_export", { items: resultSpecification.items.length });
         } catch (error) {
             setExportStatus(
                 error instanceof Error
@@ -3279,6 +3281,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
             return;
         }
         setExportStatus("Открываем системный диалог печати…");
+        trackGoal("plan_print");
         window.print();
     }, [resultSpecification]);
 
@@ -4536,6 +4539,11 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                             );
                             setPhase("result");
                             void persistGeneratedObservations(observationRequests);
+                            trackGoal("layout_generated", {
+                                outcome: "partial",
+                                items: instances.length,
+                                placed: fallbackResult.placements.length,
+                            });
                             return;
                         }
                     }
@@ -4555,6 +4563,7 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                 setSelectedInstanceId(null);
                 setGeneratedSignature(currentSignature);
                 setPhase("result");
+                trackGoal("layout_failed", { reason: result.reason, items: instances.length });
                 return;
             }
 
@@ -4599,10 +4608,16 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
             );
             setPhase("result");
             void persistGeneratedObservations(observationRequests);
+            trackGoal("layout_generated", {
+                outcome: "full",
+                items: instances.length,
+                variants: result.variants.length,
+            });
         } catch (error) {
             if (error instanceof Error && error.message === SOLVER_CANCELLED) return;
             setResultNotice(SOLVER_ERROR_NOTICE);
             setPhase("result");
+            trackGoal("layout_failed", { reason: "error", items: instances.length });
         }
     }, [
         currentSignature,

@@ -4,6 +4,7 @@ import {
     serializeDrawingProject,
     type DrawingProjectScene,
 } from "./project-file";
+import { trackGoal } from "@/shared/lib/analytics";
 import styles from "./project-tools.module.scss";
 
 export type DrawingLayers = {
@@ -71,6 +72,7 @@ export default function ProjectTools({
         link.click();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
         setMessage("Файл чертежа подготовлен для скачивания.");
+        trackGoal("drawing_file_save");
     };
     return (
         <div className={styles.bar} ref={toolbar}>

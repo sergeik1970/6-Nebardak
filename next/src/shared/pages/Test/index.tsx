@@ -3,6 +3,7 @@ import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Footer from "@/shared/components/Footer";
 import Navigation from "@/shared/components/Navigation";
+import { trackGoal } from "@/shared/lib/analytics";
 import {
     clearProjectDraftVisualTest,
     readProjectDraft,
@@ -188,6 +189,7 @@ const Test: React.FC = () => {
     const projectId = useProjectId();
     const [session, setSession] = useState<VisualTestSession | null>(null);
     const preloadedUrls = useRef(new Set<string>());
+    const previousSession = useRef<VisualTestSession | null>(null);
 
     useEffect(() => {
         const project = readProjectDraft();
@@ -202,6 +204,16 @@ const Test: React.FC = () => {
 
     useEffect(() => {
         if (!session) return;
+
+        // Compared with the previous state so a restored session never counts again.
+        const previous = previousSession.current;
+        previousSession.current = session;
+        if (previous && previous.answers.length === 0 && session.answers.length > 0) {
+            trackGoal("test_start");
+        }
+        if (previous && previous.phase !== "results" && session.phase === "results") {
+            trackGoal("test_complete", { style: session.result?.primaryKey ?? "unknown" });
+        }
 
         const result = updateProjectDraftVisualTest(session);
         if (result.status === "success") {

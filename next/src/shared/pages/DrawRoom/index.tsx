@@ -62,6 +62,7 @@ import { RECT_TEMPLATE_LIMITS, createRectTemplateRoom, roomToDrawingScene } from
 
 import ProjectTools, { DEFAULT_DRAWING_LAYERS } from "./ProjectTools";
 import { useProjectHref } from "@/shared/lib/project-scope/ProjectScope";
+import { trackGoal } from "@/shared/lib/analytics";
 
 type Tool = "select" | "wall" | "door" | "window";
 type ToolGroup = "walls" | "openings" | "furniture";
@@ -6479,6 +6480,12 @@ const DrawRoom: React.FC = () => {
             );
             return;
         }
+        trackGoal("room_drawn", {
+            shape: plannerRoom.geometry?.kind ?? "rect",
+            doors: plannerRoom.doors.length,
+            windows: plannerRoom.windows.length,
+            furniture: furnitureHandoff.placements.length,
+        });
         // A questionnaire hand-off passes through this step to the layout.
         const questionnaireHandoff = isQuestionnairePlannerHandoffId(router.query.handoff)
             ? `&handoff=${router.query.handoff}`

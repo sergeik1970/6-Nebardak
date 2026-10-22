@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import Footer from "@/shared/components/Footer";
 import Navigation from "@/shared/components/Navigation";
+import { trackGoal } from "@/shared/lib/analytics";
 import {
     FURNITURE_CATALOG,
     FurniturePriority,
@@ -359,6 +360,12 @@ const Questionnaire: React.FC = () => {
             setIsSubmitting(false);
             return;
         }
+
+        trackGoal("questionnaire_complete", {
+            items: selectedFurniture.length,
+            hasRoom,
+            hasStyle: Boolean(styleKey),
+        });
 
         try {
             const navigated = await router.push({
