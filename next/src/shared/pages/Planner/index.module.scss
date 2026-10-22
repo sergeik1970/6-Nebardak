@@ -44,7 +44,7 @@
     display: block;
     margin-bottom: 3px;
     color: #f2ad74;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 750;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -150,8 +150,8 @@
     max-width: 185px;
     align-items: center;
     gap: 6px;
-    color: #afbdd0;
-    font-size: 11px;
+    color: #c3cede;
+    font-size: 12px;
     line-height: 1.2;
 }
 
@@ -179,7 +179,7 @@
     padding: 7px 9px;
     color: #eaf2ff;
     background: #28364a;
-    font: 750 11px/1.1 var(--font-primary);
+    font: 750 12px/1.1 var(--font-primary);
     text-decoration: none;
     cursor: pointer;
     transition:
@@ -199,7 +199,7 @@
 }
 
 .appBarHistory button:disabled {
-    color: #7d8ca0;
+    color: #9aa8bb;
     cursor: not-allowed;
 }
 
@@ -364,19 +364,12 @@
     padding: 7px 3px;
     color: #536276;
     background: transparent;
-    font: 750 10px/1.15 var(--font-primary);
+    font: 750 11px/1.15 var(--font-primary);
     cursor: pointer;
     transition:
         background-color 140ms ease,
         border-color 140ms ease,
         color 140ms ease;
-}
-
-.toolRail button > span {
-    color: #5c6779;
-    font-size: 9px;
-    font-weight: 850;
-    letter-spacing: 0.08em;
 }
 
 .toolRail button:hover,
@@ -388,10 +381,6 @@
 
 .toolRail button[aria-pressed="true"] {
     box-shadow: inset 3px 0 0 var(--brand);
-}
-
-.toolRail button[aria-pressed="true"] > span {
-    color: var(--brand-dark);
 }
 
 .setupPanel,
@@ -4136,7 +4125,7 @@
     }
 
     .workspace {
-        grid-template-columns: 58px clamp(260px, 18vw, 310px) minmax(400px, 1fr) clamp(
+        grid-template-columns: 76px clamp(260px, 18vw, 310px) minmax(400px, 1fr) clamp(
                 300px,
                 20vw,
                 340px
@@ -4233,7 +4222,7 @@
         border-color: #8ca8db;
         color: var(--brand-dark);
         background: #f1f6ff;
-        font-size: 10px;
+        font-size: 11px;
     }
 
     .planToolbar {
@@ -4256,7 +4245,7 @@
         min-height: 36px;
         padding: 0 9px;
         border-color: #cbd5e1;
-        font-size: 11px;
+        font-size: 12px;
     }
 
     .variantBar {
@@ -4286,7 +4275,7 @@
         min-height: 36px;
         border-color: #b8c4d3;
         background: #fff;
-        font-size: 11px;
+        font-size: 12px;
     }
 
     .planPanViewport {
@@ -4334,7 +4323,7 @@
         padding: 7px 9px;
         border-top: 1px solid rgba(151, 166, 186, 0.35);
         color: #556579;
-        font-size: 11px;
+        font-size: 12px;
     }
 
     .primaryActionRow {
@@ -4453,6 +4442,7 @@
         border: 0;
         border-right: 1px solid var(--line);
         padding: 7px 9px;
+        font-size: 13px;
     }
 
     .toolRail button:last-child {
@@ -4755,20 +4745,20 @@
 
     .plannerHeader p {
         max-width: 280px;
-        font-size: 11px;
+        font-size: 12px;
     }
 
     .headerMetrics {
         grid-column: 2;
-        grid-row: 1 / span 2;
-        align-self: stretch;
+        grid-row: 1;
+        align-self: start;
     }
 
     .areaMetric,
     .statusMetric {
         min-width: 0;
         padding: 8px 9px;
-        font-size: 10px;
+        font-size: 11px;
     }
 
     .areaMetric strong {
@@ -4793,6 +4783,12 @@
     .appBarNewProject {
         min-height: 44px;
         padding-inline: 10px;
+    }
+
+    // The labels are visually hidden here, so the arrows carry the meaning.
+    .appBarHistory button {
+        min-width: 48px;
+        font-size: 20px;
     }
 
     .appBarHistory button span {
@@ -4823,6 +4819,87 @@
 
     .unplacedControl {
         grid-row: 4;
+    }
+}
+
+/* Phones and tablets stack the panels in task order (plan, lab, room,
+ * furniture, inspector), so the desktop column numbers would read 03, 05,
+ * 01, 02, 04. Drop them there; the headings already name each panel. */
+@media (max-width: 1059px) {
+    .panelHeading > span,
+    .toolbarStep,
+    .designLabNumber {
+        display: none;
+    }
+
+    .designLabHeader {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .projectStatus {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .projectStatus button {
+        width: auto;
+    }
+
+    // Photo beside the name instead of above it keeps each row short.
+    .catalogItemLabel:has(> span:first-child) {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr);
+        align-items: center;
+        column-gap: 12px;
+    }
+
+    .catalogItemLabel > span:first-child {
+        grid-row: 1 / span 2;
+    }
+
+    .catalogRow small {
+        white-space: normal;
+    }
+
+    .catalogSearch,
+    .catalogFilters button,
+    .roomSummary small {
+        font-size: 12px;
+    }
+
+    // The checkbox already adds one item; the counter matters once chosen.
+    .catalogRow:not(.selectedCatalogRow) {
+        grid-template-rows: auto;
+        row-gap: 0;
+        min-height: 0;
+    }
+
+    .catalogRow:not(.selectedCatalogRow) .counter {
+        display: none;
+    }
+}
+
+/* The side panels scroll inside a fixed-height row; fade their lower edge so
+ * a cut-off control reads as "more below" rather than as broken layout. */
+@media (min-width: 1060px) {
+    .setupPanel,
+    .inspector {
+        padding-bottom: 0;
+    }
+
+    // Takes over the bottom padding: at the end of the scroll it sits below
+    // the content; mid-scroll it sticks to the panel's lower edge.
+    .setupPanel::after,
+    .inspector::after {
+        content: "";
+        position: sticky;
+        z-index: 6; // above the sticky catalogue search
+        bottom: 0;
+        display: block;
+        height: 36px;
+        margin: 0 -18px;
+        background: linear-gradient(rgb(251 252 254 / 0), #fbfcfe 85%);
+        pointer-events: none;
     }
 }
 
