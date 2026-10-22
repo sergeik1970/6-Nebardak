@@ -5793,7 +5793,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                             aria-controls="planner-tool-room"
                             onClick={() => activateWorkspaceTool("room")}
                         >
-                            <span aria-hidden="true">01</span>
                             Комната
                         </button>
                         <button
@@ -5802,7 +5801,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                             aria-controls="planner-tool-furniture"
                             onClick={() => activateWorkspaceTool("furniture")}
                         >
-                            <span aria-hidden="true">02</span>
                             Мебель
                         </button>
                         <button
@@ -5811,7 +5809,6 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
                             aria-controls="planner-tool-inspection"
                             onClick={() => activateWorkspaceTool("inspection")}
                         >
-                            <span aria-hidden="true">03</span>
                             Проверка
                         </button>
                     </nav>
