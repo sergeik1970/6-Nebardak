@@ -132,6 +132,21 @@ jobs:
         continue-on-error: true
         run: npm audit --audit-level=high
 
+  monitor-bot:
+    name: Monitor bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: infra/monitor-bot
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+      # No dependencies to install: the bot uses only Node built-ins.
+      - run: npm test
+
   whitespace:
     name: Whitespace gate
     runs-on: ubuntu-latest

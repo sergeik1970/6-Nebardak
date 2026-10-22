@@ -77,4 +77,6 @@ if [ "$(date -u +%d)" = 01 ]; then s3_put "$ENCRYPTED" "monthly/$NAME"; fi
 
 SIZE=$(wc -c <"$ENCRYPTED" | tr -d ' ')
 echo "uploaded $NAME ($SIZE bytes)"
+# Read by the monitor bot's status script (infra/monitor-bot/prod/stylefinder-status).
+echo "$(date -u +%s) $NAME" >"$WORK_DIR/last-success"
 ping_healthcheck "" "uploaded $NAME ($SIZE bytes)"
