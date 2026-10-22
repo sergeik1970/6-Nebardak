@@ -7,6 +7,19 @@ export function formatDuration(ms) {
     return `${Math.floor(hours / 24)} д ${hours % 24} ч`;
 }
 
+// Second precision for recent events: "4 мин 05 с".
+export function formatAge(ms) {
+    const seconds = Math.max(0, Math.floor(ms / 1000));
+    if (seconds >= 3600) return formatDuration(ms);
+    const minutes = Math.floor(seconds / 60);
+    if (minutes === 0) return `${seconds} с`;
+    return `${minutes} мин ${String(seconds % 60).padStart(2, "0")} с`;
+}
+
+export function formatClock(ms, timeZone) {
+    return new Date(ms).toLocaleTimeString("ru-RU", { timeZone, hour12: false });
+}
+
 export function formatTime(ms, timeZone) {
     return new Date(ms).toLocaleString("ru-RU", {
         timeZone,

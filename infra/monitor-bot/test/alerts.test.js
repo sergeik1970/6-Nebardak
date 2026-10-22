@@ -52,5 +52,13 @@ test("summary marks healthy, failing and alerted checks", () => {
     assert.match(summary, /^✅ A: HTTP 200/m);
     assert.match(summary, /^🟡 B: HTTP 502/m);
     assert.match(summary, /^🔴 C: HTTP 502/m);
-    assert.match(summary, /Самая старая проверка: 1 мин назад/);
+    assert.match(summary, /Самая старая проверка: 1 мин 00 с назад, в 00:00:00/);
+});
+
+test("summary reports the age of the oldest check to the second", () => {
+    const alerts = state();
+    alerts.record("a", "A", up, 2, 0);
+    alerts.record("b", "B", up, 2, 4 * MINUTE);
+    assert.match(alerts.summary(4 * MINUTE + 5_000), /Самая старая проверка: 4 мин 05 с назад/);
+    assert.match(alerts.summary(42_000), /Самая старая проверка: 42 с назад/);
 });

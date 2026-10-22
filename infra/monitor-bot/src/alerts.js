@@ -1,4 +1,4 @@
-import { formatDuration, formatTime } from "./format.js";
+import { formatAge, formatClock, formatDuration, formatTime } from "./format.js";
 
 // Turns a stream of check results into messages: one when a check goes down after
 // `threshold` failures in a row, a reminder while it stays down, one on recovery.
@@ -46,7 +46,10 @@ export class AlertState {
             lines.push(`${icon} ${check.label}: ${check.detail}${since}`);
         }
         const oldest = Math.min(...[...this.checks.values()].map((check) => check.checkedAt));
-        lines.push("", `Самая старая проверка: ${formatDuration(now - oldest)} назад`);
+        lines.push(
+            "",
+            `Самая старая проверка: ${formatAge(now - oldest)} назад, в ${formatClock(oldest, this.timeZone)}`,
+        );
         return lines.join("\n");
     }
 }
