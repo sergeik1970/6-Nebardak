@@ -17,7 +17,7 @@ awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2} END {print "memory_available " 
 
 docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" |
     xargs -r docker inspect --format \
-        'container {{index .Config.Labels "com.docker.compose.service"}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
+        'container {{index .Config.Labels "com.docker.compose.service"}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} {{.RestartCount}} {{.State.StartedAt}}'
 
 if [ -r "$BACKUP_STAMP" ]; then echo "backup_last_success $(head -n 1 "$BACKUP_STAMP")"; fi
 echo "backup_last_result $(systemctl show -p Result --value stylefinder-backup.service)"

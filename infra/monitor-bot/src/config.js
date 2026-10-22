@@ -23,6 +23,15 @@ function list(env, name, fallback) {
         .filter(Boolean);
 }
 
+// HH:MM in DISPLAY_TIMEZONE; "off" disables the daily report.
+function dailyTime(env) {
+    const raw = env.DAILY_REPORT_TIME?.trim() || "09:00";
+    if (raw === "off") return null;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw))
+        throw new Error("DAILY_REPORT_TIME must be HH:MM or off");
+    return raw;
+}
+
 export function loadConfig(env = process.env) {
     const targets = JSON.parse(readFileSync(env.TARGETS_FILE || "/config/targets.json", "utf8"));
     const prodTarget = env.PROD_SSH_TARGET?.trim();
@@ -34,6 +43,8 @@ export function loadConfig(env = process.env) {
         checkIntervalMs: number(env, "CHECK_INTERVAL_SECONDS", 60) * 1000,
         requestTimeoutMs: number(env, "REQUEST_TIMEOUT_SECONDS", 10) * 1000,
         failureThreshold: number(env, "FAILURE_THRESHOLD", 2),
+        slowResponseMs: number(env, "SLOW_RESPONSE_MS", 3000),
+        dailyReportTime: dailyTime(env),
         reminderMs: number(env, "REMINDER_HOURS", 6) * 3600_000,
         http: targets.http ?? [],
         tls: {
