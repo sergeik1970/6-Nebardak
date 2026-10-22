@@ -474,6 +474,9 @@ npm run assets:rights:release
 - ежемесячный restore drill: проверка `stylefinder-restore-drill`;
 - сбор ошибок браузера и API без паролей и токенов.
 
+Те же проверки и состояние контейнеров выполняет Telegram-бот на отдельном
+сервере: `infra/monitor-bot/README.md`.
+
 Оповещения UptimeRobot и Healthchecks.io направьте на почту или в Telegram
 владельца. Эти сервисы получают только адреса проверок и тексты сигналов, без
 персональных данных пользователей.

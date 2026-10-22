@@ -1,0 +1,12 @@
+{
+    "http": [
+        { "name": "Сайт", "url": "https://stylefinder.online/" },
+        { "name": "API live", "url": "https://stylefinder.online/api/health/live" },
+        {
+            "name": "API ready (БД)",
+            "url": "https://stylefinder.online/api/health/ready",
+            "contains": "\"ok\""
+        }
+    ],
+    "tls": ["stylefinder.online", "www.stylefinder.online"]
+}

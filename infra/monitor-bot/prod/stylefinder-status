@@ -1,0 +1,23 @@
+#!/bin/bash
+# Read-only status for the external monitor bot (infra/monitor-bot/README.md).
+# The bot's SSH key is forced to `sudo -n /usr/local/bin/stylefinder-status`, and
+# a single sudoers rule lets its user run exactly this file. Output is one fact
+# per line, parsed by src/prod.js.
+set -euo pipefail
+
+PROJECT=stylefinder
+BACKUP_STAMP=/var/lib/stylefinder-backup/last-success
+
+for mount in / /var/lib/docker; do
+    [ -d "$mount" ] || continue
+    echo "disk $mount $(df --output=pcent "$mount" | tail -n 1 | tr -dc '0-9')"
+done
+
+awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2} END {print "memory_available " int(a * 100 / t)}' /proc/meminfo
+
+docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" |
+    xargs -r docker inspect --format \
+        'container {{index .Config.Labels "com.docker.compose.service"}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
+
+if [ -r "$BACKUP_STAMP" ]; then echo "backup_last_success $(head -n 1 "$BACKUP_STAMP")"; fi
+echo "backup_last_result $(systemctl show -p Result --value stylefinder-backup.service)"

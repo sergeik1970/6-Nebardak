@@ -1,0 +1,25 @@
+name: stylefinder-monitor
+
+services:
+    monitor:
+        build: .
+        image: stylefinder-monitor:local
+        restart: unless-stopped
+        env_file: .env
+        read_only: true
+        tmpfs:
+            - /tmp
+        cap_drop:
+            - ALL
+        security_opt:
+            - no-new-privileges:true
+        mem_limit: 128m
+        pids_limit: 64
+        volumes:
+            # targets.json, prod_ssh_key (owner 1000, mode 600) and known_hosts.
+            - ./config:/config:ro
+        logging:
+            driver: json-file
+            options:
+                max-size: 5m
+                max-file: "3"

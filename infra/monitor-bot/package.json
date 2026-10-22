@@ -1,0 +1,14 @@
+{
+    "name": "stylefinder-monitor",
+    "version": "1.0.0",
+    "private": true,
+    "description": "External uptime and server monitor for StyleFinder with Telegram alerts",
+    "type": "module",
+    "engines": {
+        "node": ">=22"
+    },
+    "scripts": {
+        "start": "node src/index.js",
+        "test": "node --test"
+    }
+}
