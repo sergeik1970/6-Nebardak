@@ -17,11 +17,22 @@ test("alerts only after the threshold of consecutive failures", () => {
     assert.equal(alerts.record("site", "Сайт", down, 2, 2 * MINUTE), null);
 });
 
-test("a single blip resets without any message", () => {
+test("a failure that ends before the threshold gets one short notice", () => {
     const alerts = state();
     assert.equal(alerts.record("site", "Сайт", down, 2, 0), null);
+    assert.equal(
+        alerts.record("site", "Сайт", up, 2, 30_000),
+        "⚠️ Сайт: кратковременный сбой, восстановился за 30 с. Было: HTTP 502, ожидался 200",
+    );
     assert.equal(alerts.record("site", "Сайт", up, 2, MINUTE), null);
-    assert.equal(alerts.record("site", "Сайт", down, 2, 2 * MINUTE), null);
+    assert.deepEqual(alerts.incidents, []);
+});
+
+test("a single slow answer stays silent", () => {
+    const alerts = state();
+    const slow = { ok: false, reachable: true, detail: "медленный ответ: 3500 мс (порог 3000 мс)" };
+    assert.equal(alerts.record("site", "Сайт", slow, 2, 0), null);
+    assert.equal(alerts.record("site", "Сайт", up, 2, 30_000), null);
 });
 
 test("recovery reports how long the outage lasted from the first failure", () => {

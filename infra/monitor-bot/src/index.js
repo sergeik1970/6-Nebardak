@@ -58,7 +58,8 @@ async function runProd() {
         return;
     }
     outbox.push(alerts.record("prod:ssh", "Сервер (SSH)", { ok: true, detail: "отвечает" }, 1));
-    const restarts = detectRestarts(lastContainers, status.containers, config.prod.services);
+    const since = lastContainers.size === 0 ? Date.now() - config.prod.intervalMs : null;
+    const restarts = detectRestarts(lastContainers, status.containers, config.prod.services, since);
     lastContainers = status.containers;
     stats.recordRestarts(restarts);
     outbox.push(formatRestarts(restarts));
