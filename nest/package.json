@@ -33,7 +33,9 @@
         "typeorm:revert-migration": "npm run typeorm -- -d ./typeOrm.config.ts migration:revert",
         "typeorm:revert-migration:prod": "node ./node_modules/typeorm/cli.js migration:revert -d ./dist/typeOrm.config.js",
         "admin:grant": "ts-node -r tsconfig-paths/register scripts/grant-admin.ts",
-        "admin:grant:prod": "node ./dist/scripts/grant-admin.js"
+        "admin:grant:prod": "node ./dist/scripts/grant-admin.js",
+        "admin:create": "ts-node -r tsconfig-paths/register scripts/create-admin.ts",
+        "admin:create:prod": "node ./dist/scripts/create-admin.js"
     },
     "dependencies": {
         "@nestjs/common": "11.2.7",
