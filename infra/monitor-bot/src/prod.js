@@ -61,13 +61,25 @@ export function parseProdStatus(text) {
 
 // Compares container start times between polls. Docker's RestartCount grows when it
 // revives a crashed container; a recreated container (deploy) starts again from zero.
-export function detectRestarts(previous, containers, services) {
+// With no previous poll (the bot itself just started) containers started after
+// `since` count as restarted, so a deploy that also restarts the bot is not lost.
+export function detectRestarts(previous, containers, services, since = null) {
     const events = [];
     for (const service of services) {
         const current = containers.get(service);
         const before = previous.get(service);
-        if (!current) continue;
-        if (!before?.startedAt || !current.startedAt || before.startedAt === current.startedAt) {
+        if (!current?.startedAt) continue;
+        if (!before) {
+            if (since !== null && Date.parse(current.startedAt) >= since) {
+                events.push({
+                    service,
+                    crashes: 0,
+                    detail: "запущен заново (деплой или ручной перезапуск)",
+                });
+            }
+            continue;
+        }
+        if (!before.startedAt || before.startedAt === current.startedAt) {
             continue;
         }
         const crashes = current.restartCount - before.restartCount;
@@ -118,6 +130,22 @@ export function evaluateProd(status, prod, now = Date.now()) {
                 : "не найден",
         });
     }
+
+    // An outdated stylefinder-status on the server drops these fields, and restart
+    // detection then silently sees nothing.
+    const blind = prod.services.filter((service) => {
+        const container = status.containers.get(service);
+        return container && (!container.startedAt || container.restartCount === null);
+    });
+    results.push({
+        key: "prod:status-script",
+        label: "Скрипт stylefinder-status",
+        ok: blind.length === 0,
+        detail:
+            blind.length === 0
+                ? "отдаёт время старта контейнеров"
+                : `нет времени старта для ${blind.join(", ")}: перезапуски не видны, переустановите скрипт`,
+    });
 
     const { lastSuccess, name, lastResult } = status.backup;
     const age = lastSuccess ? now - lastSuccess : null;

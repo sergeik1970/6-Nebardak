@@ -2,6 +2,8 @@ import { formatAge, formatClock, formatDuration, formatTime } from "./format.js"
 
 // Turns a stream of check results into messages: one when a check goes down after
 // `threshold` failures in a row, a reminder while it stays down, one on recovery.
+// Failures that end before the threshold (a deploy, a restart) get one short notice,
+// unless the target only answered slowly.
 export class AlertState {
     constructor({ reminderMs, timeZone }) {
         this.reminderMs = reminderMs;
@@ -16,15 +18,24 @@ export class AlertState {
         Object.assign(check, { label, ok: result.ok, detail: result.detail, checkedAt: now });
 
         if (result.ok) {
-            const message = check.down
-                ? `✅ ${label}: снова в норме, сбой длился ${formatDuration(now - check.failingSince)}. ${result.detail}`
-                : null;
-            Object.assign(check, { failures: 0, down: false, failingSince: null });
+            let message = null;
+            if (check.down) {
+                message = `✅ ${label}: снова в норме, сбой длился ${formatDuration(now - check.failingSince)}. ${result.detail}`;
+            } else if (check.failures > 0 && check.blipDetail) {
+                message = `⚠️ ${label}: кратковременный сбой, восстановился за ${formatDuration(now - check.failingSince)}. Было: ${check.blipDetail}`;
+            }
+            Object.assign(check, {
+                failures: 0,
+                down: false,
+                failingSince: null,
+                blipDetail: null,
+            });
             return message;
         }
 
         check.failures += 1;
         if (check.failures === 1) check.failingSince = now;
+        if (result.reachable !== true) check.blipDetail = result.detail;
         if (!check.down && check.failures >= threshold) {
             Object.assign(check, { down: true, alertedAt: now });
             this.incidents.push({ label, at: now });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { evaluateProd, parseProdStatus } from "../src/prod.js";
+import { detectRestarts, evaluateProd, parseProdStatus } from "../src/prod.js";
 
 const NOW = Date.UTC(2026, 9, 22, 12);
 const prod = {
@@ -16,11 +16,11 @@ function output({ disk = 49, memory = 61, backupAgeHours = 9, result = "success"
         `disk / ${disk}`,
         "disk /var/lib/docker 49",
         `memory_available ${memory}`,
-        "container caddy running healthy",
-        "container next running healthy",
-        "container nest running healthy",
-        "container db running healthy",
-        "container migrate exited none",
+        "container caddy running healthy 0 2026-10-22T08:00:00Z",
+        "container next running healthy 0 2026-10-22T08:00:00Z",
+        "container nest running healthy 0 2026-10-22T08:00:00Z",
+        "container db running healthy 0 2026-10-22T08:00:00Z",
+        "container migrate exited none 0 2026-10-22T07:59:00Z",
         `backup_last_success ${stamp} stylefinder-20261022T031500Z.dump.age`,
         `backup_last_result ${result}`,
         "",
@@ -37,7 +37,7 @@ test("a healthy server passes every check", () => {
         results.filter((result) => !result.ok),
         [],
     );
-    assert.equal(results.length, 8);
+    assert.equal(results.length, 9);
     assert.equal(
         byKey(results)["prod:backup"].detail,
         "успешный 9 ч 0 мин назад, stylefinder-20261022T031500Z.dump.age",
@@ -68,9 +68,15 @@ test("flags a stale backup, a failed last run and a missing stamp", () => {
 
 test("flags unhealthy, stopped and missing containers", () => {
     const text = output()
-        .replace("container nest running healthy", "container nest running unhealthy")
-        .replace("container next running healthy", "container next exited none")
-        .replace("container db running healthy\n", "");
+        .replace(
+            "container nest running healthy 0 2026-10-22T08:00:00Z",
+            "container nest running unhealthy",
+        )
+        .replace(
+            "container next running healthy 0 2026-10-22T08:00:00Z",
+            "container next exited none",
+        )
+        .replace(/container db running healthy.*\n/, "");
     const results = byKey(evaluateProd(parseProdStatus(text), prod, NOW));
     assert.equal(results["prod:container:caddy"].ok, true);
     assert.equal(results["prod:container:nest"].detail, "running, unhealthy");
@@ -83,4 +89,54 @@ test("flags unhealthy, stopped and missing containers", () => {
 test("a finished one-off container does not hide the running one", () => {
     const text = "container db running healthy\ncontainer db exited none\n";
     assert.equal(parseProdStatus(text).containers.get("db").state, "running");
+});
+
+test("flags a status script that omits container start times", () => {
+    const text = output().replace(
+        "container nest running healthy 0 2026-10-22T08:00:00Z",
+        "container nest running healthy",
+    );
+    const result = byKey(evaluateProd(parseProdStatus(text), prod, NOW))["prod:status-script"];
+    assert.equal(result.ok, false);
+    assert.match(result.detail, /нет времени старта для nest/);
+});
+
+test("detects a recreated and a crashed container between polls", () => {
+    const before = parseProdStatus(output()).containers;
+    const after = parseProdStatus(
+        output()
+            .replace(
+                "next running healthy 0 2026-10-22T08:00:00Z",
+                "next running healthy 0 2026-10-22T09:00:00Z",
+            )
+            .replace(
+                "nest running healthy 0 2026-10-22T08:00:00Z",
+                "nest running healthy 2 2026-10-22T09:00:00Z",
+            ),
+    ).containers;
+    assert.deepEqual(
+        detectRestarts(before, after, prod.services).map(({ service, crashes }) => [
+            service,
+            crashes,
+        ]),
+        [
+            ["next", 0],
+            ["nest", 2],
+        ],
+    );
+});
+
+test("on the first poll reports only containers started within the window", () => {
+    const containers = parseProdStatus(
+        output().replace(
+            "next running healthy 0 2026-10-22T08:00:00Z",
+            "next running healthy 0 2026-10-22T11:58:00Z",
+        ),
+    ).containers;
+    const since = NOW - 5 * 60_000;
+    assert.deepEqual(
+        detectRestarts(new Map(), containers, prod.services, since).map(({ service }) => service),
+        ["next"],
+    );
+    assert.deepEqual(detectRestarts(new Map(), containers, prod.services), []);
 });
