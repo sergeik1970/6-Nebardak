@@ -1,6 +1,7 @@
 import Link from "next/link";
 import React, { useId, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAuthModal } from "@/contexts/AuthModalContext";
 import { isAuthEnabled } from "@/shared/config/runtime";
 import InputText from "@/shared/components/InputText";
 import AuthPageShell from "./AuthPageShell";
@@ -12,11 +13,13 @@ const MIN_PASSWORD_LENGTH = 8;
 const ResetPassword: React.FC = () => {
     const token = useOneTimeUrlToken();
     const { resetPassword } = useAuth();
+    const { openAuthModal } = useAuthModal();
     const [password, setPassword] = useState("");
     const [confirmation, setConfirmation] = useState("");
     const [error, setError] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [isDone, setIsDone] = useState(false);
+    const [needsSignIn, setNeedsSignIn] = useState(false);
     const passwordId = useId();
     const confirmationId = useId();
     const errorId = useId();
@@ -33,7 +36,7 @@ const ResetPassword: React.FC = () => {
         setError("");
         setIsSaving(true);
         try {
-            await resetPassword(token, password);
+            setNeedsSignIn(!(await resetPassword(token, password)));
             setIsDone(true);
         } catch (caught) {
             setError(caught instanceof Error ? caught.message : "Не удалось сменить пароль");
@@ -45,6 +48,22 @@ const ResetPassword: React.FC = () => {
     const renderBody = () => {
         if (!isAuthEnabled) return <p className={styles.text}>Аккаунты сейчас отключены.</p>;
         if (token === undefined) return <p className={styles.text}>Открываем ссылку…</p>;
+
+        if (isDone && needsSignIn) {
+            return (
+                <>
+                    <p className={`${styles.status} ${styles.success}`} aria-live="polite">
+                        Пароль изменён, все устройства вышли из аккаунта. Войдите с новым паролем:
+                        для аккаунта администратора на почту придёт код подтверждения.
+                    </p>
+                    <div className={styles.actions}>
+                        <button className={styles.primary} onClick={openAuthModal} type="button">
+                            Войти
+                        </button>
+                    </div>
+                </>
+            );
+        }
 
         if (isDone) {
             return (

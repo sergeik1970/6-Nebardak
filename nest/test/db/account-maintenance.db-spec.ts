@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { DataSource } from "typeorm";
 import { AccountMaintenanceService } from "../../src/services/AccountMaintenanceService/account-maintenance.service";
+import { AdminLoginCodeService } from "../../src/services/AdminLoginCodeService/admin-login-code.service";
 import { EmailTokenService } from "../../src/services/EmailTokenService/email-token.service";
 import { OperationalLogger } from "../../src/services/OperationalLogger/operational-logger.service";
 
@@ -32,6 +33,7 @@ describe("AccountMaintenanceService on PostgreSQL", () => {
         service = new AccountMaintenanceService(
             dataSource,
             { purge: jest.fn() } as unknown as EmailTokenService,
+            { purge: jest.fn() } as unknown as AdminLoginCodeService,
             { event: jest.fn() } as unknown as OperationalLogger,
         );
     });

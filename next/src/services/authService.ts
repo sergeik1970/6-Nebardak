@@ -1,4 +1,4 @@
-import { AuthResponse, RegisterData, LoginData, User } from "../types/auth";
+import { AuthResponse, RegisterData, LoginData, LoginResponse, User } from "../types/auth";
 import { isAuthEnabled, isAuthRegistrationEnabled } from "@/shared/config/runtime";
 import { apiRequest } from "./apiClient";
 
@@ -18,11 +18,20 @@ class AuthService {
         });
     }
 
-    async login(data: LoginData): Promise<AuthResponse> {
-        return apiRequest<AuthResponse>("/auth/login", {
+    async login(data: LoginData): Promise<LoginResponse> {
+        return apiRequest<LoginResponse>("/auth/login", {
             method: "POST",
             body: data,
             fallbackMessage: "Ошибка при входе",
+        });
+    }
+
+    /** Second step for administrators. A 410 means: start over from the password. */
+    async confirmLoginCode(challenge: string, code: string): Promise<AuthResponse> {
+        return apiRequest<AuthResponse>("/auth/login/code", {
+            method: "POST",
+            body: { challenge, code },
+            fallbackMessage: "Не удалось проверить код",
         });
     }
 
@@ -59,8 +68,9 @@ class AuthService {
         });
     }
 
-    async resetPassword(token: string, password: string): Promise<User> {
-        const response = await apiRequest<{ user: User }>("/auth/reset-password", {
+    /** Null for an administrator, who then signs in with the password and a code. */
+    async resetPassword(token: string, password: string): Promise<User | null> {
+        const response = await apiRequest<{ user: User | null }>("/auth/reset-password", {
             method: "POST",
             body: { token, password },
             fallbackMessage: "Не удалось сменить пароль",

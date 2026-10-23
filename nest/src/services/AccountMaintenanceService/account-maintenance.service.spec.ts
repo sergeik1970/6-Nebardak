@@ -1,4 +1,5 @@
 import { DataSource } from "typeorm";
+import { AdminLoginCodeService } from "../AdminLoginCodeService/admin-login-code.service";
 import { EmailTokenService } from "../EmailTokenService/email-token.service";
 import { OperationalLogger } from "../OperationalLogger/operational-logger.service";
 import {
@@ -9,13 +10,15 @@ import {
 function makeService() {
     const query = jest.fn().mockResolvedValue([[], 2]);
     const emailTokens = { purge: jest.fn() };
+    const loginCodes = { purge: jest.fn() };
     const logger = { event: jest.fn() };
     const service = new AccountMaintenanceService(
         { query } as unknown as DataSource,
         emailTokens as unknown as EmailTokenService,
+        loginCodes as unknown as AdminLoginCodeService,
         logger as unknown as OperationalLogger,
     );
-    return { service, query, emailTokens, logger };
+    return { service, query, emailTokens, loginCodes, logger };
 }
 
 const now = new Date("2026-10-20T12:00:00.000Z");
@@ -39,12 +42,13 @@ describe("AccountMaintenanceService", () => {
         ]);
     });
 
-    it("purges sessions and links and reports counts only", async () => {
-        const { service, emailTokens, logger } = makeService();
+    it("purges sessions, links and codes and reports counts only", async () => {
+        const { service, emailTokens, loginCodes, logger } = makeService();
 
         await service.runOnce(now);
 
         expect(emailTokens.purge).toHaveBeenCalledWith(now);
+        expect(loginCodes.purge).toHaveBeenCalledWith(now);
         expect(logger.event).toHaveBeenCalledWith("account.maintenance", {
             expiredSessions: 2,
             deletedUnverifiedAccounts: 2,

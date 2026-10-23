@@ -1,5 +1,6 @@
 import dataSource from "../typeOrm.config";
 import { User } from "../src/entities/User/user.entity";
+import { UserSession } from "../src/entities/UserSession/user-session.entity";
 
 const readEmailArgument = (): string | null => {
     const index = process.argv.indexOf("--email");
@@ -30,6 +31,11 @@ async function main(): Promise<void> {
             user.role = "admin";
             await dataSource.getRepository(User).save(user);
         }
+        // Sessions opened before elevation never passed the emailed code;
+        // the next sign-in asks for it and gets the shorter admin lifetime.
+        await dataSource
+            .getRepository(UserSession)
+            .delete({ user: { id: user.id } });
 
         // Avoid echoing personal data. The identifier is enough for an
         // administrator to confirm that the explicit elevation completed.

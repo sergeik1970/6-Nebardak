@@ -18,6 +18,7 @@ import { CsrfGuard } from "../src/guards/csrf.guard";
 import { AuthService } from "../src/services/AuthService/auth.service";
 import { SessionService } from "../src/services/SessionService/session.service";
 import { AccountRecoveryService } from "../src/services/AccountRecoveryService/account-recovery.service";
+import { AdminLoginCodeService } from "../src/services/AdminLoginCodeService/admin-login-code.service";
 import { OperationalLogger } from "../src/services/OperationalLogger/operational-logger.service";
 
 interface HarnessOptions {
@@ -25,6 +26,7 @@ interface HarnessOptions {
     registrationEnabled?: boolean;
     databaseQuery?: jest.Mock;
     trustProxyHops?: number;
+    role?: "designer" | "admin";
 }
 
 interface Harness {
@@ -37,6 +39,7 @@ interface Harness {
         setPassword: jest.Mock;
         updateName: jest.Mock;
         deleteUser: jest.Mock;
+        getUserById: jest.Mock;
     };
     sessionService: {
         create: jest.Mock;
@@ -51,12 +54,17 @@ interface Harness {
         requestPasswordReset: jest.Mock;
         resetPassword: jest.Mock;
     };
+    loginCodes: {
+        start: jest.Mock;
+        confirm: jest.Mock;
+    };
     databaseQuery: jest.Mock;
 }
 
 const activeApps: INestApplication[] = [];
 const SESSION_TOKEN = "s".repeat(43);
 const VALID_LINK_TOKEN = "v".repeat(43);
+const CHALLENGE_TOKEN = "c".repeat(43);
 const originalEnvironment = {
     NODE_ENV: process.env.NODE_ENV,
     AUTH_ENABLED: process.env.AUTH_ENABLED,
@@ -283,6 +291,93 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
             },
         });
         expect(JSON.stringify(response.body)).not.toContain(SESSION_TOKEN);
+    });
+
+    it("asks an administrator for the emailed code instead of opening a session", async () => {
+        const harness = await createHarness({
+            authEnabled: true,
+            role: "admin",
+        });
+
+        const response = await request(harness.baseUrl)
+            .post("/api/auth/login")
+            .set("X-Requested-With", "stylefinder")
+            .send({ email: "maria@example.com", password: "safe-password" })
+            .expect(200);
+
+        expect(response.headers["set-cookie"]).toBeUndefined();
+        expect(response.body).toEqual({
+            user: null,
+            secondFactor: {
+                challenge: CHALLENGE_TOKEN,
+                expiresAt: "2026-10-23T12:10:00.000Z",
+            },
+        });
+        expect(harness.sessionService.create).not.toHaveBeenCalled();
+    });
+
+    it("answers 503 when the code letter cannot be sent", async () => {
+        const harness = await createHarness({
+            authEnabled: true,
+            role: "admin",
+        });
+        harness.loginCodes.start.mockRejectedValue(new Error("smtp down"));
+
+        const response = await request(harness.baseUrl)
+            .post("/api/auth/login")
+            .set("X-Requested-With", "stylefinder")
+            .send({ email: "maria@example.com", password: "safe-password" })
+            .expect(503);
+
+        expect(JSON.stringify(response.body)).not.toContain("smtp");
+        expect(harness.sessionService.create).not.toHaveBeenCalled();
+    });
+
+    it("opens a second-factor session only for the right code", async () => {
+        const harness = await createHarness({
+            authEnabled: true,
+            role: "admin",
+        });
+        const confirm = (challenge: string, code: string) =>
+            request(harness.baseUrl)
+                .post("/api/auth/login/code")
+                .set("X-Requested-With", "stylefinder")
+                .send({ challenge, code });
+
+        await confirm(CHALLENGE_TOKEN, "12a456").expect(400);
+        const wrong = await confirm(CHALLENGE_TOKEN, "000000").expect(400);
+        expect(wrong.body.message).toContain("Осталось попыток: 4");
+        await confirm("x".repeat(43), "123456").expect(410);
+        expect(harness.sessionService.create).not.toHaveBeenCalled();
+
+        const accepted = await confirm(CHALLENGE_TOKEN, "123 456").expect(200);
+        expect(String(accepted.headers["set-cookie"])).toContain(
+            `sf_session=${SESSION_TOKEN}`,
+        );
+        expect(accepted.body.user).toMatchObject({ id: 1, role: "admin" });
+        expect(harness.sessionService.create).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 1 }),
+            undefined,
+            expect.any(Date),
+            { secondFactor: true },
+        );
+    });
+
+    it("does not let a password-reset link skip an administrator's code", async () => {
+        const harness = await createHarness({
+            authEnabled: true,
+            role: "admin",
+        });
+
+        const reset = await request(harness.baseUrl)
+            .post("/api/auth/reset-password")
+            .set("X-Requested-With", "stylefinder")
+            .send({ token: VALID_LINK_TOKEN, password: "new-password-1" })
+            .expect(200);
+
+        expect(reset.body).toEqual({ user: null });
+        expect(reset.headers["set-cookie"]).toBeUndefined();
+        expect(harness.sessionService.create).not.toHaveBeenCalled();
     });
 
     it("resolves the profile only from the session cookie", async () => {
@@ -572,7 +667,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
         id: 1,
         name: "Мария",
         email: "maria@example.com",
-        role: "designer",
+        role: options.role ?? "designer",
         password: "$2b$12$never-returned",
         emailVerifiedAt: null,
     };
@@ -601,6 +696,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
             name,
         })),
         deleteUser: jest.fn().mockResolvedValue(undefined),
+        getUserById: jest.fn().mockResolvedValue(user),
     };
     const sessionService = {
         create: jest.fn().mockResolvedValue({
@@ -615,6 +711,18 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
         revoke: jest.fn().mockResolvedValue(undefined),
         revokeAll: jest.fn().mockResolvedValue(undefined),
         revokeOthers: jest.fn().mockResolvedValue(undefined),
+    };
+    const loginCodes = {
+        start: jest.fn().mockResolvedValue({
+            challenge: CHALLENGE_TOKEN,
+            expiresAt: new Date("2026-10-23T12:10:00.000Z"),
+        }),
+        confirm: jest.fn(async (challenge: string, code: string) => {
+            if (challenge !== CHALLENGE_TOKEN) return { status: "expired" };
+            return code === "123456"
+                ? { status: "ok", userId: 1 }
+                : { status: "wrong", attemptsLeft: 4 };
+        }),
     };
     const databaseQuery =
         options.databaseQuery ?? jest.fn().mockResolvedValue([{ ok: 1 }]);
@@ -641,6 +749,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
             { provide: AuthService, useValue: authService },
             { provide: SessionService, useValue: sessionService },
             { provide: AccountRecoveryService, useValue: recovery },
+            { provide: AdminLoginCodeService, useValue: loginCodes },
             {
                 provide: EmailTokenService,
                 useValue: { revoke: jest.fn() },
@@ -669,6 +778,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
         authService,
         sessionService,
         recovery,
+        loginCodes,
         databaseQuery,
     };
 }

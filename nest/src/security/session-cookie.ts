@@ -1,6 +1,7 @@
 import type { CookieOptions, Request, Response } from "express";
 import { getRuntimeConfig } from "../config/runtime.config";
-import { SESSION_ABSOLUTE_TTL_MS } from "../services/SessionService/session.service";
+import { UserRole } from "../entities/User/user.entity";
+import { sessionLifetime } from "../services/SessionService/session.service";
 
 function cookieOptions(): CookieOptions {
     return {
@@ -32,10 +33,14 @@ export function readSessionToken(
  * The cookie lives as long as the absolute session limit; the shorter idle
  * expiry is enforced by the server, which can also end it at any time.
  */
-export function setSessionCookie(response: Response, token: string): void {
+export function setSessionCookie(
+    response: Response,
+    token: string,
+    role: UserRole,
+): void {
     response.cookie(getRuntimeConfig().session.cookieName, token, {
         ...cookieOptions(),
-        maxAge: SESSION_ABSOLUTE_TTL_MS,
+        maxAge: sessionLifetime(role).absoluteMs,
     });
 }
 

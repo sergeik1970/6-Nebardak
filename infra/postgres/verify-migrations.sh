@@ -90,8 +90,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 13 THEN
-        RAISE EXCEPTION 'expected 13 applied migrations, got %', applied_migrations;
+    IF applied_migrations <> 14 THEN
+        RAISE EXCEPTION 'expected 14 applied migrations, got %', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table still exists';
@@ -172,6 +172,12 @@ BEGIN
        NOT has_table_privilege(current_user, 'public.email_token', 'DELETE') THEN
         RAISE EXCEPTION 'runtime role lacks required email-link rights';
     END IF;
+    IF NOT has_table_privilege(current_user, 'public.login_challenge', 'SELECT') OR
+       NOT has_table_privilege(current_user, 'public.login_challenge', 'INSERT') OR
+       NOT has_table_privilege(current_user, 'public.login_challenge', 'UPDATE') OR
+       NOT has_table_privilege(current_user, 'public.login_challenge', 'DELETE') THEN
+        RAISE EXCEPTION 'runtime role lacks required sign-in code rights';
+    END IF;
     IF NOT has_table_privilege(current_user, 'public.project', 'SELECT') OR
        NOT has_table_privilege(current_user, 'public.project', 'INSERT') OR
        NOT has_table_privilege(current_user, 'public.project', 'UPDATE') OR
@@ -240,6 +246,12 @@ FROM "user" WHERE "email" = 'runtime-ci@example.test';
 UPDATE "email_token" SET "used_at" = now() WHERE "token_hash" = repeat('b', 64);
 UPDATE "user" SET "emailVerifiedAt" = now() WHERE "email" = 'runtime-ci@example.test';
 DELETE FROM "email_token" WHERE "token_hash" = repeat('b', 64);
+INSERT INTO "login_challenge" ("user_id", "token_hash", "code_hash", "expires_at")
+SELECT "id", repeat('c', 64), repeat('d', 64), now() + interval '10 minutes'
+FROM "user" WHERE "email" = 'runtime-ci@example.test';
+UPDATE "login_challenge" SET "attempts" = "attempts" + 1 WHERE "token_hash" = repeat('c', 64);
+UPDATE "user_session" SET "second_factor_at" = now() WHERE "token_hash" = repeat('a', 64);
+DELETE FROM "login_challenge" WHERE "token_hash" = repeat('c', 64);
 SELECT "id" FROM "user" WHERE "email" = 'runtime-ci@example.test' FOR UPDATE;
 INSERT INTO "project" ("owner_user_id", "name", "document", "document_version")
 SELECT "id", 'Runtime CI', '{"version": 4}', 4
@@ -267,8 +279,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 13 THEN
-        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 13', applied_migrations;
+    IF applied_migrations <> 14 THEN
+        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 14', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table returned after rollback/reapply';
