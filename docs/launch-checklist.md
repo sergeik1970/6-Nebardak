@@ -78,7 +78,7 @@
       `p=quarantine`).
 - [ ] **вы** Заполнить в `.env.server`: `SMTP_HOST`, `SMTP_PORT` (587 со
       STARTTLS или 465 с `SMTP_SECURE=true`), `SMTP_USER`, `SMTP_PASSWORD`,
-      `SMTP_FROM="StyleFinder <no-reply@<домен>>"` (`DEPLOY.md`, §1).
+      `SMTP_FROM="StyleFinder <contact@stylefinder.online>"` (`DEPLOY.md`, §1).
 - [ ] **вы** После включения (шаг 8) отправить письмо сброса пароля на ящики
       Яндекс, Mail.ru и Gmail. Письмо во «Входящих», в заголовках
       `spf=pass`, `dkim=pass`, `dmarc=pass`.

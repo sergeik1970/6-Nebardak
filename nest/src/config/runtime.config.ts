@@ -34,6 +34,8 @@ export interface MailRuntimeConfig {
     password?: string;
     /** RFC 5322 sender, e.g. `StyleFinder <no-reply@example.com>`. */
     from: string;
+    /** Certificate name to verify when `host` is a TCP relay, not the provider itself. */
+    tlsServername?: string;
 }
 
 export interface SessionRuntimeConfig {
@@ -225,6 +227,16 @@ function parseMailConfig(
         throw new Error("SMTP_USER and SMTP_PASSWORD must be set together");
     }
 
+    const tlsServername = parseBlankableString(
+        "SMTP_TLS_SERVERNAME",
+        undefined,
+        false,
+        253,
+    );
+    if (tlsServername && /\s|\//.test(tlsServername)) {
+        throw new Error("SMTP_TLS_SERVERNAME must be a hostname");
+    }
+
     return {
         host,
         port,
@@ -232,6 +244,7 @@ function parseMailConfig(
         username,
         password,
         from,
+        tlsServername,
     };
 }
 

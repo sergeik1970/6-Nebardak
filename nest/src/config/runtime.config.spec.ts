@@ -18,6 +18,7 @@ const managedEnvironmentKeys = [
     "SMTP_USER",
     "SMTP_PASSWORD",
     "SMTP_FROM",
+    "SMTP_TLS_SERVERNAME",
     "PORT",
     "TRUST_PROXY_HOPS",
     "RATE_LIMIT_TTL_MS",
@@ -144,6 +145,7 @@ describe("runtime configuration", () => {
         ["SMTP_FROM", "no address here"],
         ["SMTP_FROM", "Two <a@b.c> <d@e.f>"],
         ["SMTP_HOST", "smtp.example.net/path"],
+        ["SMTP_TLS_SERVERNAME", "smtp.example.net/path"],
     ])("rejects an invalid %s value %s", (name, value) => {
         process.env.NODE_ENV = "dev";
         process.env[name] = value;
@@ -183,6 +185,17 @@ describe("runtime configuration", () => {
             port: 465,
             secure: true,
             username: "mailer",
+        });
+    });
+
+    it("keeps the provider's certificate name when Nest talks to the relay", () => {
+        process.env.NODE_ENV = "dev";
+        process.env.SMTP_HOST = "smtp-relay";
+        process.env.SMTP_TLS_SERVERNAME = "smtp.example.net";
+
+        expect(getRuntimeConfig().mail).toMatchObject({
+            host: "smtp-relay",
+            tlsServername: "smtp.example.net",
         });
     });
 
