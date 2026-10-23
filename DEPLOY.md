@@ -59,7 +59,7 @@ cookie `__Host-sf_session` (`HttpOnly; Secure; SameSite=Lax`), а в табли�
 
 Письма подтверждения почты и сброса пароля уходят через SMTP-релей. При
 `AUTH_ENABLED=true` обязательны `SMTP_HOST` и `SMTP_FROM` (например,
-`StyleFinder <no-reply@stylefinder.design>`); `SMTP_USER`/`SMTP_PASSWORD`
+`StyleFinder <contact@stylefinder.online>`); `SMTP_USER`/`SMTP_PASSWORD`
 задаются парой. На порту 465 используется TLS сразу (`SMTP_SECURE=true`), на
 587 production требует STARTTLS. До включения аккаунтов у домена отправителя
 должны быть SPF, DKIM и DMARC, выданные провайдером (Yandex Cloud Postbox,
@@ -67,6 +67,14 @@ Unisender Go и т. п.), иначе письма попадут в спам. З
 адреса пользователей — это трансграничная передача по 152-ФЗ со своим
 уведомлением, поэтому предпочтителен российский. В логах фиксируются только
 `userId` и коды событий — без адресов и ссылок.
+
+У Nest нет выхода в интернет (сети `internal`), поэтому SMTP идёт через
+сервис `smtp-relay`: он пробрасывает TCP только на `SMTP_RELAY_UPSTREAM`, а TLS
+устанавливается между Nest и провайдером напрямую. Для reg.ru:
+`SMTP_RELAY_UPSTREAM=mail.hosting.reg.ru:465`, `SMTP_HOST=smtp-relay`,
+`SMTP_PORT=2465`, `SMTP_SECURE=true`,
+`SMTP_TLS_SERVERNAME=mail.hosting.reg.ru`. Пустой `SMTP_RELAY_UPSTREAM`
+оставляет релей в режиме ожидания.
 
 Полный порядок запуска по шагам — в [`docs/launch-checklist.md`](docs/launch-checklist.md).
 
@@ -164,7 +172,7 @@ SITE_ADDRESS=:80
 
 ```bash
 docker compose --env-file .env.server -f docker-compose.yml config --quiet
-docker compose --env-file .env.server -f docker-compose.yml --profile tools build caddy next nest migrate
+docker compose --env-file .env.server -f docker-compose.yml --profile tools build caddy next nest smtp-relay migrate
 docker compose --env-file .env.server -f docker-compose.yml up -d db
 ```
 
@@ -233,7 +241,7 @@ git pull --ff-only
 FAILED_RELEASE_SHA="$(git rev-parse HEAD)"
 printf 'Candidate release: %s\n' "$FAILED_RELEASE_SHA"
 docker compose --env-file .env.server -f docker-compose.yml config --quiet
-docker compose --env-file .env.server -f docker-compose.yml --profile tools build caddy next nest migrate
+docker compose --env-file .env.server -f docker-compose.yml --profile tools build caddy next nest smtp-relay migrate
 docker compose --env-file .env.server -f docker-compose.yml up -d db
 docker compose --env-file .env.server -f docker-compose.yml --profile tools run --rm db-roles
 docker compose --env-file .env.server -f docker-compose.yml --profile tools run --rm migrate
@@ -364,7 +372,7 @@ bash infra/backup/restore-drill.sh
 
 ```bash
 git checkout "$PREVIOUS_RELEASE_SHA"
-docker compose --env-file .env.server -f docker-compose.yml --profile tools build caddy next nest migrate
+docker compose --env-file .env.server -f docker-compose.yml --profile tools build caddy next nest smtp-relay migrate
 docker compose --env-file .env.server -f docker-compose.yml up -d --no-build --remove-orphans
 ```
 
@@ -377,7 +385,7 @@ checkout`. В этот момент локальный `migrate` image ещё о
 test "$(git rev-parse HEAD)" = "$FAILED_RELEASE_SHA"
 docker compose --env-file .env.server -f docker-compose.yml --profile tools run --rm --no-deps migrate npm run typeorm:revert-migration:prod
 git checkout "$PREVIOUS_RELEASE_SHA"
-docker compose --env-file .env.server -f docker-compose.yml --profile tools build caddy next nest migrate
+docker compose --env-file .env.server -f docker-compose.yml --profile tools build caddy next nest smtp-relay migrate
 docker compose --env-file .env.server -f docker-compose.yml up -d --no-build --remove-orphans
 ```
 

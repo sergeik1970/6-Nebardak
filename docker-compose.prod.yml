@@ -66,6 +66,7 @@ services:
             SMTP_USER: "${SMTP_USER:-}"
             SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
             SMTP_FROM: "${SMTP_FROM:-}"
+            SMTP_TLS_SERVERNAME: "${SMTP_TLS_SERVERNAME:-}"
             AUTH_ENABLED: "${AUTH_ENABLED:-false}"
             AUTH_REGISTRATION_ENABLED: "${AUTH_REGISTRATION_ENABLED:-false}"
             TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-1}"
@@ -79,6 +80,7 @@ services:
         networks:
             - api_internal
             - database_internal
+            - smtp_internal
         # Migrations are a controlled deployment step; see DEPLOY.md.
         command: ["node", "dist/src/main"]
         healthcheck:
@@ -89,6 +91,28 @@ services:
             start_period: 30s
         restart: unless-stopped
         stop_grace_period: 20s
+        logging: *default-logging
+
+    # Nest has no route to the internet; this relay forwards one host:port only.
+    smtp-relay:
+        build:
+            context: ./infra/smtp-relay
+        image: stylefinder-smtp-relay:alpine3.24
+        environment:
+            SMTP_RELAY_UPSTREAM: "${SMTP_RELAY_UPSTREAM:-}"
+        expose:
+            - "2465"
+        networks:
+            - smtp_internal
+            - smtp_egress
+        read_only: true
+        init: true
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        pids_limit: 64
+        restart: unless-stopped
         logging: *default-logging
 
     next:
@@ -204,3 +228,6 @@ networks:
         internal: true
     database_internal:
         internal: true
+    smtp_internal:
+        internal: true
+    smtp_egress:

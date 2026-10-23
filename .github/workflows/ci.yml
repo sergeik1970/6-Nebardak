@@ -178,7 +178,7 @@ jobs:
         run: cmp -s docker-compose.yml docker-compose.prod.yml
       - run: docker compose --env-file .env.server -f docker-compose.yml config --quiet
       - run: docker compose --env-file .env.server -f docker-compose.prod.yml config --quiet
-      - run: docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml --profile tools build caddy next nest migrate
+      - run: docker compose --project-name stylefinder-ci --env-file .env.server -f docker-compose.yml --profile tools build caddy next nest smtp-relay migrate
       - name: Verify database role secret preflight
         run: sh infra/postgres/test-role-preflight.sh
       - name: Validate Caddy configuration

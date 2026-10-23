@@ -36,6 +36,10 @@ export class MailService {
                 secure: mail.secure,
                 // Production refuses to send credentials or links in clear text.
                 requireTLS: nodeEnv === "production" && !mail.secure,
+                // Through the egress relay the certificate still names the provider.
+                tls: mail.tlsServername
+                    ? { servername: mail.tlsServername }
+                    : undefined,
                 auth: mail.username
                     ? { user: mail.username, pass: mail.password }
                     : undefined,
