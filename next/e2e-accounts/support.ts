@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { randomInt, randomUUID } from "node:crypto";
 import { test as base, expect, type APIRequestContext, type Page } from "@playwright/test";
 import { CURRENT_CONSENT_VERSION } from "../src/shared/legal/consent";
@@ -133,35 +134,81 @@ interface MailpitSummary {
     To: Array<{ Address: string }>;
 }
 
-/** Waits for the newest letter to `to` and returns the site link in it. */
-export const linkFromMail = async (to: string, path: "/auth/verify" | "/auth/reset") => {
+/**
+ * Waits for the newest letter to `to` whose text matches `pattern` and
+ * returns the match (its first group, if any) unless it equals `stale`.
+ */
+const findInMail = async (
+    to: string,
+    pattern: RegExp,
+    what: string,
+    stale?: string,
+): Promise<string> => {
     if (!MAILPIT_URL) throw new Error("E2E_MAILPIT_URL is not set");
-    const pattern = new RegExp(`https?://[^\\s"<>]+${path}\\?token=[A-Za-z0-9_-]+`);
-    let link: string | null = null;
+    let found: string | null = null;
     await expect
         .poll(
             async () => {
                 const search = await fetch(
                     `${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`,
                 );
+                // Mailpit lists the newest letter first.
                 const { messages } = (await search.json()) as { messages: MailpitSummary[] };
                 for (const message of messages) {
                     const body = await fetch(`${MAILPIT_URL}/api/v1/message/${message.ID}`);
                     const { Text } = (await body.json()) as { Text: string };
                     const match = Text.match(pattern);
                     if (match) {
-                        link = match[0];
-                        return true;
+                        found = match[1] ?? match[0];
+                        return found !== stale;
                     }
                 }
                 return false;
             },
-            { timeout: 20_000, message: `letter with ${path} to ${to}` },
+            { timeout: 20_000, message: `letter with ${what} to ${to}` },
         )
         .toBe(true);
+    return found!;
+};
+
+/** Waits for the newest letter to `to` and returns the site link in it. */
+export const linkFromMail = async (to: string, path: "/auth/verify" | "/auth/reset") => {
+    const link = await findInMail(
+        to,
+        new RegExp(`https?://[^\\s"<>]+${path}\\?token=[A-Za-z0-9_-]+`),
+        path,
+    );
     // Letters point at the configured public origin; keep the test's own origin.
-    const url = new URL(link!);
+    const url = new URL(link);
     return `${url.pathname}${url.search}`;
+};
+
+/** The newest administrator sign-in code sent to `to`, once it differs from `previous`. */
+export const loginCodeFromMail = (to: string, previous?: string) =>
+    findInMail(to, /^(\d{6})$/m, "a sign-in code", previous);
+
+/**
+ * Elevates an account the way `npm run admin:grant` does: role and the end
+ * of every earlier session. Straight SQL in the throwaway database container.
+ */
+export const grantAdmin = (email: string) => {
+    const container = process.env.E2E_DB_CONTAINER;
+    if (!container) throw new Error("E2E_DB_CONTAINER is not set");
+    const sql = `UPDATE "user" SET "role" = 'admin' WHERE "email" = '${email.replace(/'/g, "''")}';
+        DELETE FROM "user_session" WHERE "user_id" IN (SELECT "id" FROM "user" WHERE "email" = '${email.replace(/'/g, "''")}');`;
+    execFileSync("docker", [
+        "exec",
+        container,
+        "psql",
+        "-U",
+        "postgres",
+        "-d",
+        "stylefinder_e2e",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-c",
+        sql,
+    ]);
 };
 
 export const projectBar = (page: Page) => page.locator('[data-project-bar="true"]');

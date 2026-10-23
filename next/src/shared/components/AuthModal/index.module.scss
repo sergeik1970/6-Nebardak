@@ -243,3 +243,39 @@
         text-underline-offset: 3px;
     }
 }
+
+.notice {
+    margin: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--sf-color-line);
+    border-radius: var(--sf-radius-md);
+    color: var(--sf-color-ink-muted);
+    font-size: 14px;
+    line-height: 1.45;
+    text-align: center;
+}
+
+.codeInput {
+    font-family: "Courier New", monospace;
+    font-size: 24px;
+    letter-spacing: 0.4em;
+    text-align: center;
+}
+
+.hint {
+    margin: var(--sf-space-1) 0 0;
+    color: var(--sf-color-ink-muted);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.codeActions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--sf-space-2);
+
+    .switchButton {
+        margin-left: 0;
+    }
+}

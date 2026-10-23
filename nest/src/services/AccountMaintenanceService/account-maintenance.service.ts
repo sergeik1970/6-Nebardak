@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { getRuntimeConfig } from "../../config/runtime.config";
+import { AdminLoginCodeService } from "../AdminLoginCodeService/admin-login-code.service";
 import { EmailTokenService } from "../EmailTokenService/email-token.service";
 import { OperationalLogger } from "../OperationalLogger/operational-logger.service";
 
@@ -15,7 +16,7 @@ const FIRST_RUN_DELAY_MS = 60_000;
 
 /**
  * Housekeeping for the single API instance: expired sessions, spent email
- * links, and unverified accounts nobody has used for 30 days (their data
+ * links and sign-in codes, and unverified accounts nobody has used for 30 days (their data
  * cascades away with them, as promised in the verification letter).
  * Only accounts that signed up under that promise qualify: older accounts
  * predate both the letter and server sessions, so for them "unverified and
@@ -30,6 +31,7 @@ export class AccountMaintenanceService
     constructor(
         private readonly dataSource: DataSource,
         private readonly emailTokens: EmailTokenService,
+        private readonly loginCodes: AdminLoginCodeService,
         private readonly logger: OperationalLogger,
     ) {}
 
@@ -57,6 +59,7 @@ export class AccountMaintenanceService
                 [now],
             );
             await this.emailTokens.purge(now);
+            await this.loginCodes.purge(now);
             const accounts = await this.deleteStaleUnverifiedAccounts(now);
             this.logger.event("account.maintenance", {
                 expiredSessions: this.affected(sessions),
