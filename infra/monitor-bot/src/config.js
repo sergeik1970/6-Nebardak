@@ -44,6 +44,8 @@ export function loadConfig(env = process.env) {
         checkIntervalMs: number(env, "CHECK_INTERVAL_SECONDS", 60) * 1000,
         requestTimeoutMs: number(env, "REQUEST_TIMEOUT_SECONDS", 10) * 1000,
         failureThreshold: number(env, "FAILURE_THRESHOLD", 2),
+        // After a failed HTTP check, look again this soon instead of waiting a full interval.
+        retryMs: number(env, "HTTP_RETRY_SECONDS", 10) * 1000,
         slowResponseMs: number(env, "SLOW_RESPONSE_MS", 3000),
         dailyReportTime: dailyTime(env),
         reminderMs: number(env, "REMINDER_HOURS", 6) * 3600_000,
@@ -60,7 +62,13 @@ export function loadConfig(env = process.env) {
                   keyFile: env.PROD_SSH_KEY_FILE || "/config/prod_ssh_key",
                   knownHostsFile: env.PROD_KNOWN_HOSTS_FILE || "/config/known_hosts",
                   intervalMs: number(env, "PROD_INTERVAL_SECONDS", 300) * 1000,
-                  services: list(env, "PROD_SERVICES", ["caddy", "next", "nest", "db"]),
+                  services: list(env, "PROD_SERVICES", [
+                      "caddy",
+                      "next",
+                      "nest",
+                      "db",
+                      "smtp-relay",
+                  ]),
                   diskLimit: number(env, "DISK_LIMIT_PERCENT", 80),
                   memoryFloor: number(env, "MEMORY_AVAILABLE_MIN_PERCENT", 10),
                   backupMaxAgeHours: number(env, "BACKUP_MAX_AGE_HOURS", 26),
