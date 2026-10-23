@@ -1,6 +1,8 @@
 import { AlertState } from "./alerts.js";
 import { checkHttp, checkTls } from "./checks.js";
 import { loadConfig } from "./config.js";
+import { formatDay } from "./format.js";
+import { formatFunnel, formatMetrikaError, Metrika } from "./metrika.js";
 import {
     detectRestarts,
     evaluateProd,
@@ -19,6 +21,9 @@ const alerts = new AlertState({ reminderMs: config.reminderMs, timeZone: config.
 const stats = new Stats();
 const daily = config.dailyReportTime
     ? new DailySchedule(config.dailyReportTime, config.timeZone)
+    : null;
+const metrika = config.metrika
+    ? new Metrika({ ...config.metrika, timeoutMs: config.requestTimeoutMs })
     : null;
 let lastContainers = new Map();
 
@@ -67,11 +72,37 @@ async function runProd() {
     }
 }
 
+async function metrikaReport(title, date1, date2) {
+    try {
+        return formatFunnel(title, await metrika.funnel(date1, date2));
+    } catch (error) {
+        console.error(`metrika failed: ${error.message}`);
+        return formatMetrikaError(error);
+    }
+}
+
 function sendDailyReport() {
     if (!daily?.due()) return;
     outbox.push(formatReport(stats, alerts, config.timeZone));
     alerts.incidents = [];
     stats.reset();
+    if (metrika) {
+        const day = formatDay(Date.now() - 86_400_000, config.timeZone);
+        void metrikaReport(`вчера, ${day}`, "yesterday", "yesterday").then((text) =>
+            outbox.push(text),
+        );
+    }
+}
+
+// "/funnel" → last 7 days including today, "/funnel 30" → last 30.
+async function sendFunnel(text) {
+    if (!metrika) {
+        outbox.push("Метрика не подключена: задай METRIKA_TOKEN и METRIKA_COUNTER_ID в .env.");
+        return;
+    }
+    const days = Math.min(Math.max(Number.parseInt(text.split(/\s+/)[1], 10) || 7, 1), 365);
+    const title = days === 1 ? "сегодня" : `последние ${days} дн. с сегодняшним`;
+    outbox.push(await metrikaReport(title, days === 1 ? "today" : `${days - 1}daysAgo`, "today"));
 }
 
 async function heartbeat() {
@@ -87,6 +118,7 @@ const HELP = [
     "Мониторинг StyleFinder.",
     "/status — проверить всё сейчас и показать сводку",
     "/report — сводка за период с последнего отчёта",
+    "/funnel [дней] — воронка из Метрики, по умолчанию за 7 дней",
     "/help — эта справка",
 ].join("\n");
 
@@ -100,6 +132,8 @@ async function handleCommands() {
             outbox.push(alerts.summary());
         } else if (command === "/report") {
             outbox.push(formatReport(stats, alerts, config.timeZone));
+        } else if (command === "/funnel") {
+            await sendFunnel(message.text);
         } else if (command === "/help" || command === "/start") {
             outbox.push(HELP);
         }
