@@ -26,24 +26,35 @@ const metrika = config.metrika
     ? new Metrika({ ...config.metrika, timeoutMs: config.requestTimeoutMs })
     : null;
 let lastContainers = new Map();
+let warnedNoStartTimes = false;
 
-async function runHttp() {
-    const results = await Promise.all(
-        config.http.map((target) =>
-            checkHttp(target, config.requestTimeoutMs, config.slowResponseMs),
-        ),
-    );
-    config.http.forEach((target, index) => {
-        stats.recordHttp(`http:${target.url}`, target.name, results[index]);
-        outbox.push(
-            alerts.record(
-                `http:${target.url}`,
-                target.name,
-                results[index],
-                config.failureThreshold,
-            ),
-        );
-    });
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// A target that does not answer is checked again every retryMs until it does or the
+// next scheduled check is due. A deploy blip of a few seconds passes unnoticed; an
+// outage of retryMs × FAILURE_THRESHOLD alerts within seconds, and its recovery is
+// timed to the retry rather than to the next minute. Slow answers are not retried.
+// Only the scheduled attempt counts towards the availability in the daily report.
+async function checkTarget(target, retry) {
+    const key = `http:${target.url}`;
+    const started = Date.now();
+    const check = () => checkHttp(target, config.requestTimeoutMs, config.slowResponseMs);
+    let result = await check();
+    stats.recordHttp(key, target.name, result);
+    outbox.push(alerts.record(key, target.name, result, config.failureThreshold));
+    while (
+        retry &&
+        !result.reachable &&
+        Date.now() + config.retryMs + config.requestTimeoutMs < started + config.checkIntervalMs
+    ) {
+        await sleep(config.retryMs);
+        result = await check();
+        outbox.push(alerts.record(key, target.name, result, config.failureThreshold));
+    }
+}
+
+async function runHttp({ retry = true } = {}) {
+    await Promise.all(config.http.map((target) => checkTarget(target, retry)));
 }
 
 async function runTls() {
@@ -63,6 +74,16 @@ async function runProd() {
         return;
     }
     outbox.push(alerts.record("prod:ssh", "Сервер (SSH)", { ok: true, detail: "отвечает" }, 1));
+    const blind = config.prod.services.filter(
+        (service) => status.containers.has(service) && !status.containers.get(service).startedAt,
+    );
+    if (blind.length && !warnedNoStartTimes) {
+        warnedNoStartTimes = true;
+        outbox.push(
+            `⚠️ Не вижу время старта контейнеров (${blind.join(", ")}): перезапуски не отслеживаются. ` +
+                "Обнови /usr/local/bin/stylefinder-status на сервере из infra/monitor-bot/prod.",
+        );
+    }
     const restarts = detectRestarts(lastContainers, status.containers, config.prod.services);
     lastContainers = status.containers;
     stats.recordRestarts(restarts);
@@ -128,7 +149,11 @@ async function handleCommands() {
         if (String(message.chat.id) !== config.chatId) continue;
         const command = message.text?.split(/[\s@]/)[0];
         if (command === "/status") {
-            await Promise.all([runHttp(), runTls(), config.prod ? runProd() : null]);
+            await Promise.all([
+                runHttp({ retry: false }),
+                runTls(),
+                config.prod ? runProd() : null,
+            ]);
             outbox.push(alerts.summary());
         } else if (command === "/report") {
             outbox.push(formatReport(stats, alerts, config.timeZone));
