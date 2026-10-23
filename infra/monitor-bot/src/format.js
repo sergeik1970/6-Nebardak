@@ -20,6 +20,10 @@ export function formatClock(ms, timeZone) {
     return new Date(ms).toLocaleTimeString("ru-RU", { timeZone, hour12: false });
 }
 
+export function formatDay(ms, timeZone) {
+    return new Date(ms).toLocaleDateString("ru-RU", { timeZone, day: "2-digit", month: "2-digit" });
+}
+
 export function formatTime(ms, timeZone) {
     return new Date(ms).toLocaleString("ru-RU", {
         timeZone,

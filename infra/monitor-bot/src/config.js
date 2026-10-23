@@ -35,6 +35,7 @@ function dailyTime(env) {
 export function loadConfig(env = process.env) {
     const targets = JSON.parse(readFileSync(env.TARGETS_FILE || "/config/targets.json", "utf8"));
     const prodTarget = env.PROD_SSH_TARGET?.trim();
+    const metrikaToken = env.METRIKA_TOKEN?.trim();
 
     return {
         telegramToken: required(env, "TELEGRAM_BOT_TOKEN"),
@@ -64,6 +65,10 @@ export function loadConfig(env = process.env) {
                   memoryFloor: number(env, "MEMORY_AVAILABLE_MIN_PERCENT", 10),
                   backupMaxAgeHours: number(env, "BACKUP_MAX_AGE_HOURS", 26),
               }
+            : null,
+        // Optional product funnel from Yandex Metrika (read-only OAuth token).
+        metrika: metrikaToken
+            ? { token: metrikaToken, counterId: required(env, "METRIKA_COUNTER_ID") }
             : null,
         // Optional dead man's switch: an outside service alerts when the bot itself goes quiet.
         heartbeatUrl: env.HC_PING_URL?.trim() || null,
