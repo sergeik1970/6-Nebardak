@@ -27,7 +27,7 @@
 		-X-Powered-By
 		# Yandex Metrika: tag.js and its beacons (mc.*), and framing by metrika.yandex.* so its
 		# click and link maps can overlay the site. Session replay (webvisor) is not enabled.
-		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors https://metrika.yandex.ru https://metrika.yandex.com; form-action 'self'; img-src 'self' data: blob: https://mc.yandex.ru https://mc.yandex.com; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://mc.yandex.ru https://yastatic.net; connect-src 'self' https://mc.yandex.ru https://mc.yandex.com; worker-src 'self' blob:"
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors https://metrika.yandex.ru https://metrika.yandex.com; form-action 'self'; frame-src https://mc.yandex.ru https://mc.yandex.com; img-src 'self' data: blob: https://mc.yandex.ru https://mc.yandex.com; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://mc.yandex.ru https://yastatic.net; connect-src 'self' https://mc.yandex.ru https://mc.yandex.com; worker-src 'self' blob:"
 		Cross-Origin-Opener-Policy "same-origin"
 		Cross-Origin-Resource-Policy "same-origin"
 		X-Content-Type-Options "nosniff"
