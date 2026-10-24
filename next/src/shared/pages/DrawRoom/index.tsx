@@ -43,6 +43,7 @@ import {
     snapDrawRoomCoordinate,
     snapDrawRoomWallLaneCentre,
     snapRoomToPlannerGrid,
+    validateLayout,
     validateRoomGeometry,
     resolveDrawWallAnchor,
     moveDrawWallContourSegment,
@@ -1089,10 +1090,17 @@ const readPlannerRoom = (): Room | null => {
     return draft.status === "success" ? draft.value.planner?.room ?? null : null;
 };
 
-/** The pieces of that project's saved layout, to carry onto the drawing. */
+/**
+ * The pieces of that project's saved layout, to carry onto the drawing. A
+ * layout that no longer passes the room's checks (a stale or damaged save)
+ * stays behind rather than putting pieces into walls.
+ */
 const readPlannerLayout = (): Placement[] => {
     const draft = readProjectDraft();
-    return draft.status === "success" ? draft.value.planner?.layout?.placements ?? [] : [];
+    if (draft.status !== "success") return [];
+    const room = draft.value.planner?.room;
+    const placements = draft.value.planner?.layout?.placements ?? [];
+    return room && placements.length && validateLayout(room, placements).valid ? placements : [];
 };
 
 const parseMeters = (value: string): number | null => {
