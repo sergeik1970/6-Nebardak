@@ -4735,7 +4735,23 @@ const DrawRoom: React.FC = () => {
         const saved = readEditorSession();
         const plannerRoom = readPlannerRoom();
         if (saved) {
-            const restored = plannerRoom ? takePlannerOpenings(saved, plannerRoom) : saved;
+            const withOpenings = plannerRoom ? takePlannerOpenings(saved, plannerRoom) : saved;
+            // A layout made on the former layout step lives beside the drawing;
+            // when the drawing has no furniture yet and shows that very room,
+            // its pieces join the drawing where they stood.
+            const layout = readPlannerLayout();
+            const host =
+                plannerRoom && layout.length && !(withOpenings.furniture ?? []).length
+                    ? getRoomPreviews(withOpenings).find(
+                          (preview) => roomShapeKey(preview.room) === roomShapeKey(plannerRoom),
+                      )
+                    : undefined;
+            const restored = host
+                ? {
+                      ...withOpenings,
+                      furniture: solvedToDrawFurniture(layout, host.origin, "furniture-layout"),
+                  }
+                : withOpenings;
             if (plannerRoom) setNewerPlannerRoom(getNewerPlannerRoom(restored, plannerRoom));
             sceneForInteractionRef.current = restored;
             setHistory({ past: [], present: restored, future: [] });

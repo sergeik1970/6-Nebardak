@@ -105,11 +105,17 @@ test("an older project's room and layout open in the planner as a drawing", asyn
     await expect(page.getByRole("heading", { name: "Итоговая спецификация" })).toBeVisible({
         timeout: 60_000,
     });
-    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
-
+    // The usual case: the drawing has the walls, the layout step had the furniture.
     await page.goto("/planner", { waitUntil: "networkidle" });
     await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
-    await expect(page.locator("[data-draw-furniture^='furniture-']")).not.toHaveCount(0);
+    const pieces = page.locator("[data-draw-furniture^='furniture-']");
+    await expect(pieces).toHaveCount(1);
+
+    // A project from before the drawing existed: the room comes with its furniture.
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
+    await expect(pieces).toHaveCount(1);
     await expect(page.locator("[data-draw-room-notice='true']")).toContainText(
         "Комната и расстановка перенесены в планировщик",
     );

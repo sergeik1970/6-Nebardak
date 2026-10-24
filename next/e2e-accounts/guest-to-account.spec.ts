@@ -40,13 +40,11 @@ test("a guest's finished project moves into the new account and opens on another
     await other.goto("/projects", { waitUntil: "networkidle" });
     await loginByUi(other, account);
     await other.locator("[data-project-card] h2 a").click();
+    // It opens in the apartment planner: the walls with the layout's furniture on them.
     await expect(other).toHaveURL(/\/planner\?project=/);
     await expectSaved(other);
-    await expect(other.getByRole("heading", { name: "Итоговая спецификация" })).toBeVisible();
-    await expect(other.getByRole("checkbox", { name: /Книжный шкаф/ })).toBeChecked();
-    await expect(other.locator("[data-room-summary] [data-room-width]")).toHaveAttribute(
-        "data-room-width",
-        "5000",
-    );
+    await expect(other.locator("[data-draw-room-preview='true']")).toBeVisible();
+    await expect(other.locator("[data-draw-room-status='contour']")).toContainText("5 м × 4 м");
+    await expect(other.locator("[data-draw-furniture^='furniture-']")).toHaveCount(2);
     await otherDevice.close();
 });
