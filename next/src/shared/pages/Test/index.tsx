@@ -402,25 +402,22 @@ const Test: React.FC = () => {
 
                     <section className={styles.resultActions} aria-label="Следующий шаг">
                         <div>
-                            <p className={styles.eyebrow}>ДАЛЬШЕ — ПОТРЕБНОСТИ КОМНАТЫ</p>
-                            <h2>Соберём мебель, а затем проверим расстановку</h2>
+                            <p className={styles.eyebrow}>ДАЛЬШЕ — ПЛАНИРОВКА</p>
+                            <h2>Нарисуйте квартиру и расставьте мебель</h2>
                             <p>
-                                Стиль останется подсказкой и не будет подменять ваши реальные
-                                задачи.
+                                Стиль останется подсказкой: мебель вы выбираете сами, а подбор
+                                расстановки поможет, когда захочется.
                             </p>
                         </div>
                         <div className={styles.actionButtons}>
                             <Link
                                 className={styles.primaryAction}
                                 href={{
-                                    pathname: "/questionnaire",
-                                    query: withProjectQuery(
-                                        { style: primary.key, styleLabel: primary.label },
-                                        projectId,
-                                    ),
+                                    pathname: "/planner",
+                                    query: withProjectQuery({}, projectId),
                                 }}
                             >
-                                Перейти к мебели
+                                Перейти к планировке
                             </Link>
                             <button
                                 type="button"

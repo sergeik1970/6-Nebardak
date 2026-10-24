@@ -12,6 +12,7 @@ import {
     type DrawingProjectScene,
 } from "@/shared/pages/DrawRoom/project-file";
 import { DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY, type KeyValueStorage } from "./storage";
+import { STYLE_PROFILES } from "@/shared/lib/visual-preference";
 
 /**
  * The whole project as one JSON document — what the account stores.
@@ -199,7 +200,13 @@ export const summarizeProjectDocument = (document: ProjectDocument): ProjectSumm
         const area = Math.round(getRoomArea(room) / 10_000) / 100;
         if (Number.isFinite(area) && area > 0) areaM2 = area;
     }
-    const styleLabel = document.questionnaire.meta?.styleLabel?.slice(0, 60);
+    // A questionnaire names the style; since the test leads straight to the
+    // planner, its result names it otherwise.
+    const testStyle = document.visualTest?.result?.primaryKey;
+    const styleLabel = (
+        document.questionnaire.meta?.styleLabel ??
+        (testStyle ? STYLE_PROFILES[testStyle]?.label : undefined)
+    )?.slice(0, 60);
 
     return {
         stage,

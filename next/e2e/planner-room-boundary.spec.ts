@@ -124,7 +124,7 @@ test("planner keeps a custom boundary when dimensions change and grows a free wa
 });
 
 test("planner differentiates brown doors and blue windows in edit mode", async ({ page }) => {
-    await page.goto("/planner");
+    await page.goto("/planner/layout");
     await page.getByRole("button", { name: "Править комнату", exact: true }).click();
     const room = page.getByRole("group", { name: /План комнаты/ });
     const colors = await room.evaluate(() => {
@@ -144,7 +144,7 @@ test("planner differentiates brown doors and blue windows in edit mode", async (
 test("rectangle corner moves its own boundary and Escape restores the exact drag snapshot", async ({
     page,
 }) => {
-    await page.goto("/planner");
+    await page.goto("/planner/layout");
     await page.getByRole("button", { name: "Править комнату", exact: true }).click();
 
     const room = page.getByRole("group", { name: /План комнаты/ });
@@ -191,7 +191,7 @@ test("rectangle corner moves its own boundary and Escape restores the exact drag
 });
 
 test("occupied wall explains a blocked midpoint without covering its opening", async ({ page }) => {
-    await page.goto("/planner");
+    await page.goto("/planner/layout");
     await page.getByRole("button", { name: "Править комнату", exact: true }).click();
 
     const room = page.getByRole("group", { name: /План комнаты/ });

@@ -1,4 +1,10 @@
-import type { DoorOpening, Room, WindowOpening } from "@/shared/lib/furniture-planner";
+import type {
+    DoorOpening,
+    Placement,
+    RadiatorObstacle,
+    Room,
+    WindowOpening,
+} from "@/shared/lib/furniture-planner";
 import { createDefaultRoom } from "@/shared/lib/furniture-planner/room";
 import { DRAW_ROOM_WALL_LANE_MM } from "@/shared/lib/furniture-planner/draw-room-grid";
 import {
@@ -11,6 +17,7 @@ import {
     signedPolygonArea,
 } from "@/shared/lib/furniture-planner/room-geometry";
 import type { DrawingProjectScene } from "./project-file";
+import { solvedToDrawFurniture } from "./auto-layout";
 
 /** The editor's board; a converted room is centred on it. */
 const BOARD = { width: 16_000, height: 10_000 };
@@ -41,7 +48,10 @@ const reversed = <T extends { start: Point; end: Point }>(segment: T): T => ({
  * Partitions are not carried over: a room that has them came from the
  * editor in the first place and still has its drawing.
  */
-export const roomToDrawingScene = (room: Room): DrawingProjectScene | null => {
+export const roomToDrawingScene = (
+    room: Room,
+    placements: readonly Placement[] = [],
+): DrawingProjectScene | null => {
     const thickness = room.wallThickness ?? DRAW_ROOM_WALL_LANE_MM;
     let vertices = getRoomVertices(room);
     if (vertices.length < 4) return null;
@@ -81,7 +91,9 @@ export const roomToDrawingScene = (room: Room): DrawingProjectScene | null => {
 
     const sourceSegments = getRoomBoundarySegments(room);
     const targetSegments = getRoomBoundarySegments(derived.room);
-    const relink = <T extends DoorOpening | WindowOpening>(opening: T): T | null => {
+    const relink = <T extends DoorOpening | WindowOpening | RadiatorObstacle>(
+        opening: T,
+    ): T | null => {
         if ("partitionId" in opening && opening.partitionId) return null;
         const { drawingHostId: _host, ...rest } = opening;
         if (!opening.segmentId) return rest as T;
@@ -105,7 +117,9 @@ export const roomToDrawingScene = (room: Room): DrawingProjectScene | null => {
         segments,
         doors: keep(room.doors.map(relink)),
         windows: keep(room.windows.map(relink)),
-        furniture: [],
+        ...(room.radiators?.length ? { radiators: keep(room.radiators.map(relink)) } : {}),
+        // A saved layout keeps its pieces where they stood in the room.
+        furniture: solvedToDrawFurniture([...placements], derived.origin, "furniture-layout"),
         ...(room.wallThickness ? { wallThickness: room.wallThickness } : {}),
     };
 };

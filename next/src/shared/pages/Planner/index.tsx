@@ -4023,7 +4023,9 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
 
         // Keeps a questionnaire hand-off in the address: dropping it would reset the set.
         const plannerHref = withProjectParam(
-            handoffId ? `/planner?handoff=${encodeURIComponent(handoffId)}` : "/planner",
+            handoffId
+                ? `/planner/layout?handoff=${encodeURIComponent(handoffId)}`
+                : "/planner/layout",
         );
         const imported = result.placements;
         // A drawing with radiators is their source. An older drawing has none:

@@ -4,7 +4,7 @@ test("desktop planner presents a tool rail and reserves the largest column for t
     page,
 }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "Desktop workspace is covered once");
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     const workspace = page.locator("[data-planner-workspace='true']");
     const rail = page.getByRole("navigation", { name: "Разделы рабочего пространства" });
@@ -47,7 +47,7 @@ test("mobile planner keeps the plan full width before the stacked tool panels", 
     page,
 }, testInfo) => {
     test.skip(testInfo.project.name !== "mobile-chromium", "Mobile workspace is covered once");
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     const workspace = page.locator("[data-planner-workspace='true']");
     const rail = page.getByRole("navigation", { name: "Разделы рабочего пространства" });
@@ -81,7 +81,7 @@ test("desktop keeps the results strip in page flow instead of a hidden canvas sc
     page,
 }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "Desktop workspace is covered once");
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     const worktable = page.locator("[data-planner-primary-worktable='true']");
     const lab = page.getByRole("heading", { name: "Лаборатория расстановки", exact: true });
@@ -119,7 +119,7 @@ test("tablet app bar and mobile catalogue remain contained and touch-safe", asyn
 }, testInfo) => {
     if (testInfo.project.name === "desktop-chromium") {
         await page.setViewportSize({ width: 768, height: 1024 });
-        await page.goto("/planner", { waitUntil: "networkidle" });
+        await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
         const tablet = await page.evaluate(() => {
             const header = document.querySelector<HTMLElement>("[data-planner-app-bar='true']");
@@ -138,7 +138,7 @@ test("tablet app bar and mobile catalogue remain contained and touch-safe", asyn
     }
 
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Править комнату", exact: true }).click();
 
     const containment = await page.evaluate(() => {
@@ -174,7 +174,7 @@ test("catalogue search and filters preserve selected furniture without overlappi
             ? { width: 768, height: 1024 }
             : { width: 375, height: 812 },
     );
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
     await page.locator("#planner-tool-furniture").scrollIntoViewIfNeeded();
 
     const search = page.getByRole("searchbox", { name: "Поиск мебели" });
@@ -238,7 +238,7 @@ test("mobile room controls expose 44px targets without changing visible opening 
 }, testInfo) => {
     test.skip(testInfo.project.name !== "mobile-chromium", "Touch target geometry is covered once");
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Править комнату", exact: true }).click();
 
     const targets = await page.evaluate(() => {
@@ -276,7 +276,7 @@ test("desktop keeps the primary action visible on a 1440 by 1000 worktable", asy
 }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "Laptop height is covered once");
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     await expect(page.locator("[data-project-status='true']")).toBeHidden();
     const primaryAction = page.getByRole("button", { name: "Уместить всё", exact: true });
@@ -291,7 +291,7 @@ test("desktop fitted plan contains the room and edit controls without an interna
 }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "Desktop fit is covered once");
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     const readFit = () =>
         page.evaluate(() => {
@@ -367,7 +367,7 @@ test("resetting the demo planner returns to the uncalculated room without a solv
     page,
 }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "Reset is covered once on desktop");
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     const size = page.locator("[data-room-summary] [data-room-width]");
     await page.getByRole("button", { name: "Править комнату", exact: true }).click();

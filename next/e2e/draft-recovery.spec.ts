@@ -45,7 +45,7 @@ test("legacy v1 project is migrated and its inputs remain editable", async ({ pa
         draft: { version: 1, ...projectInputs },
     });
 
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     // The header and the narrow-screen status row share this text; one of them is shown.
     await expect(
@@ -78,7 +78,7 @@ test("v2 project is migrated without losing room inputs", async ({ page }, testI
         draft: { version: 2, ...projectInputs },
     });
 
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
     await expect(page.locator("[data-room-summary] [data-room-width]")).toHaveAttribute(
@@ -108,7 +108,7 @@ test("v3 project is migrated to v4 room geometry and segment anchors", async ({
         key: V3_KEY,
         draft: { version: 3, ...projectInputs },
     });
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     await expect
         .poll(() =>
@@ -170,7 +170,7 @@ test("invalid saved coordinates are dropped without losing room or furniture", a
         draft: invalidLayoutDraft,
     });
 
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     await expect(
         page.getByText(/Сохранённая расстановка больше не проходит проверку/),

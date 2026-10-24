@@ -1906,7 +1906,7 @@ test("separate room drawing route makes the gridded field primary and creates a 
 
     await page.getByRole("button", { name: "Продолжить с комнатой" }).click();
     // The planner drops `?drawRoom=1` once imported, so a refresh cannot re-import over edits.
-    await expect(page).toHaveURL(/\/planner(\?drawRoom=1)?$/);
+    await expect(page).toHaveURL(/\/planner\/layout(\?drawRoom=1)?$/);
     await expect(page.locator("[data-room-summary]")).toBeVisible();
     const transferredSize = await readRoomSize(page);
     expect(transferredSize.width).toBeGreaterThanOrEqual(5000);
@@ -3209,7 +3209,7 @@ test("a radiator is placed on the drawing, keeps furniture away and reaches the 
     await page.reload({ waitUntil: "networkidle" });
     await expect(radiator).toHaveCount(1);
     await page.getByRole("button", { name: "Продолжить с комнатой" }).click();
-    await page.waitForURL(/\/planner\?drawRoom=1|\/planner$/);
+    await page.waitForURL(/\/planner\/layout\?drawRoom=1|\/planner\/layout$/);
     await expect(page.locator("[data-room-obstacle='radiator']")).toHaveCount(1);
 });
 
@@ -4275,7 +4275,7 @@ test("every visible grid point remains drawable outside the former 16 by 10 m ar
 });
 
 test("planner's draw entry opens the separate room editor", async ({ page }) => {
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
     await page.getByRole("link", { name: "Изменить комнату в чертеже" }).click();
     await expect(page).toHaveURL(/\/planner\/draw$/);
     await expect(page.locator("[data-draw-room-board='true']")).toBeVisible();
@@ -4298,7 +4298,7 @@ test("tablet drawing editor has no document overflow and keeps an explicit plann
     expect(containment.documentHeight).toBeLessThanOrEqual(containment.viewportHeight);
     await expectSquareGrid(page);
     await expectCadSurfaceAlignment(page);
-    await expect(page.getByRole("link", { name: "Назад к планировщику" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Назад к проектам" })).toBeVisible();
     await expect(page.getByText("Поставьте первый угол", { exact: true })).toHaveCount(0);
     await expect(page.locator("[data-draw-room-notice='true']")).toContainText(
         "Зажмите левую кнопку",

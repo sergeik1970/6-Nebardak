@@ -44,7 +44,7 @@ test("manual placement keeps the first item after a second item is dragged onto 
     test.skip(testInfo.project.name !== "desktop-chromium", "Desktop drag scenario runs once");
 
     await page.setViewportSize({ width: 1920, height: 1080 });
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Начать вручную" }).click();
 
     const room = page.locator('[data-manual-drop-room="true"]');
@@ -69,7 +69,7 @@ test("generated plan stays on the room while a newly selected item is added", as
     );
 
     await page.setViewportSize({ width: 1920, height: 1080 });
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     for (const selector of [
         "#furniture-double-bed",
