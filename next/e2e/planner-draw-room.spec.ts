@@ -3019,6 +3019,78 @@ test("a room is picked on the plan and given a kind that survives a reload", asy
     }
 });
 
+test("furniture goes into the selected room, against its walls", async ({ page }, testInfo) => {
+    test.skip(
+        testInfo.project.name !== "desktop-chromium",
+        "Room-scoped furniture is covered once with real pointer input",
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 4000, 3000);
+    await openToolGroup(page, "walls");
+    await page.locator("[data-draw-room-tool='wall']").click();
+    await dragOnBoardWorld(page, { x: 4000, y: 3500 }, { x: 8000, y: 3500 });
+    await page.getByRole("button", { name: "Вместить" }).click();
+
+    await page.locator("[data-draw-room-step='rooms']").click();
+    const lowerRoom = await getBoardScreenPoint(page, 5000, 4300);
+    await page.mouse.click(lowerRoom.x, lowerRoom.y);
+    await page
+        .locator("[data-draw-room-region-item][data-selected='true'] select")
+        .selectOption("bedroom");
+
+    await page.locator("[data-draw-room-step='furniture']").click();
+    const panel = page.locator("[aria-label='Мебель на чертеже']");
+    await expect(panel.locator("header b")).toHaveText("Спальня");
+    // A bedroom opens the catalogue on beds and storage.
+    await expect(panel.locator("h3").first()).toHaveText("Кровати");
+    // Only the other room is greyed out.
+    await expect(page.locator("[data-draw-room-region-fill]")).toHaveCount(1);
+
+    // Dropped 10 cm short of the bottom wall, the bed is pulled flush to it.
+    await page.locator("[data-add-furniture='single-bed']").click();
+    await page.keyboard.press("r");
+    const nearWall = await getBoardScreenPoint(page, 5200, 4400);
+    await page.mouse.move(nearWall.x, nearWall.y);
+    await page.mouse.click(nearWall.x, nearWall.y);
+    const pieces = page.locator("[data-draw-furniture^='furniture-']");
+    await expect(pieces).toHaveCount(1);
+    await expect(pieces).toHaveAttribute("transform", "translate(4200 4050)");
+    await expect(pieces.locator("[data-furniture-size='width']")).toHaveText("200");
+    await expect(pieces.locator("[data-furniture-size='depth']")).toHaveText("90");
+    await expect(page.getByLabel("До стены снизу, мм")).toHaveValue("0");
+
+    // The other room does not take this room's furniture.
+    await panel.getByRole("button", { name: "Каталог" }).click();
+    await page.locator("[data-add-furniture='single-bed']").click();
+    const upperRoom = await getBoardScreenPoint(page, 6000, 2700);
+    await page.mouse.move(upperRoom.x, upperRoom.y);
+    await page.mouse.click(upperRoom.x, upperRoom.y);
+    await expect(pieces).toHaveCount(1);
+    await expect(panel.getByRole("status")).toContainText("за пределы комнаты «Спальня»");
+    await page.keyboard.press("Escape");
+
+    // Clicking the other room moves the work there; the bedroom's bed stays quiet.
+    await page.mouse.click(upperRoom.x, upperRoom.y);
+    await expect(panel.locator("header b")).toHaveText("Помещение 1");
+    await expect(pieces).toHaveCSS("opacity", "0.45");
+    await expect(pieces.locator("[data-furniture-size]")).toHaveCount(0);
+
+    // Shift keeps the piece in hand for several spots.
+    await page.locator("[data-add-furniture='pouf']").click();
+    const first = await getBoardScreenPoint(page, 5000, 2750);
+    const second = await getBoardScreenPoint(page, 7000, 2750);
+    await page.mouse.move(first.x, first.y);
+    await page.keyboard.down("Shift");
+    await page.mouse.click(first.x, first.y);
+    await page.mouse.move(second.x, second.y);
+    await page.mouse.click(second.x, second.y);
+    await page.keyboard.up("Shift");
+    await expect(pieces).toHaveCount(3);
+});
+
 test("a divider keeps the completed exterior and dimensions each room on its own", async ({
     page,
 }, testInfo) => {

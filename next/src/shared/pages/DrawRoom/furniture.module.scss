@@ -101,6 +101,15 @@
         text-align: center;
     }
 }
+.item .sizeLabels text {
+    fill: #1d252c;
+    stroke: #fffdfa;
+    stroke-width: 0.3em;
+    stroke-linejoin: round;
+    paint-order: stroke;
+    font-weight: 850;
+    pointer-events: none;
+}
 .item {
     cursor: grab;
     fill: #ede7db;
