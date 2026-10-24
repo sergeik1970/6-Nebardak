@@ -136,6 +136,11 @@
         stroke: #bf3e34;
         fill: #fbe5e0;
     }
+    // Upper units hang above the base run: dashed and see-through.
+    &[data-mounting="upper"] {
+        fill-opacity: 0.35;
+        stroke-dasharray: 6 4;
+    }
 }
 .detail {
     fill: #fffdf7;

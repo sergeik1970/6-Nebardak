@@ -1,4 +1,4 @@
-import { getMaximumFurnitureCount } from "./catalog";
+import { getFurniture, getMaximumFurnitureCount } from "./catalog";
 import { validateLayout } from "./geometry";
 import type { Placement, Room, ValidationIssue } from "./types";
 import type { DrawFurniture } from "../../pages/DrawRoom/furniture";
@@ -9,7 +9,11 @@ export function prepareDrawFurnitureHandoff(
     furniture: DrawFurniture[],
 ) {
     const selection: Record<string, number> = {};
-    const placements: Placement[] = furniture.map((item) => {
+    // The layout step has a single floor tier: upper units stay on the drawing.
+    const floorFurniture = furniture.filter(
+        (item) => getFurniture(item.definitionId).mounting !== "upper",
+    );
+    const placements: Placement[] = floorFurniture.map((item) => {
         const count = (selection[item.definitionId] ?? 0) + 1;
         selection[item.definitionId] = count;
         return {
