@@ -278,9 +278,21 @@ export interface RadiatorObstacle {
 }
 
 /** A user name attached to a stable, derived region geometry signature. */
+/** What a room is used for; it decides which furniture is offered first. */
+export type RoomKind =
+    | "bedroom"
+    | "living"
+    | "kitchen"
+    | "children"
+    | "office"
+    | "hallway"
+    | "bathroom"
+    | "other";
+
 export interface RoomRegionMetadata {
     signature: string;
     name: string;
+    kind?: RoomKind;
 }
 
 /**

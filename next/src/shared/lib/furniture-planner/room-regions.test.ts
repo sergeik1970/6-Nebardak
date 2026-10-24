@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     getDrawRoomRegions,
+    isGeneratedRoomName,
     materializeRoomRegionsState,
     normalizeRoomRegionsState,
 } from "./room-regions";
@@ -30,6 +31,44 @@ const room: Room = {
 };
 
 describe("Draw Room named regions", () => {
+    it("keeps a chosen room kind with the name and drops an unknown one", () => {
+        const [left, right] = getDrawRoomRegions(room);
+        const state = normalizeRoomRegionsState({
+            version: 1,
+            items: [
+                { signature: left.signature, name: "Спальня", kind: "bedroom" },
+                { signature: right.signature, name: "Склад", kind: "garage" },
+            ],
+        });
+        expect(state?.items).toEqual([
+            { signature: left.signature, name: "Спальня", kind: "bedroom" },
+            { signature: right.signature, name: "Склад" },
+        ]);
+        const named = getDrawRoomRegions({ ...room, regions: state });
+        expect(named.map(({ name, kind }) => ({ name, kind }))).toEqual([
+            { name: "Спальня", kind: "bedroom" },
+            { name: "Склад", kind: undefined },
+        ]);
+        expect(materializeRoomRegionsState({ ...room, regions: state }).items).toEqual(
+            state?.items,
+        );
+    });
+
+    it("tells generated names from ones a person typed", () => {
+        expect(isGeneratedRoomName("Помещение 3")).toBe(true);
+        expect(isGeneratedRoomName("Кухня")).toBe(true);
+        expect(isGeneratedRoomName("Кабинет мужа")).toBe(false);
+    });
+
+    it("covers each region with its clear rectangles", () => {
+        const [left] = getDrawRoomRegions(room);
+        const area = left.clearRects.reduce(
+            (sum, rect) => sum + (rect.right - rect.left) * (rect.bottom - rect.top),
+            0,
+        );
+        expect(area).toBe(left.areaSquareMillimeters);
+    });
+
     it("gives each region its own clear faces instead of the whole room span", () => {
         const [left, right] = getDrawRoomRegions(room);
         const lengths = (region: typeof left) =>
