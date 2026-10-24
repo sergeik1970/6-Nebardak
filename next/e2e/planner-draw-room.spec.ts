@@ -2905,7 +2905,7 @@ test("an unfinished exterior cannot turn into a small room when drawing a divide
     await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
 });
 
-test("a divider keeps the completed exterior and exposes its two clear spans", async ({
+test("a divider keeps the completed exterior and dimensions each room on its own", async ({
     page,
 }, testInfo) => {
     test.skip(
@@ -2915,9 +2915,11 @@ test("a divider keeps the completed exterior and exposes its two clear spans", a
     // Each viewport is a new scene, not a restored draft of the previous one.
     await page.addInitScript(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
 
-    for (const viewport of [
-        { width: 1440, height: 900 },
-        { width: 375, height: 812 },
+    for (const { reversed, ...viewport } of [
+        { width: 1440, height: 900, reversed: false },
+        { width: 375, height: 812, reversed: false },
+        // Drawn bottom-up, the same divider must still replace the clear total.
+        { width: 1440, height: 900, reversed: true },
     ]) {
         await page.setViewportSize(viewport);
         await page.goto("/planner/draw", { waitUntil: "networkidle" });
@@ -2928,7 +2930,10 @@ test("a divider keeps the completed exterior and exposes its two clear spans", a
         // tool rail for the rooms card); continue with the wall tool.
         await openToolGroup(page, "walls");
         await page.locator("[data-draw-room-tool='wall']").click();
-        await dragOnBoardWorld(page, { x: 5950, y: 3200 }, { x: 5950, y: 4350 });
+        const dividerTop = { x: 5950, y: 3200 };
+        const dividerBottom = { x: 5950, y: 4350 };
+        if (reversed) await dragOnBoardWorld(page, dividerBottom, dividerTop);
+        else await dragOnBoardWorld(page, dividerTop, dividerBottom);
         await page.getByRole("button", { name: "Вместить" }).click();
 
         await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
@@ -2936,22 +2941,33 @@ test("a divider keeps the completed exterior and exposes its two clear spans", a
             "1,8 м × 1,05 м",
         );
         await expect(page.locator("[data-draw-room-wall-branch='true']")).toHaveCount(1);
-        await expect(page.locator("[data-draw-room-branch-dimension]")).toHaveCount(3);
-        // The centred 10 cm divider leaves two equal 85 cm clear bays; the
-        // chain also states the divider's own thickness between them.
-        await expect(page.locator("[data-draw-room-branch-dimension-label='true']")).toHaveText([
-            "85",
-            "10",
-            "85",
-        ]);
+        // Each room carries its own clear faces; nothing runs across both.
+        await expect(page.locator("[data-draw-room-branch-dimension]")).toHaveCount(0);
         await expect(page.locator("[data-draw-room-dimension-chain='outer']")).not.toHaveCount(0);
         await expect(page.locator("[data-draw-room-dimension-chain='inner']")).not.toHaveCount(0);
         const chainLabels = await page.locator("[data-draw-room-wall-dimension]").allTextContents();
-        // The divider's 85 | 10 | 85 chain replaces the undivided 180 clear span.
-        expect(Array.from(new Set(chainLabels)).sort()).toEqual(["105", "125", "200"]);
+        // The centred 10 cm divider leaves two 85 × 105 cm rooms. The undivided
+        // 180 cm clear span would only overlap their values.
+        expect(chainLabels).not.toContain("180");
+        expect(chainLabels).toEqual(expect.arrayContaining(["200", "125"]));
+        if (viewport.width > 480) {
+            const innerLabels = await page
+                .locator("[data-draw-room-wall-dimension='inner']")
+                .allTextContents();
+            expect(innerLabels.sort()).toEqual([
+                "105",
+                "105",
+                "105",
+                "105",
+                "85",
+                "85",
+                "85",
+                "85",
+            ]);
+        }
         await page.screenshot({
             path: testInfo.outputPath(
-                `divider-clear-spans-${viewport.width}x${viewport.height}.png`,
+                `divider-clear-spans-${viewport.width}x${viewport.height}${reversed ? "-reversed" : ""}.png`,
             ),
         });
     }
@@ -3953,14 +3969,15 @@ test("constructive 10 mm drawing keeps exact face chains, regions and responsive
     await expect(page.locator("[data-draw-room-summary='true']")).toContainText("S=2,26 м²");
 
     await addCoordinates([2830, 4000, 2830, 4880]);
-    await expect(page.locator("[data-draw-room-branch-dimension-label='true']")).toHaveText([
-        "173",
-        "10",
-        "107",
-    ]);
-    expect(
-        await page.locator("[data-draw-room-wall-dimension='inner']").allTextContents(),
-    ).not.toContain("290");
+    // The divider hands the clear values to the two rooms it creates.
+    await expect(page.locator("[data-draw-room-branch-dimension-label='true']")).toHaveCount(0);
+    const roomValues = await page
+        .locator("[data-draw-room-wall-dimension='inner']")
+        .allTextContents();
+    // At this zoom the 78 cm deep rooms keep their H/S labels and hide the
+    // values that would crowd them; every value shown belongs to one room.
+    expect(roomValues.length).toBeGreaterThan(0);
+    roomValues.forEach((value) => expect(["173", "107", "78"]).toContain(value));
     await expect(page.locator("[data-draw-room-region]")).toHaveCount(2);
     await expect(page.locator("[data-draw-room-region]").first()).toContainText("H=270");
     await expect(page.locator("[data-draw-room-region]").first()).toContainText("S=1,35 м²");
