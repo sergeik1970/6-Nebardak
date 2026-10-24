@@ -1,6 +1,13 @@
 import React, { useState } from "react";
+import type { PlannerObservationVerdict } from "@/services/plannerObservationService";
 import { FURNITURE_CATALOG, getMaximumFurnitureCount } from "@/shared/lib/furniture-planner";
 import styles from "./furniture.module.scss";
+
+const VERDICTS: { value: PlannerObservationVerdict; label: string }[] = [
+    { value: "good", label: "Хорошо" },
+    { value: "questionable", label: "Спорно" },
+    { value: "needs-fix", label: "Нужно исправить" },
+];
 
 export interface AutoLayoutVariantSummary {
     label: string;
@@ -22,6 +29,10 @@ export default function AutoLayoutPanel({
     appliedIndex,
     onApply,
     blockedReason,
+    reviewable = false,
+    reviewHint = null,
+    reviewStatus = "",
+    onReview,
 }: {
     set: Record<string, number>;
     onSetChange: (set: Record<string, number>) => void;
@@ -33,8 +44,16 @@ export default function AutoLayoutPanel({
     onApply: (index: number) => void;
     /** Why solving is not possible for this room, if it is not. */
     blockedReason: string | null;
+    /** The applied variant can go to the designer review queue. */
+    reviewable?: boolean;
+    /** Why a review cannot be sent, e.g. signed out. */
+    reviewHint?: string | null;
+    reviewStatus?: string;
+    onReview?: (review: { verdict: PlannerObservationVerdict; comment: string }) => void;
 }) {
     const [open, setOpen] = useState(false);
+    const [verdict, setVerdict] = useState<PlannerObservationVerdict>("good");
+    const [comment, setComment] = useState("");
     const ids = Object.keys(set).filter((id) => set[id] > 0);
     const addable = FURNITURE_CATALOG.filter(
         (definition) => definition.mounting !== "upper" && !ids.includes(definition.id),
@@ -126,6 +145,53 @@ export default function AutoLayoutPanel({
                                 </div>
                             )}
                             <p role="status">{status}</p>
+                            {reviewable && (
+                                <form
+                                    className={styles.autoLayoutReview}
+                                    data-auto-layout-review="true"
+                                    onSubmit={(event) => {
+                                        event.preventDefault();
+                                        // The review API takes one line: no control characters.
+                                        const text = comment.replace(/\s+/g, " ").trim();
+                                        if (text) onReview?.({ verdict, comment: text });
+                                    }}
+                                >
+                                    <b>Оценить вариант для разбора</b>
+                                    {reviewHint ? (
+                                        <p>{reviewHint}</p>
+                                    ) : (
+                                        <>
+                                            <select
+                                                aria-label="Оценка варианта"
+                                                value={verdict}
+                                                onChange={(event) =>
+                                                    setVerdict(
+                                                        event.target
+                                                            .value as PlannerObservationVerdict,
+                                                    )
+                                                }
+                                            >
+                                                {VERDICTS.map((item) => (
+                                                    <option key={item.value} value={item.value}>
+                                                        {item.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <textarea
+                                                aria-label="Что не так или что удалось"
+                                                placeholder="Что не так или что удалось"
+                                                maxLength={1200}
+                                                value={comment}
+                                                onChange={(event) => setComment(event.target.value)}
+                                            />
+                                            <button type="submit" disabled={!comment.trim()}>
+                                                Отправить на разбор
+                                            </button>
+                                            {reviewStatus && <p>{reviewStatus}</p>}
+                                        </>
+                                    )}
+                                </form>
+                            )}
                         </>
                     )}
                 </div>

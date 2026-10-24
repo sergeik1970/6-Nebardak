@@ -186,7 +186,7 @@ const GuestDraftCard: React.FC<{ onImported: (project: ProjectListItem) => void 
                 >
                     {state === "saving" ? "Сохраняем…" : "Сохранить в аккаунт"}
                 </button>
-                <Link className={styles.secondary} href="/questionnaire">
+                <Link className={styles.secondary} href="/planner">
                     Открыть
                 </Link>
             </div>
@@ -389,7 +389,7 @@ const Projects: React.FC = () => {
             return (
                 <p className={styles.muted}>
                     Аккаунты сейчас отключены. Проект можно вести без входа —{" "}
-                    <Link href="/questionnaire">открыть черновик</Link>.
+                    <Link href="/planner">открыть черновик</Link>.
                 </p>
             );
         }

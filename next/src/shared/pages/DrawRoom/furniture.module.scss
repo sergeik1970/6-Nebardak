@@ -297,3 +297,18 @@
         color: #6a7b80;
     }
 }
+
+.autoLayoutReview {
+    display: grid;
+    gap: 6px;
+    border-top: 1px solid #e3d8c7;
+    padding-top: 8px;
+    textarea {
+        min-height: 56px;
+        resize: vertical;
+        border: 1px solid #bbc6c4;
+        border-radius: 4px;
+        padding: 6px;
+        font: inherit;
+    }
+}

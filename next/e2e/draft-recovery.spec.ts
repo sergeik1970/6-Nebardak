@@ -23,6 +23,12 @@ const room = {
     radiators: [],
 };
 
+/** The planner shows the migrated room as a closed drawing of its size. */
+const expectRoomOnDrawing = async (page: import("@playwright/test").Page) => {
+    await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
+    await expect(page.locator("[data-draw-room-status='contour']")).toContainText("6,2 м × 4,6 м");
+};
+
 const projectInputs = {
     updatedAt: 1_750_000_000_000,
     questionnaire: {
@@ -36,7 +42,9 @@ const projectInputs = {
     },
 };
 
-test("legacy v1 project is migrated and its inputs remain editable", async ({ page }, testInfo) => {
+test("legacy v1 project is migrated and its room opens in the planner", async ({
+    page,
+}, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "Draft recovery runs once on desktop");
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -45,17 +53,8 @@ test("legacy v1 project is migrated and its inputs remain editable", async ({ pa
         draft: { version: 1, ...projectInputs },
     });
 
-    await page.goto("/planner/layout", { waitUntil: "networkidle" });
-
-    // The header and the narrow-screen status row share this text; one of them is shown.
-    await expect(
-        page.getByText(/Черновик перенесён в новую версию/).filter({ visible: true }),
-    ).toBeVisible();
-    await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
-    await expect(page.locator("[data-room-summary] [data-room-width]")).toHaveAttribute(
-        "data-room-width",
-        "6200",
-    );
+    await page.goto("/planner", { waitUntil: "networkidle" });
+    await expectRoomOnDrawing(page);
     await expect
         .poll(() =>
             page.evaluate(
@@ -78,13 +77,8 @@ test("v2 project is migrated without losing room inputs", async ({ page }, testI
         draft: { version: 2, ...projectInputs },
     });
 
-    await page.goto("/planner/layout", { waitUntil: "networkidle" });
-
-    await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
-    await expect(page.locator("[data-room-summary] [data-room-width]")).toHaveAttribute(
-        "data-room-width",
-        "6200",
-    );
+    await page.goto("/planner", { waitUntil: "networkidle" });
+    await expectRoomOnDrawing(page);
     await expect
         .poll(() =>
             page.evaluate(
@@ -108,7 +102,8 @@ test("v3 project is migrated to v4 room geometry and segment anchors", async ({
         key: V3_KEY,
         draft: { version: 3, ...projectInputs },
     });
-    await page.goto("/planner/layout", { waitUntil: "networkidle" });
+    await page.goto("/planner", { waitUntil: "networkidle" });
+    await expectRoomOnDrawing(page);
 
     await expect
         .poll(() =>
@@ -133,7 +128,7 @@ test("v3 project is migrated to v4 room geometry and segment anchors", async ({
         });
 });
 
-test("invalid saved coordinates are dropped without losing room or furniture", async ({
+test("invalid saved coordinates are dropped without losing the room", async ({
     page,
 }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "Draft recovery runs once on desktop");
@@ -170,22 +165,10 @@ test("invalid saved coordinates are dropped without losing room or furniture", a
         draft: invalidLayoutDraft,
     });
 
-    await page.goto("/planner/layout", { waitUntil: "networkidle" });
-
-    await expect(
-        page.getByText(/Сохранённая расстановка больше не проходит проверку/),
-    ).toBeVisible();
-    await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
-    await expect(page.locator("[data-room-summary] [data-room-width]")).toHaveAttribute(
-        "data-room-width",
-        "6200",
-    );
-    await expect(page.locator("[data-plan-idle-guidance='true']")).toBeVisible();
-    await expect
-        .poll(() =>
-            page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), CURRENT_KEY),
-        )
-        .not.toHaveProperty("planner.layout");
+    await page.goto("/planner", { waitUntil: "networkidle" });
+    await expectRoomOnDrawing(page);
+    // A bed saved outside its room never reaches the plan.
+    await expect(page.locator("[data-draw-furniture^='furniture-']")).toHaveCount(0);
 });
 
 test("visual-test progress restores from the unified draft in a new page", async ({
