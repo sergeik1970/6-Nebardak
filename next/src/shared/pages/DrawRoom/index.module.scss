@@ -2294,3 +2294,29 @@
         }
     }
 }
+
+.radiator {
+    cursor: pointer;
+    line {
+        stroke: #b5503c;
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+    }
+}
+.radiatorBody {
+    fill: #f6d6cb;
+    stroke: #b5503c;
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+}
+.radiatorClearance {
+    fill: rgba(214, 96, 70, 0.07);
+    stroke: #d38a77;
+    stroke-width: 1;
+    stroke-dasharray: 5 4;
+    vector-effect: non-scaling-stroke;
+}
+.radiator[data-selected="true"] .radiatorBody {
+    stroke: var(--draw-orange);
+    stroke-width: 2.5;
+}

@@ -80,7 +80,7 @@ const overlaps = (
     a.y < b.y + b.depth - 0.01 &&
     a.y + a.depth > b.y + 0.01;
 export interface FurnitureConflict {
-    kind: "door" | "wall" | "furniture" | "room";
+    kind: "door" | "wall" | "furniture" | "room" | "radiator";
     rect: Rect;
     message: string;
 }
@@ -133,6 +133,7 @@ export function furnitureConflicts(
     thickness: number,
     doorObstacles: readonly Rect[] = [],
     room: FurnitureRoom | null = null,
+    radiatorObstacles: readonly Rect[] = [],
 ): FurnitureConflict[] {
     if (room && !furnitureInsideRoom(item, room)) {
         const { width, depth } = furnitureGeometry(item);
@@ -157,6 +158,12 @@ export function furnitureConflicts(
             rect,
             message:
                 "Мебель перекрывает дверной проём или мешает открыванию двери. Оставьте проход свободным.",
+        })),
+        // Upper units hang above a radiator and the warm air rising from it.
+        ...(mounting === "upper" ? [] : radiatorObstacles).map((rect) => ({
+            kind: "radiator" as const,
+            rect,
+            message: "Мебель закрывает радиатор. Перед ним нужно оставить 30 см свободными.",
         })),
         ...walls.map((wall) => ({
             kind: "wall" as const,
@@ -194,9 +201,11 @@ export function furnitureError(
     thickness: number,
     doorObstacles: readonly Rect[] = [],
     room: FurnitureRoom | null = null,
+    radiatorObstacles: readonly Rect[] = [],
 ): string | null {
     return (
-        furnitureConflicts(item, items, walls, thickness, doorObstacles, room)[0]?.message ?? null
+        furnitureConflicts(item, items, walls, thickness, doorObstacles, room, radiatorObstacles)[0]
+            ?.message ?? null
     );
 }
 
