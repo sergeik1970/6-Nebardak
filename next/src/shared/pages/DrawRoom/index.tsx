@@ -59,6 +59,7 @@ import {
     type DoorOpening,
     type DrawRoomGridPresentationLevel,
     type DrawRoomRegion,
+    type Placement,
     type RadiatorObstacle,
     type Room,
     type RoomBoundarySegment,
@@ -78,6 +79,17 @@ import {
     type FurnitureRoom,
 } from "./furniture";
 import ResultPanel, { type ResultItem, type ResultRoom } from "./ResultPanel";
+import AutoLayoutPanel, { type AutoLayoutVariantSummary } from "./AutoLayoutPanel";
+import {
+    ROOM_KIND_FURNITURE,
+    buildRegionSolverRoom,
+    buildRoomInstances,
+    solvedToDrawFurniture,
+} from "./auto-layout";
+import type {
+    SolverWorkerRequest,
+    SolverWorkerResponse,
+} from "@/shared/lib/furniture-planner/solver.worker";
 import Dialog from "@/shared/components/Dialog";
 import { RECT_TEMPLATE_LIMITS, createRectTemplateRoom, roomToDrawingScene } from "./room-template";
 
@@ -263,6 +275,13 @@ const MAX_ZOOM = 5;
 const MIN_ZOOM = 0.25;
 const WHEEL_ZOOM_SENSITIVITY = 0.0022;
 const BOARD_ASPECT = BOARD_WIDTH_MM / BOARD_HEIGHT_MM;
+
+/** A solver request without the id the worker channel adds. */
+type SolverPayload = SolverWorkerRequest extends infer Request
+    ? Request extends SolverWorkerRequest
+        ? Omit<Request, "requestId">
+        : never
+    : never;
 
 const RADIATOR_DEFAULT_WIDTH_MM = 800;
 const RADIATOR_DEPTH_MM = 100;
@@ -7049,6 +7068,177 @@ const DrawRoom: React.FC = () => {
                 : null,
         [furnitureRegion],
     );
+
+    // «Подобрать расстановку»: a set per room, solved in a worker for that room alone.
+    const [autoLayoutSets, setAutoLayoutSets] = useState<Record<string, Record<string, number>>>(
+        {},
+    );
+    const [autoLayoutSolving, setAutoLayoutSolving] = useState(false);
+    const [autoLayoutStatus, setAutoLayoutStatus] = useState("");
+    const [autoLayoutVariants, setAutoLayoutVariants] = useState<{
+        signature: string;
+        variants: { summary: AutoLayoutVariantSummary; pieces: DrawFurniture[] }[];
+    } | null>(null);
+    const [autoLayoutApplied, setAutoLayoutApplied] = useState<number | null>(null);
+    const autoLayoutWorker = useRef<Worker | null>(null);
+    useEffect(() => () => autoLayoutWorker.current?.terminate(), []);
+    const autoLayoutSet =
+        (furnitureRegion && autoLayoutSets[furnitureRegion.signature]) ??
+        ROOM_KIND_FURNITURE[furnitureRegion?.kind ?? "other"];
+    const autoLayoutTarget = useMemo(() => {
+        if (!furnitureRegion || !furnitureRoom) return null;
+        const owner = previews.find((item) => regionPrefix(item) === furnitureRegion.buildingId);
+        if (!owner) return null;
+        const items = scene.furniture ?? [];
+        const own = items.filter((item) => furnitureBelongsToRoom(item, furnitureRoom));
+        if (own.some((item) => item.locked))
+            return {
+                status: "unsupported" as const,
+                message:
+                    "В комнате есть закреплённые предметы. Снимите закрепление, чтобы подобрать расстановку.",
+            };
+        const cut = buildRegionSolverRoom(owner.room, furnitureRegion);
+        if (cut.status !== "ready") return cut;
+        return {
+            ...cut,
+            offset: { x: owner.origin.x + cut.origin.x, y: owner.origin.y + cut.origin.y },
+            kept: items.filter((item) => !own.includes(item)),
+        };
+    }, [furnitureRegion, furnitureRoom, previews, scene.furniture]);
+    const requestSolver = useCallback(
+        (request: SolverPayload) =>
+            new Promise<SolverWorkerResponse>((resolve, reject) => {
+                autoLayoutWorker.current?.terminate();
+                const worker = new Worker(
+                    new URL("../../lib/furniture-planner/solver.worker.ts", import.meta.url),
+                );
+                autoLayoutWorker.current = worker;
+                worker.onmessage = (event: MessageEvent<SolverWorkerResponse>) => {
+                    worker.terminate();
+                    resolve(event.data);
+                };
+                worker.onerror = (event) => {
+                    worker.terminate();
+                    reject(new Error(event.message || "Не удалось выполнить расчёт."));
+                };
+                worker.postMessage({ ...request, requestId: 1 } as SolverWorkerRequest);
+            }),
+        [],
+    );
+    const solveAutoLayout = useCallback(async () => {
+        if (!furnitureRegion || !furnitureRoom || autoLayoutTarget?.status !== "ready") return;
+        const target = autoLayoutTarget;
+        const instances = buildRoomInstances(autoLayoutSet);
+        setAutoLayoutSolving(true);
+        setAutoLayoutStatus("Подбираем варианты…");
+        setAutoLayoutApplied(null);
+        try {
+            let solved: { label: string; placements: Placement[] }[] = [];
+            const response = await requestSolver({
+                action: "solve-variants",
+                room: target.room,
+                instances,
+                preferences: {},
+                limit: 3,
+            });
+            if (response.ok && response.action === "solve-variants") {
+                if (response.result.status === "success") {
+                    solved = response.result.variants.map((variant) => ({
+                        label: variant.profile.label,
+                        placements: variant.placements,
+                    }));
+                } else {
+                    // As on the layout step: fall back to what fits, dropping optional pieces.
+                    const fallback = await requestSolver({
+                        action: "solve-preferred-fallback",
+                        room: target.room,
+                        instances,
+                        preferences: {},
+                    });
+                    if (
+                        fallback.ok &&
+                        fallback.action === "solve-preferred-fallback" &&
+                        fallback.result.result.status === "success"
+                    )
+                        solved = [
+                            {
+                                label: fallback.result.unplacedInstances.length
+                                    ? "Без части желательной мебели"
+                                    : "Всё поместилось",
+                                placements: fallback.result.result.placements,
+                            },
+                        ];
+                }
+            }
+            // A variant must also hold in the whole apartment, as hand-placed pieces do.
+            const variants = solved.flatMap((variant, index) => {
+                const pieces = solvedToDrawFurniture(
+                    variant.placements,
+                    target.offset,
+                    `furniture-auto-${Date.now()}-${index + 1}`,
+                );
+                const all = [...target.kept, ...pieces];
+                const fits = pieces.every(
+                    (piece) =>
+                        !furnitureError(
+                            piece,
+                            all,
+                            scene.segments,
+                            renderedWallThickness,
+                            furnitureDoorObstacles,
+                            furnitureRoom,
+                            furnitureRadiatorObstacles,
+                        ),
+                );
+                return fits && pieces.length
+                    ? [{ summary: { label: variant.label, count: pieces.length }, pieces }]
+                    : [];
+            });
+            setAutoLayoutVariants({ signature: furnitureRegion.signature, variants });
+            setAutoLayoutStatus(
+                variants.length
+                    ? "Выберите вариант — он заменит мебель этой комнаты. Отменить можно кнопкой «Отменить»."
+                    : "Не получилось расставить этот набор. Уберите часть мебели и попробуйте ещё раз.",
+            );
+            trackGoal(variants.length ? "layout_generated" : "layout_failed", {
+                source: "drawing",
+                variants: variants.length,
+            });
+        } catch (error) {
+            setAutoLayoutStatus(
+                error instanceof Error ? error.message : "Не удалось выполнить расчёт.",
+            );
+        } finally {
+            setAutoLayoutSolving(false);
+        }
+    }, [
+        autoLayoutSet,
+        autoLayoutTarget,
+        furnitureDoorObstacles,
+        furnitureRadiatorObstacles,
+        furnitureRegion,
+        furnitureRoom,
+        renderedWallThickness,
+        requestSolver,
+        scene.segments,
+    ]);
+    const currentAutoLayoutVariants = useMemo(
+        () =>
+            autoLayoutVariants && autoLayoutVariants.signature === furnitureRegion?.signature
+                ? autoLayoutVariants.variants
+                : [],
+        [autoLayoutVariants, furnitureRegion?.signature],
+    );
+    const applyAutoLayout = useCallback(
+        (index: number) => {
+            const variant = currentAutoLayoutVariants[index];
+            if (!variant || autoLayoutTarget?.status !== "ready") return;
+            commitScene({ ...scene, furniture: [...autoLayoutTarget.kept, ...variant.pieces] });
+            setAutoLayoutApplied(index);
+            setNotice(`Вариант ${index + 1} расставлен. Предметы можно двигать вручную.`);
+        },
+        [autoLayoutTarget, commitScene, currentAutoLayoutVariants, scene],
+    );
     // Opening the contour again takes away the rooms and the furniture step.
     const activeStepLost =
         (activeToolGroup === "rooms" && renderedRoomRegions.length === 0) ||
@@ -9846,6 +10036,33 @@ const DrawRoom: React.FC = () => {
                             doorObstacles={furnitureDoorObstacles}
                             radiatorObstacles={furnitureRadiatorObstacles}
                             presented={activeToolGroup === "result"}
+                            autoLayout={
+                                furnitureRegion ? (
+                                    <AutoLayoutPanel
+                                        key={furnitureRegion.signature}
+                                        set={autoLayoutSet}
+                                        onSetChange={(set) =>
+                                            setAutoLayoutSets((current) => ({
+                                                ...current,
+                                                [furnitureRegion.signature]: set,
+                                            }))
+                                        }
+                                        onSolve={() => void solveAutoLayout()}
+                                        solving={autoLayoutSolving}
+                                        status={autoLayoutStatus}
+                                        variants={currentAutoLayoutVariants.map(
+                                            (variant) => variant.summary,
+                                        )}
+                                        appliedIndex={autoLayoutApplied}
+                                        onApply={applyAutoLayout}
+                                        blockedReason={
+                                            autoLayoutTarget && autoLayoutTarget.status !== "ready"
+                                                ? autoLayoutTarget.message
+                                                : null
+                                        }
+                                    />
+                                ) : null
+                            }
                             room={furnitureRoom}
                             onChange={(furniture) =>
                                 commitScene({ ...sceneForInteractionRef.current, furniture })

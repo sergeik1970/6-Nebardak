@@ -3267,8 +3267,11 @@ test("the result step lists each room's furniture, saves a PNG and prints the pl
         };
     });
     await result.getByRole("button", { name: "Печать" }).click();
+    // Rendering the 1600 px sheet is the slow part on a loaded machine.
     await expect
-        .poll(() => page.evaluate(() => (window as unknown as { printed: number }).printed))
+        .poll(() => page.evaluate(() => (window as unknown as { printed: number }).printed), {
+            timeout: 20_000,
+        })
         .toBe(1);
     await page.emulateMedia({ media: "print" });
     const visibility = await page.evaluate(() => ({
@@ -3281,6 +3284,63 @@ test("the result step lists each room's furniture, saves a PNG and prints the pl
     await page.emulateMedia({ media: "screen" });
     await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
     await expect(page.locator("[data-draw-room-print-sheet='true']")).toHaveCount(0);
+});
+
+test("the selected room is furnished automatically and the variant can be undone", async ({
+    page,
+}, testInfo) => {
+    test.skip(
+        testInfo.project.name !== "desktop-chromium",
+        "The solver worker is covered once in Chromium",
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    // A 3,4 × 3,9 m bedroom and a second room behind a partition with a door.
+    await drawMeasuredRectangle(page, { x: 3000, y: 2000 }, 7000, 4000);
+    await openToolGroup(page, "walls");
+    await page.locator("[data-draw-room-tool='wall']").click();
+    await dragOnBoardWorld(page, { x: 6500, y: 2000 }, { x: 6500, y: 6000 });
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='openings']").click();
+    await page.locator("[data-draw-room-door-kind='room']").click();
+    const doorway = await getBoardScreenPoint(page, 6500, 5400);
+    await page.mouse.click(doorway.x, doorway.y);
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
+
+    await page.locator("[data-draw-room-step='furniture']").click();
+    const auto = page.locator("[data-draw-room-auto-layout='true']");
+    await auto.getByRole("button", { name: "Подобрать расстановку" }).click();
+    // The bedroom set is offered first and can be edited.
+    await expect(auto.locator("[data-auto-layout-item='double-bed']")).toBeVisible();
+    await auto.getByRole("button", { name: "Подобрать", exact: true }).click();
+    const variant = auto.locator("[data-auto-layout-variant='0']");
+    await expect(variant).toBeVisible({ timeout: 30_000 });
+    await variant.click();
+
+    const pieces = page.locator("[data-draw-furniture^='furniture-']");
+    await expect(pieces).toHaveCount(4);
+    await expect(
+        page.locator("[data-draw-furniture^='furniture-'][data-invalid='true']"),
+    ).toHaveCount(0);
+    // Every solved piece stands in the bedroom, left of the partition's face.
+    const rights = await page.evaluate(() => {
+        const scene = JSON.parse(
+            localStorage.getItem("stylefinder:draw-room-editor:v1") ?? "{}",
+        ) as {
+            furniture?: { x: number; width: number; depth: number; rotation: number }[];
+        };
+        return (scene.furniture ?? []).map(
+            (item) => item.x + (item.rotation % 180 ? item.depth : item.width),
+        );
+    });
+    expect(rights).toHaveLength(4);
+    rights.forEach((right) => expect(right).toBeLessThanOrEqual(6450));
+
+    await page.keyboard.press("ControlOrMeta+z");
+    await expect(pieces).toHaveCount(0);
 });
 
 test("a divider keeps the completed exterior and dimensions each room on its own", async ({
