@@ -46,6 +46,10 @@ export const getProjectProgress = (document: ProjectDocument | null): ProjectPro
         plan: { done: room, available: true },
         result: room
             ? { done: furnished, available: true }
-            : { done: false, available: false, hint: "Итог появится, когда стены квартиры замкнутся" },
+            : {
+                  done: false,
+                  available: false,
+                  hint: "Итог появится, когда стены квартиры замкнутся",
+              },
     };
 };
