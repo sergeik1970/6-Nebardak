@@ -30,6 +30,48 @@ const room: Room = {
 };
 
 describe("Draw Room named regions", () => {
+    it("gives each region its own clear faces instead of the whole room span", () => {
+        const [left, right] = getDrawRoomRegions(room);
+        const lengths = (region: typeof left) =>
+            region.clearEdges.map(
+                ({ start, end }) => Math.abs(end.x - start.x) + Math.abs(end.y - start.y),
+            );
+        expect(lengths(left).sort()).toEqual([2975, 2975, 4000, 4000]);
+        expect(lengths(right).sort()).toEqual([2975, 2975, 4000, 4000]);
+        // The partition face belongs to both rooms, each seeing it from its side.
+        expect(left.clearEdges).toContainEqual({
+            start: { x: 2975, y: 0 },
+            end: { x: 2975, y: 4000 },
+            inward: { x: -1, y: 0 },
+        });
+        expect(right.clearEdges).toContainEqual({
+            start: { x: 3025, y: 0 },
+            end: { x: 3025, y: 4000 },
+            inward: { x: 1, y: 0 },
+        });
+    });
+
+    it("outlines a partition stub with its two faces and its end", () => {
+        const [region] = getDrawRoomRegions({
+            ...room,
+            partitions: [
+                { id: "stub", start: { x: 3000, y: 0 }, end: { x: 3000, y: 1500 }, thickness: 50 },
+            ],
+        });
+        const stubFaces = region.clearEdges.filter(
+            ({ start, end }) => start.x > 0 && start.x < 6000 && start.x === end.x,
+        );
+        expect(stubFaces.map(({ start, end }) => end.y - start.y)).toEqual([1500, 1500]);
+        expect(region.clearEdges).toContainEqual({
+            start: { x: 2975, y: 1500 },
+            end: { x: 3025, y: 1500 },
+            inward: { x: 0, y: 1 },
+        });
+        // The top wall is split by the stub into two separate faces.
+        const topFaces = region.clearEdges.filter(({ start, end }) => start.y === 0 && end.y === 0);
+        expect(topFaces).toHaveLength(2);
+    });
+
     it("derives two material-separated regions and carries a matching name by signature", () => {
         const initial = getDrawRoomRegions(room);
         expect(initial).toHaveLength(2);
