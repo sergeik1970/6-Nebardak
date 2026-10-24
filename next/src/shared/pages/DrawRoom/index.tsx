@@ -66,7 +66,15 @@ import { useProjectHref } from "@/shared/lib/project-scope/ProjectScope";
 import { trackGoal } from "@/shared/lib/analytics";
 
 type Tool = "select" | "wall" | "door" | "window";
-type ToolGroup = "walls" | "openings" | "furniture";
+type ToolGroup = "walls" | "openings" | "rooms" | "furniture";
+
+/** The drawing is worked through in these steps, each its own layer of the plan. */
+const DRAW_STEPS: { group: ToolGroup; label: string; controls?: string }[] = [
+    { group: "walls", label: "Стены", controls: "draw-room-walls-tools" },
+    { group: "openings", label: "Двери и окна", controls: "draw-room-opening-tools" },
+    { group: "rooms", label: "Помещения" },
+    { group: "furniture", label: "Мебель" },
+];
 type KeyboardTool = Exclude<Tool, "select">;
 type Point = { x: number; y: number };
 
@@ -3832,7 +3840,6 @@ const DrawRoom: React.FC = () => {
         edgeIndex: number;
         grab: ContourWallGrab;
     } | null>(null);
-    const [roomInspectorDismissed, setRoomInspectorDismissed] = useState(false);
     const openingDragRef = useRef<
         | (SelectedOpening & { startPoint: Point; startOffset: number; allowedOffsets?: number[] })
         | null
@@ -6565,6 +6572,35 @@ const DrawRoom: React.FC = () => {
             : 0;
     const liveDimensionLayout =
         ghost && liveWallLength > 0 && liveWallDimensions.length < 4 ? "compact" : "full";
+    const roomInspectorOpen = activeToolGroup === "rooms" && renderedRoomRegions.length > 0;
+    // Room H/S labels would sit on top of the pieces being placed.
+    const furnitureStep = activeToolGroup === "furniture";
+    // Opening the contour again takes away the rooms and the furniture step.
+    const activeStepLost =
+        (activeToolGroup === "rooms" && renderedRoomRegions.length === 0) ||
+        (activeToolGroup === "furniture" && !preview);
+    useEffect(() => {
+        if (activeStepLost) setActiveToolGroup("walls");
+    }, [activeStepLost]);
+    const stepAvailable = (group: ToolGroup) =>
+        group === "rooms"
+            ? renderedRoomRegions.length > 0
+            : group === "furniture"
+              ? Boolean(preview)
+              : true;
+    const selectStep = (group: ToolGroup) => {
+        if (group === "walls" || group === "openings") {
+            toggleToolGroup(group);
+            return;
+        }
+        setTool("select");
+        setMeasuring(false);
+        setSelectedOpening(null);
+        setSelectedContourWallEdge(null);
+        setSelectedSegmentWallId(null);
+        setActiveToolGroup(group);
+        setToolSheetCollapsed(false);
+    };
     const isToolSheetOpen = (group: ToolGroup) =>
         activeToolGroup === group && !(toolSheetOverlaysCanvas && toolSheetCollapsed);
     const toggleToolGroup = (group: ToolGroup) => {
@@ -6774,8 +6810,38 @@ const DrawRoom: React.FC = () => {
                         setSelectedOpening(null);
                         setSelectedContourWallEdge(null);
                         setSelectedSegmentWallId(null);
-                        setRoomInspectorDismissed(true);
                     }}
+                    steps={
+                        <nav className={styles.stepTabs} aria-label="Шаги чертежа">
+                            {DRAW_STEPS.map((step, index) => (
+                                <button
+                                    key={step.group}
+                                    type="button"
+                                    className={styles.stepTab}
+                                    data-draw-room-step={step.group}
+                                    aria-current={
+                                        activeToolGroup === step.group ? "step" : undefined
+                                    }
+                                    aria-controls={step.controls}
+                                    aria-expanded={
+                                        step.controls ? isToolSheetOpen(step.group) : undefined
+                                    }
+                                    disabled={!stepAvailable(step.group)}
+                                    title={
+                                        stepAvailable(step.group)
+                                            ? undefined
+                                            : step.group === "rooms"
+                                              ? "Помещения появятся, когда стены замкнут контур"
+                                              : "Сначала замкните стены"
+                                    }
+                                    onClick={() => selectStep(step.group)}
+                                >
+                                    <span aria-hidden="true">{index + 1}</span>
+                                    {step.label}
+                                </button>
+                            ))}
+                        </nav>
+                    }
                     status={autosaveStatus}
                     layers={layers}
                     onLayers={setLayers}
@@ -6955,15 +7021,6 @@ const DrawRoom: React.FC = () => {
                     >
                         Координаты <kbd>⌥K</kbd>
                     </button>
-                    {preview && renderedRoomRegions.length > 0 && (
-                        <button
-                            type="button"
-                            className={styles.roomInspectorToggle}
-                            onClick={() => setRoomInspectorDismissed((current) => !current)}
-                        >
-                            {roomInspectorDismissed ? "Помещения" : "Инструменты"}
-                        </button>
-                    )}
                     {!hasBoundary && (tool === "door" || tool === "window") && (
                         <span id="draw-room-openings-hint" className={styles.openingHint}>
                             Инструмент уже выбран. Завершите внешний контур и нажмите на стену.
@@ -7005,171 +7062,114 @@ const DrawRoom: React.FC = () => {
                               ? "opening"
                               : selectedWallInspector
                                 ? "wall"
-                                : renderedRoomRegions.length > 0 && !roomInspectorDismissed
+                                : roomInspectorOpen
                                   ? "regions"
                                   : "tools"
                     }
                 >
-                    <aside className={styles.toolRail} aria-label="Инструменты чертежа">
-                        {/* Furniture is placed on the layout step; older drawings keep theirs editable. */}
-                        {(scene.furniture?.length ?? 0) > 0 && (
-                            <button
-                                type="button"
-                                className={styles.toolGroupButton}
-                                aria-label="Мебель"
-                                aria-expanded={activeToolGroup === "furniture"}
-                                onClick={() => {
-                                    setActiveToolGroup(
-                                        activeToolGroup === "furniture" ? "walls" : "furniture",
-                                    );
-                                    setTool("select");
-                                    setSelectedOpening(null);
-                                    setRoomInspectorDismissed(true);
-                                }}
-                            >
-                                <svg
-                                    viewBox="0 0 24 24"
-                                    aria-hidden="true"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.7"
-                                >
-                                    <path d="M5 11V5h14v6M3 11h18v8H3zM6 19v3m12-3v3M3 15h18" />
-                                </svg>
-                                <span>
-                                    <b>Мебель</b>
-                                    <small>Добавить и переместить</small>
-                                </span>
-                            </button>
-                        )}
-                        <div className={styles.toolRailIntro}>
-                            <span>КОНСТРУКЦИЯ</span>
-                        </div>
-                        <button
-                            type="button"
-                            className={styles.toolGroupButton}
-                            aria-expanded={isToolSheetOpen("walls")}
-                            aria-controls="draw-room-walls-tools"
-                            onClick={() => toggleToolGroup("walls")}
-                        >
-                            <ToolIcon name="wall" />
-                            <span>
-                                <b>Стены</b>
-                                <small>Контур и продолжение</small>
-                            </span>
-                        </button>
-                        {isToolSheetOpen("walls") && (
-                            <div id="draw-room-walls-tools" className={styles.toolGroupPanel}>
-                                <button
-                                    type="button"
-                                    className={styles.toolButton}
-                                    data-draw-room-tool="select"
-                                    aria-pressed={tool === "select"}
-                                    onClick={() => selectTool("select")}
-                                >
-                                    <ToolIcon name="select" />
-                                    <span className={styles.toolCopy}>
-                                        <b>Выбрать</b>
-                                        <small>Панорамирование и объект</small>
-                                    </span>
-                                </button>
-                                <button
-                                    type="button"
-                                    className={styles.toolButton}
-                                    data-draw-room-tool="wall"
-                                    aria-pressed={tool === "wall"}
-                                    onClick={() => selectTool("wall")}
-                                >
-                                    <ToolIcon name="wall" />
-                                    <span className={styles.toolCopy}>
-                                        <b>Стена</b>
-                                        <small>
-                                            {preview
-                                                ? "Внутренняя стена создаст перегородку"
-                                                : "Стройте внешний контур по сетке"}
-                                        </small>
-                                    </span>
-                                </button>
-                            </div>
-                        )}
-                        <button
-                            type="button"
-                            className={styles.toolGroupButton}
-                            aria-expanded={isToolSheetOpen("openings")}
-                            aria-controls="draw-room-opening-tools"
-                            onClick={() => toggleToolGroup("openings")}
-                        >
-                            <ToolIcon name="door" />
-                            <span>
-                                <b>Проёмы</b>
-                                <small>Двери и окна</small>
-                            </span>
-                        </button>
-                        {isToolSheetOpen("openings") && (
-                            <div id="draw-room-opening-tools" className={styles.toolGroupPanel}>
-                                <span className={styles.toolGroupCaption}>Двери</span>
-                                {DOOR_CATALOG.map((item) => (
+                    {/* Rooms and furniture bring their own panels; drawing tools belong to the wall steps. */}
+                    {(activeToolGroup === "walls" || activeToolGroup === "openings") && (
+                        <aside className={styles.toolRail} aria-label="Инструменты чертежа">
+                            {isToolSheetOpen("walls") && (
+                                <div id="draw-room-walls-tools" className={styles.toolGroupPanel}>
                                     <button
                                         type="button"
-                                        key={item.kind}
                                         className={styles.toolButton}
-                                        data-draw-room-door-kind={item.kind}
-                                        aria-pressed={
-                                            tool === "door" && selectedDoorKind === item.kind
-                                        }
-                                        onClick={() => selectTool("door", item.kind)}
+                                        data-draw-room-tool="select"
+                                        aria-pressed={tool === "select"}
+                                        onClick={() => selectTool("select")}
                                     >
-                                        <ToolIcon name="door" />
+                                        <ToolIcon name="select" />
                                         <span className={styles.toolCopy}>
-                                            <b>{item.label}</b>
-                                            <small>{item.description}</small>
+                                            <b>Выбрать</b>
+                                            <small>Панорамирование и объект</small>
                                         </span>
                                     </button>
-                                ))}
-                                {tool === "door" &&
-                                    !isHingedDoor({ doorKind: selectedDoorKind }) && (
-                                        <SlidingDoorSettings
-                                            mount={slidingMount}
-                                            direction={slidingDirection}
-                                            double={selectedDoorKind === "sliding-double"}
-                                            onChange={(patch) => {
-                                                if (patch.slidingMount)
-                                                    setSlidingMount(patch.slidingMount);
-                                                if (patch.slidingDirection)
-                                                    setSlidingDirection(patch.slidingDirection);
-                                            }}
-                                        />
-                                    )}
-                                <span className={styles.toolGroupCaption}>Окна</span>
-                                <button
-                                    type="button"
-                                    className={styles.toolButton}
-                                    data-draw-room-tool="window"
-                                    aria-pressed={tool === "window"}
-                                    onClick={() => selectTool("window")}
-                                >
-                                    <ToolIcon name="window" />
-                                    <span className={styles.toolCopy}>
-                                        <b>Окно</b>
-                                        <small>Только во внешней стене</small>
-                                    </span>
-                                </button>
-                            </div>
-                        )}
-                        <button
-                            type="button"
-                            className={`${styles.toolButton} ${styles.clearButton}`}
-                            onClick={clearScene}
-                            title="Очистить контур"
-                            aria-label="Очистить контур"
-                        >
-                            <ToolIcon name="clear" />
-                            <span className={styles.toolCopy}>
-                                <b>Очистить</b>
-                                <small>Удалить контур, проёмы и мебель</small>
-                            </span>
-                        </button>
-                    </aside>
+                                    <button
+                                        type="button"
+                                        className={styles.toolButton}
+                                        data-draw-room-tool="wall"
+                                        aria-pressed={tool === "wall"}
+                                        onClick={() => selectTool("wall")}
+                                    >
+                                        <ToolIcon name="wall" />
+                                        <span className={styles.toolCopy}>
+                                            <b>Стена</b>
+                                            <small>
+                                                {preview
+                                                    ? "Внутренняя стена создаст перегородку"
+                                                    : "Стройте внешний контур по сетке"}
+                                            </small>
+                                        </span>
+                                    </button>
+                                </div>
+                            )}
+                            {isToolSheetOpen("openings") && (
+                                <div id="draw-room-opening-tools" className={styles.toolGroupPanel}>
+                                    <span className={styles.toolGroupCaption}>Двери</span>
+                                    {DOOR_CATALOG.map((item) => (
+                                        <button
+                                            type="button"
+                                            key={item.kind}
+                                            className={styles.toolButton}
+                                            data-draw-room-door-kind={item.kind}
+                                            aria-pressed={
+                                                tool === "door" && selectedDoorKind === item.kind
+                                            }
+                                            onClick={() => selectTool("door", item.kind)}
+                                        >
+                                            <ToolIcon name="door" />
+                                            <span className={styles.toolCopy}>
+                                                <b>{item.label}</b>
+                                                <small>{item.description}</small>
+                                            </span>
+                                        </button>
+                                    ))}
+                                    {tool === "door" &&
+                                        !isHingedDoor({ doorKind: selectedDoorKind }) && (
+                                            <SlidingDoorSettings
+                                                mount={slidingMount}
+                                                direction={slidingDirection}
+                                                double={selectedDoorKind === "sliding-double"}
+                                                onChange={(patch) => {
+                                                    if (patch.slidingMount)
+                                                        setSlidingMount(patch.slidingMount);
+                                                    if (patch.slidingDirection)
+                                                        setSlidingDirection(patch.slidingDirection);
+                                                }}
+                                            />
+                                        )}
+                                    <span className={styles.toolGroupCaption}>Окна</span>
+                                    <button
+                                        type="button"
+                                        className={styles.toolButton}
+                                        data-draw-room-tool="window"
+                                        aria-pressed={tool === "window"}
+                                        onClick={() => selectTool("window")}
+                                    >
+                                        <ToolIcon name="window" />
+                                        <span className={styles.toolCopy}>
+                                            <b>Окно</b>
+                                            <small>Только во внешней стене</small>
+                                        </span>
+                                    </button>
+                                </div>
+                            )}
+                            <button
+                                type="button"
+                                className={`${styles.toolButton} ${styles.clearButton}`}
+                                onClick={clearScene}
+                                title="Очистить контур"
+                                aria-label="Очистить контур"
+                            >
+                                <ToolIcon name="clear" />
+                                <span className={styles.toolCopy}>
+                                    <b>Очистить</b>
+                                    <small>Удалить контур, проёмы и мебель</small>
+                                </span>
+                            </button>
+                        </aside>
+                    )}
 
                     {keyboardEntryOpen && (
                         <aside
@@ -8049,7 +8049,7 @@ const DrawRoom: React.FC = () => {
                                         ))}
                                     </g>
                                 )}
-                            {roomSummary && !ghost && showCommittedDimensions && (
+                            {roomSummary && !ghost && showCommittedDimensions && !furnitureStep && (
                                 <g
                                     className={styles.roomSummary}
                                     data-draw-room-summary="true"
@@ -8867,6 +8867,7 @@ const DrawRoom: React.FC = () => {
                             {renderedRoomRegions.length > 1 &&
                                 !ghost &&
                                 showCommittedDimensions &&
+                                !furnitureStep &&
                                 roomRegionLabelPlacements.map(({ region, label }) => {
                                     return (
                                         <g
@@ -9216,7 +9217,6 @@ const DrawRoom: React.FC = () => {
                                 setSelectedOpening(null);
                                 setSelectedContourWallEdge(null);
                                 setSelectedSegmentWallId(null);
-                                setRoomInspectorDismissed(true);
                             }}
                             items={scene.furniture ?? []}
                             walls={scene.segments}
@@ -9230,8 +9230,7 @@ const DrawRoom: React.FC = () => {
                             !selectedOpeningData &&
                             !selectedWallInspector &&
                             !keyboardEntryOpen &&
-                            renderedRoomRegions.length > 0 &&
-                            !roomInspectorDismissed && (
+                            roomInspectorOpen && (
                                 <aside
                                     className={styles.roomInspector}
                                     aria-label="Помещения на плане"
@@ -9245,7 +9244,7 @@ const DrawRoom: React.FC = () => {
                                         <button
                                             type="button"
                                             className={styles.roomInspectorReturnTools}
-                                            onClick={() => setRoomInspectorDismissed(true)}
+                                            onClick={() => toggleToolGroup("walls")}
                                         >
                                             К инструментам
                                         </button>

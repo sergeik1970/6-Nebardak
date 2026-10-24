@@ -329,6 +329,66 @@
     background: #fbfcfa;
 }
 
+.stepTabs {
+    min-width: 0;
+    display: flex;
+    flex: 0 1 auto;
+    gap: 4px;
+    overflow-x: auto;
+    margin-left: 12px;
+    scrollbar-width: none;
+}
+.stepTab {
+    min-height: 30px;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 0 12px;
+    color: #40545b;
+    background: transparent;
+    font: 760 12px/1 var(--font-primary);
+    white-space: nowrap;
+    cursor: pointer;
+}
+.stepTab span {
+    width: 18px;
+    height: 18px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 10px;
+}
+.stepTab:hover:not(:disabled),
+.stepTab:focus-visible {
+    border-color: var(--draw-orange);
+    color: #8a4900;
+    background: #fff0da;
+}
+.stepTab[aria-current="step"],
+.stepTab[aria-current="step"]:hover:not(:disabled),
+.stepTab[aria-current="step"]:focus-visible {
+    border-color: var(--draw-orange);
+    color: #fff;
+    background: var(--draw-orange);
+}
+.stepTab:disabled {
+    color: #a3afb3;
+    cursor: not-allowed;
+}
+@media (max-width: 700px) {
+    .stepTabs {
+        margin-left: 0;
+    }
+    .stepTab {
+        padding: 0 8px;
+        font-size: 11px;
+    }
+}
+
 .canvasMeta {
     min-height: 36px;
     display: flex;

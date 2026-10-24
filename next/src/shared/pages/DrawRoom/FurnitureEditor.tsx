@@ -278,7 +278,8 @@ export default function FurnitureEditor({
                 data-locked={Boolean(item.locked)}
                 style={{
                     pointerEvents: (active || selectable) && !ghost && !pending ? "auto" : "none",
-                    opacity: ghost ? 0.65 : 1,
+                    // Outside the furniture step the pieces stay visible as a quiet layer.
+                    opacity: ghost ? 0.65 : active ? 1 : 0.45,
                     cursor: item.locked ? "pointer" : undefined,
                 }}
                 role={ghost ? undefined : "button"}
