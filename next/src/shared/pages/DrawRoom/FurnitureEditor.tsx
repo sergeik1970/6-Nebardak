@@ -36,6 +36,7 @@ const categories: Record<FurnitureCategory, string> = {
     work: "Рабочее место",
     media: "ТВ",
     children: "Детская",
+    kitchen: "Кухня",
 };
 const snap = (n: number) => Math.round(n / 10) * 10;
 export default function FurnitureEditor({
@@ -294,6 +295,7 @@ export default function FurnitureEditor({
                 data-selected={active && selectedId === item.id}
                 data-invalid={invalid}
                 data-locked={Boolean(item.locked)}
+                data-mounting={definition.mounting ?? "floor"}
                 style={{
                     pointerEvents: editable && !pending ? "auto" : "none",
                     // Outside the furniture step, or the selected room, pieces stay a quiet layer.
@@ -389,6 +391,41 @@ export default function FurnitureEditor({
                                         className={styles.detail}
                                     />
                                 )}
+                            {!photo && definition.id === "kitchen-sink" && (
+                                <rect
+                                    x={rect.x + rect.width * 0.15}
+                                    y={rect.y + rect.depth * 0.2}
+                                    width={rect.width * 0.7}
+                                    height={rect.depth * 0.55}
+                                    rx={60}
+                                    className={styles.detail}
+                                />
+                            )}
+                            {!photo &&
+                                definition.id === "kitchen-cooker" &&
+                                [0.3, 0.7].flatMap((fx) =>
+                                    [0.3, 0.7].map((fy) => (
+                                        <circle
+                                            key={`${fx}-${fy}`}
+                                            cx={rect.x + rect.width * fx}
+                                            cy={rect.y + rect.depth * fy}
+                                            r={Math.min(rect.width, rect.depth) * 0.13}
+                                            className={styles.detail}
+                                        />
+                                    )),
+                                )}
+                            {!photo &&
+                                (definition.mounting === "upper" ||
+                                    [
+                                        "kitchen-fridge",
+                                        "kitchen-fridge-wide",
+                                        "kitchen-tall",
+                                    ].includes(definition.id)) && (
+                                    // Tall and upper units are crossed, as on a kitchen plan.
+                                    <path
+                                        d={`M ${rect.x} ${rect.y} L ${rect.x + rect.width} ${rect.y + rect.depth} M ${rect.x + rect.width} ${rect.y} L ${rect.x} ${rect.y + rect.depth}`}
+                                    />
+                                )}
                             {!photo && definition.category === "storage" && (
                                 <path
                                     d={`M ${rect.x + rect.width / 2} ${rect.y} v ${rect.depth}`}
@@ -412,26 +449,29 @@ export default function FurnitureEditor({
                         {definition.shortLabel}
                     </text>
                 )}
-                {active && own && (
-                    // Plan sizes in centimetres along the front and the side, as on a drawing.
-                    <g className={styles.sizeLabels} style={{ fontSize: 12 * screenUnit }}>
-                        <text
-                            data-furniture-size="width"
-                            x={geometry.width / 2}
-                            y={geometry.depth - 7 * screenUnit}
-                            textAnchor="middle"
-                        >
-                            {Math.round(geometry.width / 10)}
-                        </text>
-                        <text
-                            data-furniture-size="depth"
-                            transform={`translate(${geometry.width - 7 * screenUnit} ${geometry.depth / 2}) rotate(-90)`}
-                            textAnchor="middle"
-                        >
-                            {Math.round(geometry.depth / 10)}
-                        </text>
-                    </g>
-                )}
+                {active &&
+                    own &&
+                    // Upper units overlie base units: their sizes show when selected.
+                    (definition.mounting !== "upper" || selectedId === item.id || ghost) && (
+                        // Plan sizes in centimetres along the front and the side, as on a drawing.
+                        <g className={styles.sizeLabels} style={{ fontSize: 12 * screenUnit }}>
+                            <text
+                                data-furniture-size="width"
+                                x={geometry.width / 2}
+                                y={geometry.depth - 7 * screenUnit}
+                                textAnchor="middle"
+                            >
+                                {Math.round(geometry.width / 10)}
+                            </text>
+                            <text
+                                data-furniture-size="depth"
+                                transform={`translate(${geometry.width - 7 * screenUnit} ${geometry.depth / 2}) rotate(-90)`}
+                                textAnchor="middle"
+                            >
+                                {Math.round(geometry.depth / 10)}
+                            </text>
+                        </g>
+                    )}
             </g>
         );
     };
@@ -445,20 +485,34 @@ export default function FurnitureEditor({
             : [];
     const sideLabels = { left: "Слева", right: "Справа", top: "Сверху", bottom: "Снизу" };
     const screenUnit = 1 / (board?.getScreenCTM()?.a || 0.1);
+    const layerHost =
+        board?.querySelector<SVGGElement>("[data-draw-furniture-host='true']") ?? board;
     return (
         <>
-            {board &&
+            {layerHost &&
                 createPortal(
                     <g data-draw-furniture-layer="true">
-                        {items.map((item) =>
-                            symbol(
-                                preview?.id === item.id && !pending
-                                    ? preview
-                                    : reposition?.id === item.id && selectedId === item.id
-                                      ? reposition
-                                      : item,
-                            ),
-                        )}
+                        {[...items]
+                            .sort(
+                                (first, second) =>
+                                    Number(
+                                        furnitureDefinition(first.definitionId)?.mounting ===
+                                            "upper",
+                                    ) -
+                                    Number(
+                                        furnitureDefinition(second.definitionId)?.mounting ===
+                                            "upper",
+                                    ),
+                            )
+                            .map((item) =>
+                                symbol(
+                                    preview?.id === item.id && !pending
+                                        ? preview
+                                        : reposition?.id === item.id && selectedId === item.id
+                                          ? reposition
+                                          : item,
+                                ),
+                            )}
                         {pending && preview && symbol(preview, true)}
                         <g pointerEvents="none" aria-hidden="true" data-furniture-conflicts="true">
                             {conflicts.map((conflict, index) => (
@@ -506,7 +560,7 @@ export default function FurnitureEditor({
                             )}
                         </g>
                     </g>,
-                    board,
+                    layerHost,
                 )}
             {active && (
                 <aside

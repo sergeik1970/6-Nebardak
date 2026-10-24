@@ -149,8 +149,10 @@ export function furnitureConflicts(
         x: rect.x + item.x,
         y: rect.y + item.y,
     }));
+    const mounting = furnitureDefinition(item.definitionId)?.mounting;
     const candidates: FurnitureConflict[] = [
-        ...doorObstacles.map((rect) => ({
+        // A swinging door leaf passes under upper units.
+        ...(mounting === "upper" ? [] : doorObstacles).map((rect) => ({
             kind: "door" as const,
             rect,
             message:
@@ -162,7 +164,12 @@ export function furnitureConflicts(
             message: "Предмет пересекает стену. Выберите свободное место.",
         })),
         ...items
-            .filter((other) => other.id !== item.id)
+            // Upper units hang over base units; each tier meets only its own.
+            .filter(
+                (other) =>
+                    other.id !== item.id &&
+                    furnitureDefinition(other.definitionId)?.mounting === mounting,
+            )
             .flatMap((other) =>
                 furnitureGeometry(other).bodyRects.map((body) => ({
                     kind: "furniture" as const,
@@ -280,7 +287,7 @@ export function snapFurnitureToWalls(
 const KIND_CATEGORIES: Record<RoomKind, FurnitureCategory[]> = {
     bedroom: ["sleep", "storage", "work", "media"],
     living: ["living", "media", "storage"],
-    kitchen: ["living", "storage"],
+    kitchen: ["kitchen", "living", "storage"],
     children: ["children", "sleep", "storage", "work"],
     office: ["work", "storage", "living"],
     hallway: ["storage", "living"],

@@ -643,6 +643,60 @@ for (const [id, label, width, depth, category, visualKind] of suppliedFurniture)
     VISUAL_KIND_MANIFEST[id] = visualKind;
 }
 
+// Kitchen modules for manual placement on the drawing: label, short label, size,
+// count, kind (base / tall / island / upper) and visual kind.
+const kitchenFurniture: [
+    string,
+    string,
+    string,
+    number,
+    number,
+    number,
+    "base" | "tall" | "island" | "upper",
+][] = [
+    ["kitchen-base-600", "Напольный шкаф 60 см", "Шкаф 60", 600, 600, 12, "base"],
+    ["kitchen-base-400", "Напольный шкаф 40 см", "Шкаф 40", 400, 600, 8, "base"],
+    ["kitchen-sink", "Мойка с тумбой 80 см", "Мойка", 800, 600, 2, "base"],
+    ["kitchen-cooker", "Плита с духовкой 60 см", "Плита", 600, 600, 2, "base"],
+    ["kitchen-dishwasher", "Посудомоечная машина 60 см", "ПММ", 600, 600, 1, "base"],
+    ["kitchen-washer", "Стиральная машина", "Стир. маш.", 600, 600, 1, "base"],
+    ["kitchen-fridge", "Холодильник", "Холодильник", 600, 650, 2, "tall"],
+    ["kitchen-fridge-wide", "Холодильник двухдверный", "Холодильник", 900, 700, 1, "tall"],
+    ["kitchen-tall", "Шкаф-пенал 60 см", "Пенал", 600, 600, 4, "tall"],
+    ["kitchen-island", "Кухонный остров", "Остров", 1200, 900, 1, "island"],
+    ["kitchen-upper-600", "Навесной шкаф 60 см", "Навесной 60", 600, 350, 12, "upper"],
+    ["kitchen-upper-400", "Навесной шкаф 40 см", "Навесной 40", 400, 350, 8, "upper"],
+    ["kitchen-hood", "Вытяжка 60 см", "Вытяжка", 600, 500, 1, "upper"],
+];
+for (const [id, label, shortLabel, width, depth, count, kind] of kitchenFurniture) {
+    BODY_MANIFEST[id] = [{ x: 0, y: 0, width, depth }];
+    WALL_EDGE_MANIFEST[id] = kind === "island" ? [] : ["back"];
+    CLEARANCE_MANIFEST[id] =
+        kind === "upper"
+            ? []
+            : kind === "island"
+              ? [
+                    { x: 0, y: -900, width, depth: 900 },
+                    { x: 0, y: depth, width, depth: 900 },
+                    { x: -900, y: 0, width: 900, depth },
+                    { x: width, y: 0, width: 900, depth },
+                ].map((rect) => ({ ...rect, label: "Проход у стола", requirement: "hard" }))
+              : [{ x: 0, y: depth, width, depth: 900, label: "Зона доступа", requirement: "hard" }];
+    DEFINITION_METADATA_MANIFEST[id] = {
+        label,
+        shortLabel,
+        category: "kitchen",
+        centerAllowed: kind === "island",
+        requiredWallContact: kind !== "island",
+        removalPriority: 30,
+    };
+    RELATION_MANIFEST[id] = [];
+    MAX_COUNT_MANIFEST[id] = count;
+    VISUAL_KIND_MANIFEST[id] = kind === "tall" || kind === "upper" ? "wood" : "surface";
+    // A worktop run and an island may stand under a window; tall and upper units may not.
+    if (kind === "base" || kind === "island") WINDOW_ALLOWED.push(id);
+}
+
 const area = (rects: Rect[]) => rects.reduce((total, rect) => total + rect.width * rect.depth, 0);
 
 describe("furniture catalog golden manifest", () => {

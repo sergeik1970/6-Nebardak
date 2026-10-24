@@ -290,3 +290,37 @@ describe("furniture in the selected room", () => {
         expect(new Set(furnitureCategoryOrder(all, "office")).size).toBe(all.length);
     });
 });
+
+describe("kitchen tiers", () => {
+    const base: DrawFurniture = {
+        id: "base",
+        definitionId: "kitchen-base-600",
+        x: 0,
+        y: 0,
+        width: 600,
+        depth: 600,
+        rotation: 0,
+    };
+    const upper: DrawFurniture = {
+        ...base,
+        id: "upper",
+        definitionId: "kitchen-upper-600",
+        depth: 350,
+    };
+    const walls = [{ id: "back", start: { x: -1000, y: -50 }, end: { x: 3000, y: -50 } }];
+    it("hangs an upper unit over a base unit without a conflict", () => {
+        expect(furnitureError(upper, [base, upper], walls, 100)).toBeNull();
+        expect(furnitureError(base, [base, upper], walls, 100)).toBeNull();
+    });
+    it("still keeps upper units apart from each other and out of the wall", () => {
+        expect(furnitureError({ ...upper, id: "second", x: 300 }, [upper], walls, 100)).toContain(
+            "мебелью",
+        );
+        expect(furnitureError({ ...upper, y: -40 }, [], walls, 100)).toContain("стену");
+    });
+    it("lets a door leaf pass under an upper unit", () => {
+        const swing = [{ x: 0, y: 0, width: 900, depth: 900 }];
+        expect(furnitureError(upper, [], [], 100, swing)).toBeNull();
+        expect(furnitureError(base, [], [], 100, swing)).toContain("двер");
+    });
+});

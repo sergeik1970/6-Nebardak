@@ -49,7 +49,14 @@ export interface CurtainBufferPolicy {
     note: string;
 }
 
-export type FurnitureCategory = "sleep" | "storage" | "work" | "living" | "media" | "children";
+export type FurnitureCategory =
+    | "sleep"
+    | "storage"
+    | "work"
+    | "living"
+    | "media"
+    | "children"
+    | "kitchen";
 
 export type FurnitureAssetKey =
     | "single-bed"
@@ -177,6 +184,11 @@ export interface FurnitureDefinition {
     assetKey?: FurnitureAssetKey;
     visualKind: "wood" | "fabric" | "screen" | "surface" | "nursery";
     source: FurnitureDefinitionSource;
+    /**
+     * Upper wall units hang above the floor pieces: on the plan they share
+     * the footprint of base units and only meet walls and each other.
+     */
+    mounting?: "upper";
 }
 
 export interface FurnitureInstance {

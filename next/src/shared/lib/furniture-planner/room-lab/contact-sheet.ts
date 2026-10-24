@@ -79,6 +79,8 @@ const furnitureColor = (definitionId: string): string => {
             return "#c49342";
         case "children":
             return "#cf6f91";
+        case "kitchen":
+            return "#5f8f3e";
     }
 };
 
