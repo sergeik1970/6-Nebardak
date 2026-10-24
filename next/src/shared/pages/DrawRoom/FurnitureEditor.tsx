@@ -50,6 +50,7 @@ export default function FurnitureEditor({
     radiatorObstacles,
     room,
     presented = false,
+    autoLayout,
     onChange,
 }: {
     boardRef: React.RefObject<SVGSVGElement>;
@@ -63,6 +64,8 @@ export default function FurnitureEditor({
     radiatorObstacles: readonly Rect[];
     /** The result step shows every piece at full strength, read-only. */
     presented?: boolean;
+    /** «Подобрать расстановку» for the room, shown while nothing is in hand. */
+    autoLayout?: React.ReactNode;
     /** Pieces are placed in this room only; others' furniture stays a quiet layer. */
     room: FurnitureRoom | null;
     onChange: (items: DrawFurniture[]) => void;
@@ -614,6 +617,7 @@ export default function FurnitureEditor({
                             <span>{items.filter(inRoom).length} в комнате</span>
                         )}
                     </header>
+                    {!editing && autoLayout}
                     {editing && (
                         <section className={styles.properties}>
                             <b>{furnitureDefinition(editing.definitionId)?.label}</b>
