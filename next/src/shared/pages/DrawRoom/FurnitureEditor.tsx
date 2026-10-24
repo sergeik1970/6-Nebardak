@@ -49,6 +49,7 @@ export default function FurnitureEditor({
     doorObstacles,
     radiatorObstacles,
     room,
+    presented = false,
     onChange,
 }: {
     boardRef: React.RefObject<SVGSVGElement>;
@@ -60,6 +61,8 @@ export default function FurnitureEditor({
     doorObstacles: readonly Rect[];
     /** Radiators with the free air in front of them. */
     radiatorObstacles: readonly Rect[];
+    /** The result step shows every piece at full strength, read-only. */
+    presented?: boolean;
     /** Pieces are placed in this room only; others' furniture stays a quiet layer. */
     room: FurnitureRoom | null;
     onChange: (items: DrawFurniture[]) => void;
@@ -312,7 +315,7 @@ export default function FurnitureEditor({
                 style={{
                     pointerEvents: editable && !pending ? "auto" : "none",
                     // Outside the furniture step, or the selected room, pieces stay a quiet layer.
-                    opacity: ghost ? 0.65 : editable ? 1 : 0.45,
+                    opacity: ghost ? 0.65 : editable || presented ? 1 : 0.45,
                     cursor: item.locked ? "pointer" : undefined,
                 }}
                 role={ghost ? undefined : "button"}

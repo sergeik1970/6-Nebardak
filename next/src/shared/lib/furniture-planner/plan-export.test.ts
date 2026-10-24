@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    buildDrawingPlanSpecification,
     buildPlanSpecification,
     getPlanExportFilename,
     renderPlanSpecificationPng,
@@ -220,5 +221,39 @@ describe("plan export", () => {
         await expect(renderPlanSpecificationPng(result)).rejects.toThrow(
             "доступен только в браузере",
         );
+    });
+});
+
+describe("drawing export", () => {
+    const generatedAt = "2026-10-24T12:00:00.000Z";
+    it("names each piece's room and claims only the editor's checks", () => {
+        const specification = buildDrawingPlanSpecification({
+            room,
+            placements: [{ ...placements[0], roomName: "Кабинет" }],
+            conflictCount: 0,
+            generatedAt,
+        });
+        expect(specification.source).toBe("drawing");
+        expect(specification.items).toEqual([
+            expect.objectContaining({ definitionId: "desk", roomName: "Кабинет" }),
+        ]);
+        expect(specification.checks.map((check) => check.id)).toEqual([
+            "inside-room",
+            "body-overlap",
+            "openings",
+        ]);
+        // A hand-made plan never claims the solver's wall-contact or relation rules.
+        expect(specification.checks.some((check) => check.id === "relations")).toBe(false);
+        expect(specification.catalogRevision).not.toBe("unversioned");
+    });
+    it("drops every check and says why while a piece conflicts", () => {
+        const specification = buildDrawingPlanSpecification({
+            room,
+            placements,
+            conflictCount: 2,
+            generatedAt,
+        });
+        expect(specification.checks).toEqual([]);
+        expect(specification.caveats[0]).toContain("2 предмета конфликтуют");
     });
 });
