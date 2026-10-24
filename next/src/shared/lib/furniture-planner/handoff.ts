@@ -424,7 +424,7 @@ export const getQuestionnairePlannerHandoffStorageKey = (id: string): string =>
     `${QUESTIONNAIRE_PLANNER_HANDOFF_STORAGE_PREFIX}${id}`;
 
 export const getQuestionnairePlannerHandoffUrl = (id: string): string =>
-    `/planner?handoff=${encodeURIComponent(id)}`;
+    `/planner/layout?handoff=${encodeURIComponent(id)}`;
 
 const resolveStorage = (
     options: QuestionnairePlannerHandoffStorageOptions,

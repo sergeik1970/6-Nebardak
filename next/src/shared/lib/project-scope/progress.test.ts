@@ -10,42 +10,49 @@ const asDocument = (draft: ReturnType<typeof createProjectDraft>): ProjectDocume
 });
 
 describe("project progress", () => {
-    it("opens only the first steps of an empty project", () => {
+    it("opens style and planning in an empty project and keeps the result for later", () => {
         const progress = getProjectProgress(null);
         expect(progress.style).toEqual({ done: false, available: true });
-        expect(progress.room).toEqual({ done: false, available: true });
-        expect(progress.layout.available).toBe(false);
-        expect(progress.layout.hint).toBe("Сначала выберите мебель и нарисуйте комнату");
-        expect(progress.result.available).toBe(false);
+        expect(progress.plan).toEqual({ done: false, available: true });
+        expect(progress.result).toMatchObject({ done: false, available: false });
+        expect(progress.result.hint).toBe("Итог появится, когда стены квартиры замкнутся");
     });
 
-    it("needs a closed room before the layout step", () => {
-        const draft = asDocument(
-            createProjectDraft({
-                items: [{ definitionId: "double-bed", count: 1, priority: "required" }],
-            }),
-        );
-        expect(getProjectProgress(draft).questionnaire.done).toBe(true);
-        expect(getProjectProgress(draft).layout).toMatchObject({
-            available: false,
-            hint: "Сначала нарисуйте комнату",
-        });
-
+    it("needs no questionnaire: a closed drawing opens the result", () => {
+        const draft = asDocument(createProjectDraft({ items: [] }));
         const openWalls = { ...fixtureDrawing, segments: fixtureDrawing.segments.slice(0, 3) };
-        expect(getProjectProgress({ ...draft, drawing: openWalls }).room.done).toBe(false);
+        expect(getProjectProgress({ ...draft, drawing: openWalls }).plan.done).toBe(false);
 
         const withRoom = getProjectProgress({ ...draft, drawing: fixtureDrawing });
-        expect(withRoom.room.done).toBe(true);
-        expect(withRoom.layout).toEqual({ done: false, available: true });
+        expect(withRoom.plan.done).toBe(true);
+        expect(withRoom.result).toEqual({ done: false, available: true });
+
+        const furnished = getProjectProgress({
+            ...draft,
+            drawing: {
+                ...fixtureDrawing,
+                furniture: [
+                    {
+                        id: "bed",
+                        definitionId: "double-bed",
+                        x: 0,
+                        y: 0,
+                        width: 1800,
+                        depth: 2000,
+                        rotation: 0,
+                    },
+                ],
+            },
+        });
+        expect(furnished.result).toEqual({ done: true, available: true });
     });
 
-    it("treats the planner's room and placements as done steps", () => {
+    it("counts an older project's planner room and saved layout", () => {
         const draft = createFixtureDraft();
         const progress = getProjectProgress(asDocument(draft));
         expect(progress.style.done).toBe(true);
-        expect(progress.room.done).toBe(true);
-        expect(progress.layout).toEqual({ done: false, available: true });
-        expect(progress.result.available).toBe(false);
+        expect(progress.plan.done).toBe(true);
+        expect(progress.result).toEqual({ done: false, available: true });
 
         const placed = asDocument({
             ...draft,
@@ -72,8 +79,6 @@ describe("project progress", () => {
                 } as never,
             },
         });
-        const done = getProjectProgress(placed);
-        expect(done.layout.done).toBe(true);
-        expect(done.result).toEqual({ done: true, available: true });
+        expect(getProjectProgress(placed).result).toEqual({ done: true, available: true });
     });
 });

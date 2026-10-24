@@ -167,7 +167,7 @@ export const openPlannerWithRoom = async (page: Page, room: object) => {
         },
         [DRAFT_KEY, JSON.stringify(draft)] as const,
     );
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 };
 
 /** Clear room size in millimetres, as the room summary reports it. */
@@ -203,7 +203,7 @@ export const continueThroughRoomStep = async (page: Page, width = "6", depth = "
     ]);
     await buildRectRoom(page, width, depth);
     await Promise.all([
-        page.waitForURL(/\/planner\?(?:drawRoom=1&)?handoff=/, {
+        page.waitForURL(/\/planner\/layout\?(?:drawRoom=1&)?handoff=/, {
             timeout: 60_000,
             waitUntil: "commit",
         }),

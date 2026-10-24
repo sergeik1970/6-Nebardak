@@ -3,35 +3,33 @@ import { buildRectRoom, continueThroughRoomStep, readRoomSize } from "./project-
 
 test.describe.configure({ timeout: 120_000 });
 
-test("the steps unlock the layout only once there is furniture and a room", async ({ page }) => {
-    await page.goto("/questionnaire", { waitUntil: "networkidle" });
+test("the steps go from the style test to the planner and open the result once walls close", async ({
+    page,
+}) => {
+    await page.goto("/planner", { waitUntil: "networkidle" });
     const steps = page.getByRole("navigation", { name: "Шаги проекта" });
     const step = (id: string) => steps.locator(`[data-step="${id}"]`);
 
-    await expect(step("questionnaire")).toHaveAttribute("data-status", "current");
-    await expect(step("layout")).toHaveAttribute("data-status", "locked");
-    await expect(step("layout").locator("[aria-disabled='true']")).toHaveAttribute(
+    await expect(steps.locator("[data-step]")).toHaveCount(3);
+    await expect(step("style")).toHaveAttribute("data-status", "open");
+    await expect(step("plan")).toHaveAttribute("data-status", "current");
+    await expect(step("result")).toHaveAttribute("data-status", "locked");
+    await expect(step("result").locator("[aria-disabled='true']")).toHaveAttribute(
         "title",
-        "Сначала выберите мебель и нарисуйте комнату",
+        "Итог появится, когда стены квартиры замкнутся",
     );
 
-    await page.getByRole("radio", { name: "Односпальная", exact: true }).check();
-    await expect(step("layout").locator("[aria-disabled='true']")).toHaveAttribute(
-        "title",
-        "Сначала нарисуйте комнату",
-    );
-
-    await step("room").getByRole("link").click();
-    await expect(page).toHaveURL(/\/planner\/draw$/);
-    await expect(step("questionnaire")).toHaveAttribute("data-status", "done");
-    await expect(step("room")).toHaveAttribute("data-status", "current");
+    // No questionnaire stands in the way: a closed room opens the result.
     await buildRectRoom(page, "4,2", "3,4");
-    await expect(step("room")).toHaveAttribute("data-status", "current");
-    await expect(step("layout")).toHaveAttribute("data-status", "open");
+    await expect(step("plan")).toHaveAttribute("data-status", "current");
+    await expect(step("result")).toHaveAttribute("data-status", "open");
 
-    await step("layout").getByRole("link").click();
-    await expect(page).toHaveURL(/\/planner$/);
-    await expect(step("layout")).toHaveAttribute("data-status", "current");
+    await step("result").getByRole("link").click();
+    await expect(page).toHaveURL(/\/planner\?step=result$/);
+    await expect(page.locator("[data-draw-room-result='true']")).toBeVisible();
+
+    await step("style").getByRole("link").click();
+    await expect(page).toHaveURL(/\/test$/);
 });
 
 test("a room change marks the layout stale instead of erasing it silently", async ({
@@ -92,6 +90,29 @@ test("door changes on the layout step survive a trip through the drawing", async
     await page.getByRole("button", { name: "Продолжить с комнатой" }).click();
     await page.locator("summary").filter({ hasText: "Проёмы и отопление" }).click();
     await expect(page.locator('input[name="door-door-main-offset"]')).toHaveValue("120");
+});
+
+test("an older project's room and layout open in the planner as a drawing", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "The migration runs once");
+
+    // A layout made on the former layout step, before the drawing held furniture.
+    await page.goto("/questionnaire", { waitUntil: "networkidle" });
+    await page.getByRole("radio", { name: "Односпальная", exact: true }).check();
+    await continueThroughRoomStep(page);
+    await page.getByRole("button", { name: "Уместить всё" }).click();
+    await expect(page.getByRole("heading", { name: "Итоговая спецификация" })).toBeVisible({
+        timeout: 60_000,
+    });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+
+    await page.goto("/planner", { waitUntil: "networkidle" });
+    await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
+    await expect(page.locator("[data-draw-furniture^='furniture-']")).not.toHaveCount(0);
+    await expect(page.locator("[data-draw-room-notice='true']")).toContainText(
+        "Комната и расстановка перенесены в планировщик",
+    );
 });
 
 test("project list explains itself when accounts are off", async ({ page }) => {

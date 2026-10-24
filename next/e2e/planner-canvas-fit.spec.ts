@@ -16,7 +16,7 @@ const getScrollMetrics = (selector: string) =>
         : null;
 
 test("normal plan stays unobstructed and fits before intentional zoom", async ({ page }) => {
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Начать вручную" }).click();
 
     const viewport = page.getByLabel("Прокручиваемая область плана");

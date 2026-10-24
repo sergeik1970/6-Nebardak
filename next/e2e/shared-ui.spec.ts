@@ -77,7 +77,8 @@ test("beta status is honest and reduced-motion removes navigation animation", as
     test.skip(testInfo.project.name !== "mobile-chromium", "Status UI runs once on mobile");
 
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    // A page with the site header; the full-screen planner has its own bar.
+    await page.goto("/test", { waitUntil: "networkidle" });
 
     await expect(page.getByLabel("Бета-версия сайта")).toHaveText("Бета");
     const transitionDuration = await page

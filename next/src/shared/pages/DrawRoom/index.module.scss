@@ -5,6 +5,8 @@
     --draw-grid: #d8e0e3;
     --draw-grid-major: #b4c0c5;
     --draw-orange: #e97800;
+    /* The brand orange behind text: white on it reaches 5.3:1. */
+    --draw-orange-strong: #ad5000;
     --draw-blue: #3e89ad;
     --draw-brown: #9a603c;
     --draw-green: #22856b;
@@ -97,7 +99,7 @@
 
 .crumb {
     gap: 7px;
-    color: #718087;
+    color: #5c6b71;
     font-size: 12px;
     white-space: nowrap;
 }
@@ -210,7 +212,7 @@
 .primary {
     padding: 0 16px;
     color: #fff !important;
-    background: var(--draw-orange) !important;
+    background: var(--draw-orange-strong) !important;
     box-shadow: 0 2px 0 #b45a00;
     font-size: 13px;
     font-weight: 800;
@@ -371,9 +373,9 @@
 .stepTab[aria-current="step"],
 .stepTab[aria-current="step"]:hover:not(:disabled),
 .stepTab[aria-current="step"]:focus-visible {
-    border-color: var(--draw-orange);
+    border-color: var(--draw-orange-strong);
     color: #fff;
-    background: var(--draw-orange);
+    background: var(--draw-orange-strong);
 }
 .stepTab:disabled {
     color: #a3afb3;
@@ -421,7 +423,7 @@
 }
 .keyboardEntryTrigger kbd {
     margin-left: 3px;
-    color: #697a7f;
+    color: #56666d;
     font: 800 10px/1 var(--font-primary);
 }
 .roomInspectorToggle,
@@ -487,7 +489,7 @@
 .rulerSide {
     position: absolute;
     z-index: 2;
-    color: #7e9097;
+    color: #5c6d73;
     font: 700 10px/1 var(--font-primary);
     pointer-events: none;
 }
@@ -1296,7 +1298,7 @@
     margin-top: 10px;
     border: 0;
     color: #fffdfa;
-    background: var(--draw-orange);
+    background: var(--draw-orange-strong);
     box-shadow: 0 2px 0 #b45a00;
     font: 800 12px/1 var(--font-primary);
     cursor: pointer;
@@ -1581,7 +1583,7 @@
 }
 .toolButton[aria-pressed="true"] {
     color: #fffdf8;
-    background: var(--draw-orange);
+    background: var(--draw-orange-strong);
     box-shadow: inset 3px 0 0 #ffc36e;
 }
 
@@ -2378,9 +2380,9 @@
     margin-top: 12px;
     button {
         min-height: 36px;
-        border: 1px solid var(--draw-orange);
+        border: 1px solid var(--draw-orange-strong);
         color: #fff;
-        background: var(--draw-orange);
+        background: var(--draw-orange-strong);
         font: 760 13px/1 var(--font-primary);
         cursor: pointer;
     }

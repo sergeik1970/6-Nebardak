@@ -83,7 +83,7 @@ test("a malformed project id falls back to the guest draft", async ({ page }) =>
         value: draft,
     });
 
-    await page.goto("/planner?project=..%2F..%2Fsecret", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout?project=..%2F..%2Fsecret", { waitUntil: "networkidle" });
 
     await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
 });
