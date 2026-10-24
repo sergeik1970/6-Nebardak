@@ -2965,6 +2965,60 @@ test("the plan is worked through steps and furniture is placed on the drawing", 
     }
 });
 
+test("a room is picked on the plan and given a kind that survives a reload", async ({
+    page,
+}, testInfo) => {
+    test.skip(
+        testInfo.project.name !== "desktop-chromium",
+        "Desktop and phone rooms are covered in one real-pointer flow",
+    );
+    for (const viewport of [
+        { width: 1440, height: 900 },
+        { width: 375, height: 812 },
+    ]) {
+        await page.setViewportSize(viewport);
+        await page.goto("/planner/draw", { waitUntil: "networkidle" });
+        await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+        await page.reload({ waitUntil: "networkidle" });
+        await zoomPhoneOntoDrawing(page, viewport.width);
+        await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 4000, 3000);
+        await openToolGroup(page, "walls");
+        await page.locator("[data-draw-room-tool='wall']").click();
+        await dragOnBoardWorld(page, { x: 4000, y: 3500 }, { x: 8000, y: 3500 });
+        await page.getByRole("button", { name: "Вместить" }).click();
+
+        await page.locator("[data-draw-room-step='rooms']").click();
+        const lowerRoom = await getBoardScreenPoint(page, 5000, 4300);
+        await page.mouse.click(lowerRoom.x, lowerRoom.y);
+        const selected = page.locator("[data-draw-room-region-item][data-selected='true']");
+        await expect(selected).toHaveCount(1);
+        await expect(page.locator("[data-draw-room-region-fill='selected']")).toHaveCount(1);
+        await expect(selected.locator("input")).toHaveValue("Помещение 2");
+
+        // A kind names a room that still has its numbered name.
+        await selected.locator("select").selectOption("bedroom");
+        await expect(selected.locator("input")).toHaveValue("Спальня");
+        await expect(page.locator("[data-draw-room-region-title='true']")).toHaveText(["Спальня"]);
+
+        // A name the person typed is kept when the kind changes.
+        await selected.locator("input").fill("Комната сына");
+        await selected.locator("select").selectOption("children");
+        await expect(selected.locator("input")).toHaveValue("Комната сына");
+
+        // Clicking outside the rooms clears the selection.
+        const outside = await getBoardScreenPoint(page, 2500, 1500);
+        await page.mouse.click(outside.x, outside.y);
+        await expect(page.locator("[data-draw-room-region-fill='selected']")).toHaveCount(0);
+
+        await page.reload({ waitUntil: "networkidle" });
+        await page.locator("[data-draw-room-step='rooms']").click();
+        const items = page.locator("[data-draw-room-region-item]");
+        await expect(items.nth(1).locator("input")).toHaveValue("Комната сына");
+        await expect(items.nth(1).locator("select")).toHaveValue("children");
+        await expect(items.nth(0).locator("select")).toHaveValue("");
+    }
+});
+
 test("a divider keeps the completed exterior and dimensions each room on its own", async ({
     page,
 }, testInfo) => {

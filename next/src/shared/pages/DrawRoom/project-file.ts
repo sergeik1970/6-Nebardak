@@ -1,8 +1,9 @@
-import type {
-    DrawWallSegment,
-    DoorOpening,
-    WindowOpening,
-    Room,
+import {
+    ROOM_KINDS,
+    type DrawWallSegment,
+    type DoorOpening,
+    type WindowOpening,
+    type Room,
 } from "@/shared/lib/furniture-planner";
 import { readFurniture, type DrawFurniture } from "./furniture";
 
@@ -100,7 +101,11 @@ export function parseDrawingProject(text: string): DrawingProjectScene {
             s.regions.version !== 1 ||
             !Array.isArray(s.regions.items) ||
             !s.regions.items.every(
-                (v) => record(v) && typeof v.signature === "string" && typeof v.name === "string",
+                (v) =>
+                    record(v) &&
+                    typeof v.signature === "string" &&
+                    typeof v.name === "string" &&
+                    (v.kind === undefined || ROOM_KINDS.some((item) => item.kind === v.kind)),
             ))
     )
         return fail();

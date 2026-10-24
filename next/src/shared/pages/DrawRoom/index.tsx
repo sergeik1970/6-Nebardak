@@ -19,6 +19,10 @@ import {
     getRoomSegment,
     isHingedDoor,
     materializeRoomRegionsState,
+    isGeneratedRoomName,
+    roomKindLabel,
+    toRoomRegionMetadata,
+    ROOM_KINDS,
     pointInsideRoom,
     saveDrawRoomDraft,
     DRAW_ROOM_GRID_ORIGIN_MM,
@@ -52,6 +56,7 @@ import {
     type DrawRoomRegion,
     type Room,
     type RoomBoundarySegment,
+    type RoomKind,
     type WindowOpening,
 } from "@/shared/lib/furniture-planner";
 import styles from "./index.module.scss";
@@ -2616,6 +2621,8 @@ interface RoomRegionLabelPlacement {
     width: number;
     height: number;
     fontSize: number;
+    /** A room's own name heads the label; numbered defaults stay off the plan. */
+    title: string | null;
     heightValue: string;
     areaValue: string;
     clearBounds: ScreenRect;
@@ -3495,6 +3502,7 @@ const getRoomRegionLabelPlacement = (
     region: {
         x: number;
         y: number;
+        name?: string;
         areaSquareMillimeters: number;
         labelBounds: ScreenRect;
     },
@@ -3509,6 +3517,8 @@ const getRoomRegionLabelPlacement = (
 
     const heightValue = `H=${Math.round(ROOM_CEILING_HEIGHT_MM / 10)}`;
     const areaValue = formatRoomArea(region.areaSquareMillimeters / 1_000_000);
+    const title = region.name && !/^Помещение \d+$/.test(region.name) ? region.name : null;
+    const lineCount = title ? 3 : 2;
     const clearShortestSide = Math.min(clearWidth, clearHeight);
     const horizontalPadding = clamp(clearShortestSide * 0.04, 24, 48);
     const verticalPadding = clamp(clearShortestSide * 0.03, 18, 40);
@@ -3521,9 +3531,10 @@ const getRoomRegionLabelPlacement = (
     );
     // Compact CAD labels deliberately use metric-only text and a tight
     // letter-spacing, so a 14 px S=… value can still fit a narrow 85 cm bay.
-    const areaCharacterWidth = areaValue.length * 0.52;
+    const areaCharacterWidth = Math.max(areaValue.length * 0.52, (title?.length ?? 0) * 0.56);
     const maximumByWidth = (clearWidth - horizontalPadding * 2) / areaCharacterWidth;
-    const maximumByHeight = (clearHeight - verticalPadding * 2) / 2.55;
+    const linesHeight = lineCount === 3 ? 3.8 : 2.55;
+    const maximumByHeight = (clearHeight - verticalPadding * 2) / linesHeight;
     const fontSize = Math.min(desiredFont, maximumByWidth, maximumByHeight);
     if (!Number.isFinite(fontSize) || fontSize < Math.min(ROOM_LABEL_MIN_FONT_MM, screenFontCap))
         return null;
@@ -3534,7 +3545,7 @@ const getRoomRegionLabelPlacement = (
     // Chromium's SVG text box includes the painted glyph ascenders/descenders
     // beyond its nominal line height. Reserve that real visual height so the
     // white backing remains a full container at every zoom level.
-    const height = fontSize * 2.55 + verticalPadding * 2;
+    const height = fontSize * linesHeight + verticalPadding * 2;
     if (width > clearWidth || height > clearHeight) return null;
 
     // Clear-face bounds already exclude material. Do not spend the few
@@ -3598,6 +3609,7 @@ const getRoomRegionLabelPlacement = (
         width,
         height,
         fontSize,
+        title,
         heightValue,
         areaValue,
         clearBounds,
@@ -3781,6 +3793,7 @@ const DrawRoom: React.FC = () => {
     const boardRef = useRef<SVGSVGElement>(null);
     const [tool, setTool] = useState<Tool>("wall");
     const [activeToolGroup, setActiveToolGroup] = useState<ToolGroup>("walls");
+    const [selectedRegionSignature, setSelectedRegionSignature] = useState<string | null>(null);
     // On narrow screens a group sheet covers much of the canvas, so it folds
     // away once a tool is picked and its group button toggles it back.
     const [toolSheetCollapsed, setToolSheetCollapsed] = useState(false);
@@ -3890,6 +3903,7 @@ const DrawRoom: React.FC = () => {
                     ...region,
                     signature: regionPrefix(owner) + region.signature,
                     buildingId: regionPrefix(owner),
+                    origin: owner.origin,
                     x: owner.origin.x + region.center.x,
                     y: owner.origin.y + region.center.y,
                     bounds: {
@@ -4597,7 +4611,7 @@ const DrawRoom: React.FC = () => {
                 // graph, so a browser refresh never renames a stable region.
                 regions: {
                     version: 1,
-                    items: renderedRoomRegions.map(({ signature, name }) => ({ signature, name })),
+                    items: renderedRoomRegions.map(toRoomRegionMetadata),
                 },
             };
             const storage = getProjectStorage();
@@ -5504,27 +5518,35 @@ const DrawRoom: React.FC = () => {
         [commitScene, preview, scene, sceneSnapMm, selectedOpeningData],
     );
 
-    const updateRegionName = useCallback(
-        (signature: string, value: string) => {
+    const updateRegion = useCallback(
+        (signature: string, patch: { name?: string; kind?: RoomKind }) => {
             if (!preview) return;
-            const name = value.trim().replace(/\s+/g, " ");
-            if (!name) {
+            const name = patch.name?.trim().replace(/\s+/g, " ");
+            if (patch.name !== undefined && !name) {
                 setNotice("Название помещения не может быть пустым.");
                 return;
             }
-            const regions = {
-                version: 1 as const,
-                items:
-                    renderedRoomRegions
-                        .map(({ signature, name }) => ({ signature, name }))
-                        .map((item) =>
-                            item.signature === signature
-                                ? { ...item, name: name.slice(0, 80) }
-                                : item,
-                        ) ?? [],
-            };
-            commitScene({ ...scene, regions });
-            setNotice(`Название помещения сохранено: «${name.slice(0, 80)}».`);
+            const items = renderedRoomRegions.map((region) => {
+                if (region.signature !== signature) return toRoomRegionMetadata(region);
+                const kind = patch.kind ?? region.kind;
+                // A chosen kind names the room until the person types a name.
+                const nextName =
+                    name?.slice(0, 80) ??
+                    (patch.kind && isGeneratedRoomName(region.name)
+                        ? roomKindLabel(patch.kind)
+                        : region.name);
+                return toRoomRegionMetadata({ signature, name: nextName, kind });
+            });
+            commitScene({ ...scene, regions: { version: 1, items } });
+            const updated = items.find((item) => item.signature === signature);
+            if (updated)
+                setNotice(
+                    patch.kind
+                        ? updated.name === roomKindLabel(patch.kind)
+                            ? `Помещение отмечено: ${updated.name.toLowerCase()}.`
+                            : `«${updated.name}» — ${roomKindLabel(patch.kind).toLowerCase()}.`
+                        : `Название помещения сохранено: «${updated.name}».`,
+                );
         },
         [commitScene, preview, renderedRoomRegions, scene],
     );
@@ -5809,6 +5831,21 @@ const DrawRoom: React.FC = () => {
                     setSelectedContourWallEdge(null);
                     setSelectedSegmentWallId(null);
                     setSelectedOpening(null);
+                    if (activeToolGroup === "rooms") {
+                        const point = pointFromEvent(event, false);
+                        const hit =
+                            point &&
+                            renderedRoomRegions.find((region) =>
+                                region.clearRects.some(
+                                    (rect) =>
+                                        point.x >= region.origin.x + rect.left &&
+                                        point.x <= region.origin.x + rect.right &&
+                                        point.y >= region.origin.y + rect.top &&
+                                        point.y <= region.origin.y + rect.bottom,
+                                ),
+                            );
+                        setSelectedRegionSignature(hit ? hit.signature : null);
+                    }
                 }
                 startPan(event);
                 return;
@@ -5824,7 +5861,17 @@ const DrawRoom: React.FC = () => {
             }
             if (tool === "door" || tool === "window") addOpening(tool, point);
         },
-        [addOpening, beginWallDrawing, pointFromEvent, spacePan, startOpeningDrag, startPan, tool],
+        [
+            activeToolGroup,
+            addOpening,
+            beginWallDrawing,
+            pointFromEvent,
+            renderedRoomRegions,
+            spacePan,
+            startOpeningDrag,
+            startPan,
+            tool,
+        ],
     );
 
     const flushPendingWheelZoom = useCallback(() => {
@@ -6796,10 +6843,7 @@ const DrawRoom: React.FC = () => {
                         ...scene,
                         regions: {
                             version: 1,
-                            items: renderedRoomRegions.map(({ signature, name }) => ({
-                                signature,
-                                name,
-                            })),
+                            items: renderedRoomRegions.map(toRoomRegionMetadata),
                         },
                     }}
                     measuring={measuring}
@@ -7498,6 +7542,38 @@ const DrawRoom: React.FC = () => {
                                                 .join(" ")}
                                         />
                                     ))}
+                                    {activeToolGroup === "rooms" && (
+                                        <g
+                                            pointerEvents="none"
+                                            shapeRendering="crispEdges"
+                                            data-draw-room-region-fills="true"
+                                        >
+                                            {renderedRoomRegions.map((region) => {
+                                                const selected =
+                                                    region.signature === selectedRegionSignature;
+                                                return (
+                                                    <g
+                                                        key={region.signature}
+                                                        fill="#e97800"
+                                                        fillOpacity={selected ? 0.16 : 0.04}
+                                                        data-draw-room-region-fill={
+                                                            selected ? "selected" : "idle"
+                                                        }
+                                                    >
+                                                        {region.clearRects.map((rect) => (
+                                                            <rect
+                                                                key={`${rect.left},${rect.top}`}
+                                                                x={region.origin.x + rect.left}
+                                                                y={region.origin.y + rect.top}
+                                                                width={rect.right - rect.left}
+                                                                height={rect.bottom - rect.top}
+                                                            />
+                                                        ))}
+                                                    </g>
+                                                );
+                                            })}
+                                        </g>
+                                    )}
                                     <g className={styles.wallLayers}>
                                         <path
                                             data-draw-room-wall-strip="true"
@@ -8897,11 +8973,28 @@ const DrawRoom: React.FC = () => {
                                                     label.height * 0.15,
                                                 )}
                                             />
+                                            {label.title && (
+                                                <text
+                                                    className={styles.roomRegionTitle}
+                                                    data-draw-room-region-title="true"
+                                                    x={label.x}
+                                                    y={label.y - label.fontSize * 1.18}
+                                                    style={{ fontSize: label.fontSize }}
+                                                    textAnchor="middle"
+                                                    dominantBaseline="middle"
+                                                >
+                                                    {label.title}
+                                                </text>
+                                            )}
                                             <text
                                                 className={styles.roomRegionHeight}
                                                 data-draw-room-region-height="true"
                                                 x={label.x}
-                                                y={label.y - label.fontSize * 0.59}
+                                                y={
+                                                    label.title
+                                                        ? label.y
+                                                        : label.y - label.fontSize * 0.59
+                                                }
                                                 style={{ fontSize: label.fontSize }}
                                                 textAnchor="middle"
                                                 dominantBaseline="middle"
@@ -8912,7 +9005,10 @@ const DrawRoom: React.FC = () => {
                                                 className={styles.roomRegionArea}
                                                 data-draw-room-region-area="true"
                                                 x={label.x}
-                                                y={label.y + label.fontSize * 0.59}
+                                                y={
+                                                    label.y +
+                                                    label.fontSize * (label.title ? 1.18 : 0.59)
+                                                }
                                                 style={{ fontSize: label.fontSize }}
                                                 textAnchor="middle"
                                                 dominantBaseline="middle"
@@ -9261,6 +9357,10 @@ const DrawRoom: React.FC = () => {
                                                 <label
                                                     key={region.signature}
                                                     className={styles.roomInspectorItem}
+                                                    data-draw-room-region-item={region.signature}
+                                                    data-selected={
+                                                        region.signature === selectedRegionSignature
+                                                    }
                                                 >
                                                     <span>
                                                         {(
@@ -9274,13 +9374,44 @@ const DrawRoom: React.FC = () => {
                                                         aria-label={`Название помещения ${region.name} — ${group.name}`}
                                                         value={region.name}
                                                         maxLength={80}
-                                                        onChange={(event) =>
-                                                            updateRegionName(
+                                                        onFocus={() =>
+                                                            setSelectedRegionSignature(
                                                                 region.signature,
-                                                                event.target.value,
                                                             )
                                                         }
+                                                        onChange={(event) =>
+                                                            updateRegion(region.signature, {
+                                                                name: event.target.value,
+                                                            })
+                                                        }
                                                     />
+                                                    <select
+                                                        aria-label={`Тип помещения ${region.name}`}
+                                                        value={region.kind ?? ""}
+                                                        onFocus={() =>
+                                                            setSelectedRegionSignature(
+                                                                region.signature,
+                                                            )
+                                                        }
+                                                        onChange={(event) =>
+                                                            updateRegion(region.signature, {
+                                                                kind: event.target
+                                                                    .value as RoomKind,
+                                                            })
+                                                        }
+                                                    >
+                                                        <option value="" disabled>
+                                                            Тип комнаты
+                                                        </option>
+                                                        {ROOM_KINDS.map((item) => (
+                                                            <option
+                                                                key={item.kind}
+                                                                value={item.kind}
+                                                            >
+                                                                {item.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
                                                 </label>
                                             ))}
                                         </section>
