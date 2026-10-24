@@ -2905,6 +2905,66 @@ test("an unfinished exterior cannot turn into a small room when drawing a divide
     await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
 });
 
+test("the plan is worked through steps and furniture is placed on the drawing", async ({
+    page,
+}, testInfo) => {
+    test.skip(
+        testInfo.project.name !== "desktop-chromium",
+        "Desktop and phone steps are covered in one real-pointer flow",
+    );
+    await page.addInitScript(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+
+    for (const viewport of [
+        { width: 1440, height: 900 },
+        { width: 375, height: 812 },
+    ]) {
+        await page.setViewportSize(viewport);
+        await page.goto("/planner/draw", { waitUntil: "networkidle" });
+        const step = (name: string) => page.locator(`[data-draw-room-step='${name}']`);
+
+        // Rooms and furniture need a closed contour first.
+        await expect(step("walls")).toHaveAttribute("aria-current", "step");
+        await expect(step("rooms")).toBeDisabled();
+        await expect(step("furniture")).toBeDisabled();
+
+        await zoomPhoneOntoDrawing(page, viewport.width);
+        await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 4000, 3000);
+        await openToolGroup(page, "walls");
+        await page.locator("[data-draw-room-tool='wall']").click();
+        await dragOnBoardWorld(page, { x: 4000, y: 3500 }, { x: 8000, y: 3500 });
+        await page.getByRole("button", { name: "Вместить" }).click();
+        await expect(page.locator("[data-draw-room-region]")).toHaveCount(2);
+
+        // The rooms list belongs to its own step, not on top of the tools.
+        await expect(page.locator("[data-draw-room-room-inspector='true']")).toHaveCount(0);
+        await step("rooms").click();
+        await expect(page.locator("[data-draw-room-room-inspector='true']")).toBeVisible();
+        await expect(page.locator("[aria-label='Инструменты чертежа']")).toHaveCount(0);
+
+        await step("furniture").click();
+        await expect(step("furniture")).toHaveAttribute("aria-current", "step");
+        await expect(page.locator("[data-draw-room-room-inspector='true']")).toHaveCount(0);
+        await page.locator("[data-add-furniture='single-bed']").click();
+        // Turned along the 3,9 m wall, the 2 m bed fits the 1,4 m deep room.
+        await page.keyboard.press("r");
+        const bedCentre = await getBoardScreenPoint(page, 6000, 2750);
+        await page.mouse.move(bedCentre.x, bedCentre.y);
+        await page.mouse.click(bedCentre.x, bedCentre.y);
+        const bed = page.locator("[data-draw-furniture^='furniture-']");
+        await expect(bed).toHaveCount(1);
+        await expect(bed).toHaveAttribute("data-invalid", "false");
+
+        // Other steps keep the furniture as a quiet layer.
+        await step("walls").click();
+        await expect(step("walls")).toHaveAttribute("aria-current", "step");
+        await expect(bed).toHaveCSS("opacity", "0.45");
+        await page.screenshot({
+            path: testInfo.outputPath(`plan-steps-${viewport.width}x${viewport.height}.png`),
+        });
+        await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    }
+});
+
 test("a divider keeps the completed exterior and dimensions each room on its own", async ({
     page,
 }, testInfo) => {
@@ -4008,6 +4068,8 @@ test("constructive 10 mm drawing keeps exact face chains, regions and responsive
     expect(tablet.overlaps).toBe(false);
 
     await page.setViewportSize({ width: 375, height: 812 });
+    // The rooms list is its own step; on a phone it takes the dock's place.
+    await page.locator("[data-draw-room-step='rooms']").click();
     const mobile = await page.evaluate(() => {
         const dock = document.querySelector<HTMLElement>("[aria-label='Инструменты чертежа']");
         const inspector = document.querySelector<HTMLElement>(
@@ -4017,12 +4079,12 @@ test("constructive 10 mm drawing keeps exact face chains, regions and responsive
         const inspectorBox = inspector?.getBoundingClientRect();
         const canvasBox = canvas?.getBoundingClientRect();
         return {
-            dockDisplay: dock ? getComputedStyle(dock).display : "",
+            dockShown: Boolean(dock),
             inspectorTop: inspectorBox?.top ?? 0,
             canvasBottom: canvasBox?.bottom ?? 0,
         };
     });
-    expect(mobile.dockDisplay).toBe("none");
+    expect(mobile.dockShown).toBe(false);
     expect(mobile.canvasBottom).toBeLessThanOrEqual(mobile.inspectorTop);
 
     // The compact region sheet is reversible: a user can return to the dock,

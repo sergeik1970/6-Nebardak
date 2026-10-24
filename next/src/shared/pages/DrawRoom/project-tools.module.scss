@@ -14,6 +14,7 @@
     summary {
         cursor: pointer;
         padding: 6px;
+        white-space: nowrap;
     }
 }
 .popup {
@@ -79,6 +80,11 @@
     }
     .status {
         max-width: 190px;
+    }
+    // The step tabs need this row on a phone; only a failure is worth the space.
+    .status[data-drawing-save-status="saved"],
+    .status[data-drawing-save-status="loading"] {
+        display: none;
     }
 }
 

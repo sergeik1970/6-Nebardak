@@ -185,6 +185,12 @@
     padding: 0;
     margin: 0;
     min-width: 0;
+    // Four sides do not fit one row of the narrow panel; two per row keep
+    // a four-digit distance readable.
+    .sizes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
     legend {
         font-weight: 600;
         margin-bottom: 8px;
