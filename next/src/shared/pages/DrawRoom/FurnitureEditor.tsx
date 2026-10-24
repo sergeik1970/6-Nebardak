@@ -4,17 +4,22 @@ import {
     FURNITURE_CATALOG,
     getRotatedGeometry,
     type DrawWallSegment,
+    type FurnitureCategory,
     type Rotation,
     type Rect,
 } from "@/shared/lib/furniture-planner";
 import {
+    furnitureBelongsToRoom,
+    furnitureCategoryOrder,
     furnitureDefinition,
     furnitureError,
     furnitureConflicts,
     furnitureWallDistances,
     furnitureGeometry,
     rotatedFurnitureCandidates,
+    snapFurnitureToWalls,
     type DrawFurniture,
+    type FurnitureRoom,
 } from "./furniture";
 import styles from "./furniture.module.scss";
 import FurniturePhoto from "@/shared/components/FurniturePhoto";
@@ -24,7 +29,7 @@ import {
 } from "@/shared/lib/furniture-planner/furniture-photos";
 import { isSchematicFurnitureSource } from "@/shared/lib/furniture-planner/catalog";
 
-const categories = {
+const categories: Record<FurnitureCategory, string> = {
     sleep: "Кровати",
     living: "Гостиная",
     storage: "Хранение",
@@ -36,22 +41,23 @@ const snap = (n: number) => Math.round(n / 10) * 10;
 export default function FurnitureEditor({
     boardRef,
     active,
-    selectable,
     onActivate,
     items,
     walls,
     thickness,
     doorObstacles,
+    room,
     onChange,
 }: {
     boardRef: React.RefObject<SVGSVGElement>;
     active: boolean;
-    selectable: boolean;
     onActivate: () => void;
     items: DrawFurniture[];
     walls: DrawWallSegment[];
     thickness: number;
     doorObstacles: readonly Rect[];
+    /** Pieces are placed in this room only; others' furniture stays a quiet layer. */
+    room: FurnitureRoom | null;
     onChange: (items: DrawFurniture[]) => void;
 }) {
     const [board, setBoard] = useState<SVGSVGElement | null>(null);
@@ -102,7 +108,9 @@ export default function FurnitureEditor({
         return matrix ? new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse()) : null;
     };
     const error = (item: DrawFurniture) =>
-        furnitureError(item, items, walls, thickness, doorObstacles);
+        furnitureError(item, items, walls, thickness, doorObstacles, room);
+    const inRoom = (item: DrawFurniture) => !room || furnitureBelongsToRoom(item, room);
+    const settle = (item: DrawFurniture) => snapFurnitureToWalls(item, walls, thickness);
     const update = (item: DrawFurniture) => {
         if (items.find((old) => old.id === item.id)?.locked) {
             setMessage("Предмет закреплён. Разблокируйте его для редактирования.");
@@ -142,11 +150,11 @@ export default function FurnitureEditor({
             const p = point(event.clientX, event.clientY);
             if (!p) return null;
             const geometry = furnitureGeometry(pending);
-            return {
+            return settle({
                 ...pending,
                 x: snap(p.x - geometry.width / 2),
                 y: snap(p.y - geometry.depth / 2),
-            };
+            });
         };
         const move = (event: PointerEvent) => {
             if (event.buttons) return;
@@ -166,6 +174,11 @@ export default function FurnitureEditor({
             }
             const placed = { ...item, id: `furniture-${crypto.randomUUID()}` };
             onChange([...items, placed]);
+            // Shift keeps the same piece in hand for the next spot.
+            if (event.shiftKey) {
+                setMessage("Предмет добавлен. Укажите следующее место или нажмите Esc.");
+                return;
+            }
             setSelectedId(placed.id);
             setPending(null);
             setPreview(null);
@@ -256,7 +269,12 @@ export default function FurnitureEditor({
         const geometry = furnitureGeometry(item);
         const definition = furnitureDefinition(item.definitionId)!;
         const photo = getFurniturePhoto(item.definitionId, item.photoId);
-        const invalid = Boolean(error(item));
+        const own = ghost || inRoom(item);
+        // Another room's furniture is judged on its own ground, not this room's.
+        const invalid = Boolean(
+            own ? error(item) : furnitureError(item, items, walls, thickness, doorObstacles),
+        );
+        const editable = active && own && !ghost;
         const baseGeometry = furnitureGeometry({ ...item, rotation: 0 });
         const transform =
             item.rotation === 90
@@ -277,20 +295,20 @@ export default function FurnitureEditor({
                 data-invalid={invalid}
                 data-locked={Boolean(item.locked)}
                 style={{
-                    pointerEvents: (active || selectable) && !ghost && !pending ? "auto" : "none",
-                    // Outside the furniture step the pieces stay visible as a quiet layer.
-                    opacity: ghost ? 0.65 : active ? 1 : 0.45,
+                    pointerEvents: editable && !pending ? "auto" : "none",
+                    // Outside the furniture step, or the selected room, pieces stay a quiet layer.
+                    opacity: ghost ? 0.65 : editable ? 1 : 0.45,
                     cursor: item.locked ? "pointer" : undefined,
                 }}
                 role={ghost ? undefined : "button"}
-                tabIndex={(active || selectable) && !ghost ? 0 : undefined}
+                tabIndex={editable ? 0 : undefined}
                 aria-label={ghost ? undefined : definition.label}
                 onFocus={() => {
                     onActivate();
                     setSelectedId(item.id);
                 }}
                 onPointerDown={(event) => {
-                    if ((!active && !selectable) || event.button !== 0 || pending) return;
+                    if (!editable || event.button !== 0 || pending) return;
                     onActivate();
                     const p = point(event.clientX, event.clientY);
                     if (!p) return;
@@ -314,11 +332,11 @@ export default function FurnitureEditor({
                     event.stopPropagation();
                     const p = point(event.clientX, event.clientY);
                     if (!p) return;
-                    const next = {
+                    const next = settle({
                         ...session.initial,
                         x: snap(session.initial.x + p.x - session.start.x),
                         y: snap(session.initial.y + p.y - session.start.y),
-                    };
+                    });
                     const reason = error(next);
                     // Follow the pointer across obstacles; validate the destination on release.
                     session.last = next;
@@ -394,12 +412,32 @@ export default function FurnitureEditor({
                         {definition.shortLabel}
                     </text>
                 )}
+                {active && own && (
+                    // Plan sizes in centimetres along the front and the side, as on a drawing.
+                    <g className={styles.sizeLabels} style={{ fontSize: 12 * screenUnit }}>
+                        <text
+                            data-furniture-size="width"
+                            x={geometry.width / 2}
+                            y={geometry.depth - 7 * screenUnit}
+                            textAnchor="middle"
+                        >
+                            {Math.round(geometry.width / 10)}
+                        </text>
+                        <text
+                            data-furniture-size="depth"
+                            transform={`translate(${geometry.width - 7 * screenUnit} ${geometry.depth / 2}) rotate(-90)`}
+                            textAnchor="middle"
+                        >
+                            {Math.round(geometry.depth / 10)}
+                        </text>
+                    </g>
+                )}
             </g>
         );
     };
     const inspected = active ? preview ?? reposition ?? selected : null;
     const conflicts = inspected
-        ? furnitureConflicts(inspected, items, walls, thickness, doorObstacles)
+        ? furnitureConflicts(inspected, items, walls, thickness, doorObstacles, room)
         : [];
     const distances =
         selected && !pending && !preview && !reposition
@@ -460,7 +498,9 @@ export default function FurnitureEditor({
                                             ? "Освободите проход перед дверью"
                                             : conflicts[0].kind === "wall"
                                               ? "Предмет пересекает стену"
-                                              : "Место занято другой мебелью"}
+                                              : conflicts[0].kind === "room"
+                                                ? "За пределами выбранной комнаты"
+                                                : "Место занято другой мебелью"}
                                     </text>
                                 </g>
                             )}
@@ -476,7 +516,7 @@ export default function FurnitureEditor({
                     onPointerDown={(event) => event.stopPropagation()}
                 >
                     <header>
-                        <b>Мебель</b>
+                        <b>{room ? room.name : "Мебель"}</b>
                         {editing ? (
                             <button
                                 type="button"
@@ -491,7 +531,7 @@ export default function FurnitureEditor({
                                 Каталог
                             </button>
                         ) : (
-                            <span>{items.length} на плане</span>
+                            <span>{items.filter(inRoom).length} в комнате</span>
                         )}
                     </header>
                     {editing && (
@@ -693,8 +733,10 @@ export default function FurnitureEditor({
                     <p role="status">
                         {message ||
                             (pending
-                                ? "Щёлкните по свободному месту на плане. R — поворот, Esc — отмена."
-                                : "Выберите предмет и укажите место на плане. Мебель можно перетаскивать мышью.")}
+                                ? "Щёлкните по свободному месту. У стены предмет прилипнет к ней. R — поворот, Shift — несколько, Esc — отмена."
+                                : room
+                                  ? "Выберите предмет и укажите место в комнате. Shift — поставить несколько. Другая комната — нажмите на неё на плане."
+                                  : "Выберите предмет и укажите место на плане. Мебель можно перетаскивать мышью.")}
                     </p>
                     <input
                         aria-label="Поиск мебели"
@@ -703,7 +745,11 @@ export default function FurnitureEditor({
                         onChange={(event) => setQuery(event.target.value)}
                     />
                     <div className={styles.catalog}>
-                        {Object.entries(categories).map(([category, label]) => {
+                        {furnitureCategoryOrder(
+                            Object.keys(categories) as FurnitureCategory[],
+                            room?.kind,
+                        ).map((category) => {
+                            const label = categories[category];
                             const definitions = FURNITURE_CATALOG.filter(
                                 (item) =>
                                     item.category === category &&

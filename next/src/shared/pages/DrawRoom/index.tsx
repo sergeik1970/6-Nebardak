@@ -62,7 +62,7 @@ import {
 import styles from "./index.module.scss";
 import FurnitureEditor from "./FurnitureEditor";
 import MeasureTool from "./MeasureTool";
-import { readFurniture, type DrawFurniture } from "./furniture";
+import { readFurniture, type DrawFurniture, type FurnitureRoom } from "./furniture";
 import Dialog from "@/shared/components/Dialog";
 import { RECT_TEMPLATE_LIMITS, createRectTemplateRoom, roomToDrawingScene } from "./room-template";
 
@@ -5831,7 +5831,7 @@ const DrawRoom: React.FC = () => {
                     setSelectedContourWallEdge(null);
                     setSelectedSegmentWallId(null);
                     setSelectedOpening(null);
-                    if (activeToolGroup === "rooms") {
+                    if (activeToolGroup === "rooms" || activeToolGroup === "furniture") {
                         const point = pointFromEvent(event, false);
                         const hit =
                             point &&
@@ -5844,7 +5844,9 @@ const DrawRoom: React.FC = () => {
                                         point.y <= region.origin.y + rect.bottom,
                                 ),
                             );
-                        setSelectedRegionSignature(hit ? hit.signature : null);
+                        // While furnishing, a click beside the plan keeps the room in hand.
+                        if (hit || activeToolGroup === "rooms")
+                            setSelectedRegionSignature(hit ? hit.signature : null);
                     }
                 }
                 startPan(event);
@@ -6622,6 +6624,26 @@ const DrawRoom: React.FC = () => {
     const roomInspectorOpen = activeToolGroup === "rooms" && renderedRoomRegions.length > 0;
     // Room H/S labels would sit on top of the pieces being placed.
     const furnitureStep = activeToolGroup === "furniture";
+    const selectedRegion =
+        renderedRoomRegions.find((region) => region.signature === selectedRegionSignature) ?? null;
+    // Furniture goes into one room; without a choice yet, the first room is it.
+    const furnitureRegion = selectedRegion ?? renderedRoomRegions[0] ?? null;
+    const furnitureRoom = useMemo<FurnitureRoom | null>(
+        () =>
+            furnitureRegion
+                ? {
+                      name: furnitureRegion.name,
+                      kind: furnitureRegion.kind,
+                      rects: furnitureRegion.clearRects.map((rect) => ({
+                          left: furnitureRegion.origin.x + rect.left,
+                          right: furnitureRegion.origin.x + rect.right,
+                          top: furnitureRegion.origin.y + rect.top,
+                          bottom: furnitureRegion.origin.y + rect.bottom,
+                      })),
+                  }
+                : null,
+        [furnitureRegion],
+    );
     // Opening the contour again takes away the rooms and the furniture step.
     const activeStepLost =
         (activeToolGroup === "rooms" && renderedRoomRegions.length === 0) ||
@@ -7542,20 +7564,32 @@ const DrawRoom: React.FC = () => {
                                                 .join(" ")}
                                         />
                                     ))}
-                                    {activeToolGroup === "rooms" && (
+                                    {(activeToolGroup === "rooms" ||
+                                        (furnitureStep && renderedRoomRegions.length > 1)) && (
                                         <g
                                             pointerEvents="none"
                                             shapeRendering="crispEdges"
                                             data-draw-room-region-fills="true"
                                         >
                                             {renderedRoomRegions.map((region) => {
-                                                const selected =
-                                                    region.signature === selectedRegionSignature;
+                                                const selected = furnitureStep
+                                                    ? region.signature ===
+                                                      furnitureRegion?.signature
+                                                    : region.signature === selectedRegionSignature;
+                                                // Furnishing greys out the other rooms; the
+                                                // rooms step tints all and marks the choice.
+                                                if (furnitureStep && selected) return null;
                                                 return (
                                                     <g
                                                         key={region.signature}
-                                                        fill="#e97800"
-                                                        fillOpacity={selected ? 0.16 : 0.04}
+                                                        fill={furnitureStep ? "#26313a" : "#e97800"}
+                                                        fillOpacity={
+                                                            furnitureStep
+                                                                ? 0.1
+                                                                : selected
+                                                                  ? 0.16
+                                                                  : 0.04
+                                                        }
                                                         data-draw-room-region-fill={
                                                             selected ? "selected" : "idle"
                                                         }
@@ -9306,7 +9340,6 @@ const DrawRoom: React.FC = () => {
                         <FurnitureEditor
                             boardRef={boardRef}
                             active={activeToolGroup === "furniture"}
-                            selectable={tool === "select"}
                             onActivate={() => {
                                 setTool("select");
                                 setActiveToolGroup("furniture");
@@ -9318,6 +9351,7 @@ const DrawRoom: React.FC = () => {
                             walls={scene.segments}
                             thickness={renderedWallThickness}
                             doorObstacles={furnitureDoorObstacles}
+                            room={furnitureRoom}
                             onChange={(furniture) =>
                                 commitScene({ ...sceneForInteractionRef.current, furniture })
                             }

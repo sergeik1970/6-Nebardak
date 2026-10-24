@@ -2,8 +2,10 @@ import {
     FURNITURE_CATALOG,
     getRotatedGeometry,
     type DrawWallSegment,
+    type FurnitureCategory,
     type Rotation,
     type Rect,
+    type RoomKind,
 } from "@/shared/lib/furniture-planner";
 import { getFurniturePhotos } from "@/shared/lib/furniture-planner/furniture-photos";
 
@@ -78,10 +80,44 @@ const overlaps = (
     a.y < b.y + b.depth - 0.01 &&
     a.y + a.depth > b.y + 0.01;
 export interface FurnitureConflict {
-    kind: "door" | "wall" | "furniture";
+    kind: "door" | "wall" | "furniture" | "room";
     rect: Rect;
     message: string;
 }
+
+/** The room furniture is being placed in, as clear rectangles in plan coordinates. */
+export interface FurnitureRoom {
+    name: string;
+    kind?: RoomKind;
+    rects: readonly { left: number; top: number; right: number; bottom: number }[];
+}
+
+const coveredArea = (rect: Rect, room: FurnitureRoom) =>
+    room.rects.reduce((total, cell) => {
+        const width = Math.min(rect.x + rect.width, cell.right) - Math.max(rect.x, cell.left);
+        const depth = Math.min(rect.y + rect.depth, cell.bottom) - Math.max(rect.y, cell.top);
+        return width > 0 && depth > 0 ? total + width * depth : total;
+    }, 0);
+
+/** Room cells never overlap, so a body is inside when they cover its whole area. */
+export const furnitureInsideRoom = (item: DrawFurniture, room: FurnitureRoom) =>
+    furnitureGeometry(item).bodyRects.every((body) => {
+        const rect = { ...body, x: body.x + item.x, y: body.y + item.y };
+        return coveredArea(rect, room) >= rect.width * rect.depth - 1;
+    });
+
+/** A piece belongs to the room its centre stands in. */
+export const furnitureBelongsToRoom = (item: DrawFurniture, room: FurnitureRoom) => {
+    const { width, depth } = furnitureGeometry(item);
+    const centre = { x: item.x + width / 2, y: item.y + depth / 2 };
+    return room.rects.some(
+        (cell) =>
+            centre.x >= cell.left &&
+            centre.x <= cell.right &&
+            centre.y >= cell.top &&
+            centre.y <= cell.bottom,
+    );
+};
 
 const wallRect = (wall: DrawWallSegment, thickness: number): Rect => ({
     x: Math.min(wall.start.x, wall.end.x) - thickness / 2,
@@ -96,7 +132,18 @@ export function furnitureConflicts(
     walls: DrawWallSegment[],
     thickness: number,
     doorObstacles: readonly Rect[] = [],
+    room: FurnitureRoom | null = null,
 ): FurnitureConflict[] {
+    if (room && !furnitureInsideRoom(item, room)) {
+        const { width, depth } = furnitureGeometry(item);
+        return [
+            {
+                kind: "room",
+                rect: { x: item.x, y: item.y, width, depth },
+                message: `Предмет выходит за пределы комнаты «${room.name}». Мебель ставится в выбранную комнату.`,
+            },
+        ];
+    }
     const rects = furnitureGeometry(item).bodyRects.map((rect) => ({
         ...rect,
         x: rect.x + item.x,
@@ -139,8 +186,11 @@ export function furnitureError(
     walls: DrawWallSegment[],
     thickness: number,
     doorObstacles: readonly Rect[] = [],
+    room: FurnitureRoom | null = null,
 ): string | null {
-    return furnitureConflicts(item, items, walls, thickness, doorObstacles)[0]?.message ?? null;
+    return (
+        furnitureConflicts(item, items, walls, thickness, doorObstacles, room)[0]?.message ?? null
+    );
 }
 
 export interface FurnitureWallDistance {
@@ -203,4 +253,48 @@ export function rotatedFurnitureCandidates(item: DrawFurniture): DrawFurniture[]
         x: item.x + x,
         y: item.y + y,
     }));
+}
+
+/** Closer than this to a wall face, a piece is pulled flush against it. */
+export const FURNITURE_WALL_SNAP_MM = 150;
+
+/** Pulls a piece flush to the nearest wall on each axis when it is close enough. */
+export function snapFurnitureToWalls(
+    item: DrawFurniture,
+    walls: DrawWallSegment[],
+    thickness: number,
+): DrawFurniture {
+    const distances = furnitureWallDistances(item, walls, thickness).filter(
+        (entry) => entry.distance > 0 && entry.distance < FURNITURE_WALL_SNAP_MM,
+    );
+    const next = { ...item };
+    (["x", "y"] as const).forEach((axis) => {
+        const nearest = distances
+            .filter((entry) => entry.axis === axis)
+            .sort((first, second) => first.distance - second.distance)[0];
+        if (nearest) next[axis] = item[axis] - nearest.direction * nearest.distance;
+    });
+    return next;
+}
+
+const KIND_CATEGORIES: Record<RoomKind, FurnitureCategory[]> = {
+    bedroom: ["sleep", "storage", "work", "media"],
+    living: ["living", "media", "storage"],
+    kitchen: ["living", "storage"],
+    children: ["children", "sleep", "storage", "work"],
+    office: ["work", "storage", "living"],
+    hallway: ["storage", "living"],
+    bathroom: ["storage"],
+    other: [],
+};
+
+/** Catalogue sections for a room: what suits its kind first, the rest after. */
+export function furnitureCategoryOrder(
+    all: readonly FurnitureCategory[],
+    kind?: RoomKind,
+): FurnitureCategory[] {
+    const preferred = kind
+        ? KIND_CATEGORIES[kind].filter((category) => all.includes(category))
+        : [];
+    return [...preferred, ...all.filter((category) => !preferred.includes(category))];
 }

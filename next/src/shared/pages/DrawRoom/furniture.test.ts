@@ -5,8 +5,12 @@ import {
 } from "@/shared/lib/furniture-planner";
 import { describe, expect, it } from "vitest";
 import {
+    furnitureBelongsToRoom,
+    furnitureCategoryOrder,
     furnitureError,
     furnitureConflicts,
+    furnitureInsideRoom,
+    snapFurnitureToWalls,
     furnitureWallDistances,
     furnitureGeometry,
     rotatedFurnitureCandidates,
@@ -242,5 +246,47 @@ describe("furniture editing feedback", () => {
             kind: "furniture",
             rect: { x: 1000, y: 1000, width: 900, depth: 2000 },
         });
+    });
+});
+
+describe("furniture in the selected room", () => {
+    // An L of two clear cells: 3 × 3 m with a 1 m wide leg below its left part.
+    const room = {
+        name: "Спальня",
+        kind: "bedroom" as const,
+        rects: [
+            { left: 0, top: 0, right: 3000, bottom: 3000 },
+            { left: 0, top: 3000, right: 1000, bottom: 4000 },
+        ],
+    };
+    it("accepts a piece covered by the room cells and rejects one that leaves them", () => {
+        expect(furnitureInsideRoom({ ...item, x: 0, y: 0 }, room)).toBe(true);
+        // The bed reaches from the square into the narrow leg.
+        expect(furnitureInsideRoom({ ...item, x: 0, y: 1900 }, room)).toBe(true);
+        expect(furnitureInsideRoom({ ...item, x: 1500, y: 1900 }, room)).toBe(false);
+        expect(furnitureError({ ...item, x: 2500, y: 0 }, [], [], 100, [], room)).toContain(
+            "«Спальня»",
+        );
+        expect(furnitureError({ ...item, x: 0, y: 0 }, [], [], 100, [], room)).toBeNull();
+    });
+    it("assigns a piece to the room its centre stands in", () => {
+        expect(furnitureBelongsToRoom({ ...item, x: 0, y: 0 }, room)).toBe(true);
+        expect(furnitureBelongsToRoom({ ...item, x: 5000, y: 0 }, room)).toBe(false);
+    });
+    it("pulls a piece flush to a near wall and leaves a far one alone", () => {
+        const walls = [
+            { id: "left", start: { x: -50, y: -50 }, end: { x: -50, y: 5000 } },
+            { id: "top", start: { x: -50, y: -50 }, end: { x: 5000, y: -50 } },
+        ];
+        const snapped = snapFurnitureToWalls({ ...item, x: 120, y: 400 }, walls, 100);
+        expect(snapped.x).toBe(0);
+        expect(snapped.y).toBe(400);
+    });
+    it("offers the sections that suit the room kind first", () => {
+        const all = ["sleep", "living", "storage", "work", "media", "children"] as const;
+        expect(furnitureCategoryOrder(all, "children").slice(0, 2)).toEqual(["children", "sleep"]);
+        expect(furnitureCategoryOrder(all, "living")[0]).toBe("living");
+        expect(furnitureCategoryOrder(all)).toEqual([...all]);
+        expect(new Set(furnitureCategoryOrder(all, "office")).size).toBe(all.length);
     });
 });
