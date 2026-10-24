@@ -1,4 +1,3 @@
-import { prepareDrawFurnitureHandoff } from "@/shared/lib/furniture-planner/draw-furniture-handoff";
 import {
     DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY,
     getProjectStorage,
@@ -24,7 +23,6 @@ import {
     toRoomRegionMetadata,
     ROOM_KINDS,
     pointInsideRoom,
-    saveDrawRoomDraft,
     DRAW_ROOM_GRID_ORIGIN_MM,
     DRAW_ROOM_GRID_SNAP_MM,
     DRAW_ROOM_CONSTRUCTION_WALL_THICKNESS_MM,
@@ -42,7 +40,6 @@ import {
     ensureUniqueDrawWallSegmentIds,
     snapDrawRoomCoordinate,
     snapDrawRoomWallLaneCentre,
-    snapRoomToPlannerGrid,
     validateLayout,
     validateRoomGeometry,
     resolveDrawWallAnchor,
@@ -52,7 +49,6 @@ import {
     resizeDrawWallRun,
     findMovedDrawWallContourEdge,
     getRoomVertices,
-    isQuestionnairePlannerHandoffId,
     readDrawRoomDraft,
     readProjectDraft,
     type DrawWallSegment,
@@ -82,6 +78,18 @@ import {
 import ResultPanel, { type ResultItem, type ResultRoom } from "./ResultPanel";
 import AutoLayoutPanel, { type AutoLayoutVariantSummary } from "./AutoLayoutPanel";
 import {
+    WORKING_CORE_OBSERVATION_ID,
+    createPlannerObservationRequests,
+    type PlannerObservationTarget,
+} from "./planner-observation";
+import {
+    plannerObservationService,
+    type PlannerObservationCreateInput,
+    type PlannerObservationVerdict,
+} from "@/services/plannerObservationService";
+import { useAuth } from "@/contexts/AuthContext";
+import { isAuthEnabled } from "@/shared/config/runtime";
+import {
     ROOM_KIND_FURNITURE,
     buildRegionSolverRoom,
     buildRoomInstances,
@@ -95,7 +103,6 @@ import Dialog from "@/shared/components/Dialog";
 import { RECT_TEMPLATE_LIMITS, createRectTemplateRoom, roomToDrawingScene } from "./room-template";
 
 import ProjectTools, { DEFAULT_DRAWING_LAYERS } from "./ProjectTools";
-import { useProjectHref } from "@/shared/lib/project-scope/ProjectScope";
 import { trackGoal } from "@/shared/lib/analytics";
 
 type Tool = "select" | "wall" | "door" | "window" | "radiator";
@@ -3934,7 +3941,6 @@ const getRoomSummaryPlacement = (
 };
 
 const DrawRoom: React.FC = () => {
-    const projectHref = useProjectHref();
     const router = useRouter();
     const boardRef = useRef<SVGSVGElement>(null);
     const [tool, setTool] = useState<Tool>("wall");
@@ -4009,14 +4015,12 @@ const DrawRoom: React.FC = () => {
     const [notice, setNotice] = useState(
         "Зажмите левую кнопку и ведите по сетке — стена рисуется сразу под курсором.",
     );
-    const [saving, setSaving] = useState(false);
     const [autosaveStatus, setAutosaveStatus] = useState<"loading" | "saved" | "error">("loading");
     const [layers, setLayers] = useState(DEFAULT_DRAWING_LAYERS);
     const [measuring, setMeasuring] = useState(false);
     useEffect(() => {
         if (tool !== "select" || activeToolGroup !== "walls") setMeasuring(false);
     }, [tool, activeToolGroup]);
-    const [plannerBuildingHostId, setPlannerBuildingHostId] = useState<string | null>(null);
     const [spacePan, setSpacePan] = useState(false);
     const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false);
     const viewBoxRef = useRef(DEFAULT_VIEW_BOX);
@@ -4098,23 +4102,6 @@ const DrawRoom: React.FC = () => {
                 .filter((group) => group.regions.length > 0),
         [previews, renderedRoomRegions],
     );
-    // The graph may have a valid closed room while the furniture planner must
-    // still reject it (for example the screenshot's 2.2 × 1.2 m outline).
-    // Never hide the closed geometry for that reason; use this only to guard
-    // the irreversible handoff into the planner.
-    const plannerPreview =
-        previews.find((room) => room.wallIds?.includes(plannerBuildingHostId ?? "")) ?? preview;
-    // The planner works on a 50 mm lattice; a 10 mm drawing is rounded on
-    // handoff instead of blocking it (at most 25 mm per coordinate).
-    const plannerGridSnap = useMemo(
-        () => (plannerPreview ? snapRoomToPlannerGrid(plannerPreview.room) : null),
-        [plannerPreview],
-    );
-    const plannerEligibilityError = useMemo(
-        () => (plannerGridSnap ? validateRoomGeometry(plannerGridSnap.room) : null),
-        [plannerGridSnap],
-    );
-    const plannerEligible = Boolean(preview && !plannerEligibilityError);
     const boundarySegments = useMemo(
         () => (preview ? getRoomBoundarySegments(preview.room) : []),
         [preview],
@@ -6679,50 +6666,6 @@ const DrawRoom: React.FC = () => {
         scene.furniture?.length,
     ]);
 
-    const continueToPlanner = useCallback(() => {
-        if (!plannerPreview) {
-            setNotice(
-                "Замкните корректный контур: прямоугольник — четырьмя углами, сложную комнату — минимум пятью.",
-            );
-            return;
-        }
-        const plannerRoom = plannerGridSnap?.room ?? plannerPreview.room;
-        const validation = plannerEligibilityError ?? validateRoomGeometry(plannerRoom);
-        if (validation) {
-            setNotice(`Контур замкнут, но ещё не подходит для планировщика: ${validation}`);
-            return;
-        }
-        const furnitureHandoff = prepareDrawFurnitureHandoff(
-            plannerRoom,
-            plannerPreview.origin,
-            scene.furniture ?? [],
-        );
-        if (furnitureHandoff.error) {
-            setNotice(`Мебель не перенесена: ${furnitureHandoff.error}`);
-            return;
-        }
-        setSaving(true);
-        const handoff = saveDrawRoomDraft(plannerRoom, furnitureHandoff.placements);
-        if (handoff.status !== "success") {
-            setSaving(false);
-            setNotice(
-                "Не удалось сохранить контур в этом браузере. Проверьте настройки локального хранения.",
-            );
-            return;
-        }
-        trackGoal("room_drawn", {
-            shape: plannerRoom.geometry?.kind ?? "rect",
-            doors: plannerRoom.doors.length,
-            windows: plannerRoom.windows.length,
-            furniture: furnitureHandoff.placements.length,
-        });
-        // A questionnaire hand-off passes through this step to the layout.
-        const questionnaireHandoff = isQuestionnairePlannerHandoffId(router.query.handoff)
-            ? `&handoff=${router.query.handoff}`
-            : "";
-        void router.push(withProjectParam(`/planner/layout?drawRoom=1${questionnaireHandoff}`));
-    }, [plannerEligibilityError, plannerGridSnap, plannerPreview, router, scene.furniture]);
-
     useEffect(() => {
         const handleKey = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null;
@@ -7109,11 +7052,46 @@ const DrawRoom: React.FC = () => {
     );
     const [autoLayoutSolving, setAutoLayoutSolving] = useState(false);
     const [autoLayoutStatus, setAutoLayoutStatus] = useState("");
+    const [autoLayoutApplied, setAutoLayoutApplied] = useState<number | null>(null);
     const [autoLayoutVariants, setAutoLayoutVariants] = useState<{
         signature: string;
-        variants: { summary: AutoLayoutVariantSummary; pieces: DrawFurniture[] }[];
+        variants: {
+            summary: AutoLayoutVariantSummary;
+            pieces: DrawFurniture[];
+            observation?: PlannerObservationCreateInput;
+        }[];
     } | null>(null);
-    const [autoLayoutApplied, setAutoLayoutApplied] = useState<number | null>(null);
+    const { isAuthenticated } = useAuth();
+    // Saved review-queue records of the offered variants, by variant index.
+    const [autoLayoutObservationIds, setAutoLayoutObservationIds] = useState<
+        Record<number, number>
+    >({});
+    const [autoLayoutReviewStatus, setAutoLayoutReviewStatus] = useState("");
+    const submitAutoLayoutReview = useCallback(
+        async (review: { verdict: PlannerObservationVerdict; comment: string }) => {
+            const index = autoLayoutApplied;
+            const variant = index === null ? null : autoLayoutVariants?.variants[index];
+            if (index === null || !variant?.observation) return;
+            if (!isAuthEnabled || !isAuthenticated) {
+                setAutoLayoutReviewStatus("Войдите, чтобы отправить вариант на разбор.");
+                return;
+            }
+            setAutoLayoutReviewStatus("Отправляем…");
+            try {
+                const id =
+                    autoLayoutObservationIds[index] ??
+                    (await plannerObservationService.create(variant.observation)).id;
+                setAutoLayoutObservationIds((current) => ({ ...current, [index]: id }));
+                await plannerObservationService.saveReview(id, review);
+                setAutoLayoutReviewStatus("Отзыв отправлен на разбор. Спасибо!");
+            } catch (error) {
+                setAutoLayoutReviewStatus(
+                    error instanceof Error ? error.message : "Не удалось отправить отзыв.",
+                );
+            }
+        },
+        [autoLayoutApplied, autoLayoutObservationIds, autoLayoutVariants, isAuthenticated],
+    );
     const autoLayoutWorker = useRef<Worker | null>(null);
     useEffect(() => () => autoLayoutWorker.current?.terminate(), []);
     const autoLayoutSet =
@@ -7167,7 +7145,7 @@ const DrawRoom: React.FC = () => {
         setAutoLayoutStatus("Подбираем варианты…");
         setAutoLayoutApplied(null);
         try {
-            let solved: { label: string; placements: Placement[] }[] = [];
+            let solved: (PlannerObservationTarget & { label: string })[] = [];
             const response = await requestSolver({
                 action: "solve-variants",
                 room: target.room,
@@ -7178,8 +7156,14 @@ const DrawRoom: React.FC = () => {
             if (response.ok && response.action === "solve-variants") {
                 if (response.result.status === "success") {
                     solved = response.result.variants.map((variant) => ({
+                        id: variant.variantId,
                         label: variant.profile.label,
+                        profile: variant.profile,
                         placements: variant.placements,
+                        exploredNodes: variant.exploredNodes,
+                        score: variant.score,
+                        notes: variant.notes,
+                        solverStatus: "success" as const,
                     }));
                 } else {
                     // As on the layout step: fall back to what fits, dropping optional pieces.
@@ -7196,10 +7180,21 @@ const DrawRoom: React.FC = () => {
                     )
                         solved = [
                             {
+                                id: WORKING_CORE_OBSERVATION_ID,
                                 label: fallback.result.unplacedInstances.length
                                     ? "Без части желательной мебели"
                                     : "Всё поместилось",
                                 placements: fallback.result.result.placements,
+                                exploredNodes: fallback.result.result.exploredNodes,
+                                score: fallback.result.result.score,
+                                notes: fallback.result.result.notes,
+                                solverStatus: "partial" as const,
+                                workingCore: {
+                                    requestedItemCount: instances.length,
+                                    unplacedInstanceIds: fallback.result.unplacedInstances.map(
+                                        (instance) => instance.instanceId,
+                                    ),
+                                },
                             },
                         ];
                 }
@@ -7225,10 +7220,49 @@ const DrawRoom: React.FC = () => {
                         ),
                 );
                 return fits && pieces.length
-                    ? [{ summary: { label: variant.label, count: pieces.length }, pieces }]
+                    ? [
+                          {
+                              summary: { label: variant.label, count: pieces.length },
+                              pieces,
+                              target: variant,
+                          },
+                      ]
                     : [];
             });
-            setAutoLayoutVariants({ signature: furnitureRegion.signature, variants });
+            // Each offered variant goes to the designer review queue, as on the layout step.
+            const observationRequests = createPlannerObservationRequests({
+                room: target.room,
+                selection: autoLayoutSet,
+                priorities: Object.fromEntries(
+                    instances.map((instance) => [instance.definitionId, instance.priority]),
+                ),
+                preferences: {},
+                instances,
+                targets: variants.map((variant) => variant.target),
+                generatedAt: new Date().toISOString(),
+                inputSignature: JSON.stringify({ room: target.room, set: autoLayoutSet }),
+            });
+            setAutoLayoutVariants({
+                signature: furnitureRegion.signature,
+                variants: variants.map((variant) => ({
+                    ...variant,
+                    observation: observationRequests[variant.target.id],
+                })),
+            });
+            setAutoLayoutObservationIds({});
+            if (isAuthEnabled && isAuthenticated) {
+                void Promise.allSettled(
+                    variants.map(async (variant, index) => {
+                        const request = observationRequests[variant.target.id];
+                        if (!request) return;
+                        const saved = await plannerObservationService.create(request);
+                        setAutoLayoutObservationIds((current) => ({
+                            ...current,
+                            [index]: saved.id,
+                        }));
+                    }),
+                );
+            }
             setAutoLayoutStatus(
                 variants.length
                     ? "Выберите вариант — он заменит мебель этой комнаты. Отменить можно кнопкой «Отменить»."
@@ -7248,6 +7282,7 @@ const DrawRoom: React.FC = () => {
     }, [
         autoLayoutSet,
         autoLayoutTarget,
+        isAuthenticated,
         furnitureDoorObstacles,
         furnitureRadiatorObstacles,
         furnitureRegion,
@@ -7459,41 +7494,18 @@ const DrawRoom: React.FC = () => {
                             <ToolIcon name="fit" />
                             <span>Вместить</span>
                         </button>
-                        {previews.length > 1 && (
-                            <select
-                                className={styles.buildingPicker}
-                                aria-label="Постройка для планировщика"
-                                value={plannerPreview?.wallIds?.[0] ?? ""}
-                                onChange={(event) => setPlannerBuildingHostId(event.target.value)}
-                            >
-                                {previews.map((room, index) => (
-                                    <option key={room.wallIds?.[0]} value={room.wallIds?.[0]}>
-                                        Постройка {index + 1} · {formatMeters(room.room.width)} ×{" "}
-                                        {formatMeters(room.room.depth)}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
                         <button
                             type="button"
                             className={styles.primary}
-                            onClick={continueToPlanner}
-                            disabled={!plannerEligible || saving}
-                            aria-label={saving ? "Сохраняем комнату" : "Продолжить с комнатой"}
-                            aria-describedby={
-                                plannerEligibilityError
-                                    ? "draw-room-planner-eligibility-warning"
-                                    : undefined
-                            }
+                            onClick={() => selectStep("result")}
+                            disabled={!preview}
                             title={
-                                saving
-                                    ? "Сохраняем комнату"
-                                    : plannerEligibilityError
-                                      ? `Контур замкнут, но пока не подходит для планировщика: ${plannerEligibilityError}`
-                                      : "Продолжить с комнатой"
+                                preview
+                                    ? "Список мебели по комнатам, PNG и печать"
+                                    : "Сначала замкните стены квартиры"
                             }
                         >
-                            {saving ? "Сохраняем…" : "Продолжить с комнатой"}
+                            К итогу
                         </button>
                     </div>
                 </header>
@@ -7734,27 +7746,6 @@ const DrawRoom: React.FC = () => {
                     <span id="draw-room-keyboard-hint" className={styles.openingHint}>
                         Для точного ввода без мыши нажмите Alt+K или кнопку «Координаты».
                     </span>
-                    {preview && plannerEligibilityError && activeToolGroup !== "furniture" && (
-                        <span
-                            id="draw-room-planner-eligibility-warning"
-                            className={styles.plannerEligibilityWarning}
-                            data-draw-room-planner-eligibility="blocked"
-                        >
-                            Контур замкнут. Для перехода в планировщик: {plannerEligibilityError}
-                        </span>
-                    )}
-                    {preview &&
-                        !plannerEligibilityError &&
-                        (plannerGridSnap?.maxShift ?? 0) > 0 &&
-                        activeToolGroup !== "furniture" && (
-                            <span
-                                className={styles.plannerEligibilityWarning}
-                                data-draw-room-planner-eligibility="rounded"
-                            >
-                                В планировщике размеры округлятся до 5 см (сдвиг до{" "}
-                                {plannerGridSnap?.maxShift} мм).
-                            </span>
-                        )}
                 </div>
 
                 <section
@@ -10096,7 +10087,26 @@ const DrawRoom: React.FC = () => {
                                             (variant) => variant.summary,
                                         )}
                                         appliedIndex={autoLayoutApplied}
-                                        onApply={applyAutoLayout}
+                                        onApply={(index) => {
+                                            setAutoLayoutReviewStatus("");
+                                            applyAutoLayout(index);
+                                        }}
+                                        reviewable={
+                                            // Without accounts there is no review queue.
+                                            isAuthEnabled &&
+                                            autoLayoutApplied !== null &&
+                                            Boolean(
+                                                currentAutoLayoutVariants[autoLayoutApplied]
+                                                    ?.observation,
+                                            )
+                                        }
+                                        reviewHint={
+                                            isAuthEnabled && !isAuthenticated
+                                                ? "Войдите, чтобы отправить вариант на разбор."
+                                                : null
+                                        }
+                                        reviewStatus={autoLayoutReviewStatus}
+                                        onReview={(review) => void submitAutoLayoutReview(review)}
                                         blockedReason={
                                             autoLayoutTarget && autoLayoutTarget.status !== "ready"
                                                 ? autoLayoutTarget.message
@@ -10729,9 +10739,7 @@ const DrawRoom: React.FC = () => {
                     >{`Масштаб: ${Math.max(zoomPercent, 1)}%`}</span>
                     <span data-draw-room-status="contour">
                         {preview
-                            ? plannerEligibilityError
-                                ? `Контур замкнут: ${formatMeters(preview.room.width)} × ${formatMeters(preview.room.depth)} · ${closedRoomArea} · для планировщика нужен размер от 2,4 м`
-                                : `Контур готов: ${formatMeters(preview.room.width)} × ${formatMeters(preview.room.depth)} · ${closedRoomArea}`
+                            ? `Контур готов: ${formatMeters(preview.room.width)} × ${formatMeters(preview.room.depth)} · ${closedRoomArea}`
                             : "Контур ещё не замкнут"}
                     </span>
                     <span data-draw-room-status="coordinates">

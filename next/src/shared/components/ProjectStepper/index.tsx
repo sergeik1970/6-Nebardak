@@ -54,10 +54,8 @@ export const useProjectProgress = (): ProjectProgress | null => {
 
 const CURRENT_STEP_BY_PATH: Record<string, ProjectStepId> = {
     "/test": "style",
-    "/questionnaire": "plan",
     "/planner": "plan",
     "/planner/draw": "plan",
-    "/planner/layout": "plan",
 };
 
 /** «Стиль → Планировка → Итог» above every step of a project. */

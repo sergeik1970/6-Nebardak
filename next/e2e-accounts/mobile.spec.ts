@@ -28,7 +28,7 @@ test("@mobile account pages and every project step fit a phone", async ({ page }
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 
     const project = await createProjectByApi(page, projectDocument(), "Телефон");
-    for (const path of ["/test", "/questionnaire", "/planner/draw", "/planner"]) {
+    for (const path of ["/test", "/planner/draw", "/planner"]) {
         await page.goto(`${path}?project=${project.id}`, { waitUntil: "networkidle" });
         await expectSaved(page);
         const bar = projectBar(page);

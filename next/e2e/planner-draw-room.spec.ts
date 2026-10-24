@@ -1,6 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 import sharp from "sharp";
-import { readRoomSize } from "./project-flow";
 
 // These tests measure the drawing canvas in screen pixels; the project steps
 // above it are covered in project-path.spec.ts, so they keep the old canvas.
@@ -1633,7 +1632,7 @@ test("free wall drawing snaps to existing walls without forcing the next cursor 
     await dragOnBoard(page, { x: 0.7, y: 0.7 }, { x: 0.7, y: 0.3 });
     await dragOnBoard(page, { x: 0.2, y: 0.7 }, { x: 0.2, y: 0.3 });
     await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Продолжить с комнатой" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "К итогу" })).toBeEnabled();
 });
 
 test("wall guides identify endpoint and wall-side attachments during a real drag", async ({
@@ -1886,7 +1885,7 @@ test("separate room drawing route makes the gridded field primary and creates a 
     });
     await expect(page.locator("[data-draw-room-summary='true']")).toBeVisible();
     await expect(page.locator("[data-draw-room-preview='true'] circle")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Продолжить с комнатой" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "К итогу" })).toBeEnabled();
     await openToolGroup(page, "opening");
     await expect(page.locator("[data-draw-room-door-kind='room']")).toBeEnabled();
     await expect(page.locator("[data-draw-room-tool='window']")).toBeEnabled();
@@ -1903,16 +1902,6 @@ test("separate room drawing route makes the gridded field primary and creates a 
     const windowOpening = page.locator("[data-draw-room-opening='window']");
     await expect(windowOpening).toHaveCount(1);
     await expect(windowOpening).toHaveCSS("stroke", "rgb(62, 137, 173)");
-
-    await page.getByRole("button", { name: "Продолжить с комнатой" }).click();
-    // The planner drops `?drawRoom=1` once imported, so a refresh cannot re-import over edits.
-    await expect(page).toHaveURL(/\/planner\/layout(\?drawRoom=1)?$/);
-    await expect(page.locator("[data-room-summary]")).toBeVisible();
-    const transferredSize = await readRoomSize(page);
-    expect(transferredSize.width).toBeGreaterThanOrEqual(5000);
-    expect(transferredSize.width).toBeLessThanOrEqual(10_000);
-    expect(transferredSize.depth).toBeGreaterThanOrEqual(3000);
-    expect(transferredSize.depth).toBeLessThanOrEqual(10_000);
 });
 
 test("selection grips move a complete wall and keep its opening attached", async ({
@@ -2767,7 +2756,7 @@ test("a real 200 by 125 cm closed contour uses canonical face dimensions", async
 
         await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
         await expect(page.locator("[data-draw-room-status='contour']")).toContainText(
-            "Контур замкнут",
+            "Контур готов",
         );
         await expect(page.locator("[data-draw-room-status='contour']")).toContainText("S=1,89 м²");
         await expect(page.locator("[data-draw-room-persistent-dimensions='true']")).toHaveCount(0);
@@ -2838,7 +2827,7 @@ test("a T wall remains visible and dimensioned after a closed room is recognised
         await page.getByRole("button", { name: "Вместить" }).click();
         await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
         await expect(page.locator("[data-draw-room-status='contour']")).toContainText(
-            "Контур замкнут",
+            "Контур готов",
         );
         await expect(page.locator("[data-draw-room-persistent-dimensions='true']")).toHaveCount(0);
         await expect(page.locator("[data-draw-room-dimension-chain='outer']")).not.toHaveCount(0);
@@ -3147,7 +3136,7 @@ test("a kitchen is fitted with base and upper units", async ({ page }, testInfo)
     await page.screenshot({ path: testInfo.outputPath("kitchen-units.png") });
 });
 
-test("a radiator is placed on the drawing, keeps furniture away and reaches the planner", async ({
+test("a radiator is placed on the drawing, keeps furniture away and stays after a reload", async ({
     page,
 }, testInfo) => {
     test.skip(
@@ -3205,12 +3194,9 @@ test("a radiator is placed on the drawing, keeps furniture away and reaches the 
     ).toContainText("закрывает радиатор");
     await page.keyboard.press("Escape");
 
-    // The radiator stays in the drawing after a reload and goes to the planner.
+    // The radiator stays in the drawing after a reload.
     await page.reload({ waitUntil: "networkidle" });
     await expect(radiator).toHaveCount(1);
-    await page.getByRole("button", { name: "Продолжить с комнатой" }).click();
-    await page.waitForURL(/\/planner\/layout\?drawRoom=1|\/planner\/layout$/);
-    await expect(page.locator("[data-room-obstacle='radiator']")).toHaveCount(1);
 });
 
 test("the result step lists each room's furniture, saves a PNG and prints the plan", async ({
@@ -3310,6 +3296,13 @@ test("the selected room is furnished automatically and the variant can be undone
     await page.locator("[data-draw-room-step='rooms']").click();
     await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
 
+    // Without accounts there is no review queue: nothing is sent for review.
+    const observationRequests: string[] = [];
+    page.on("request", (request) => {
+        if (request.url().includes("/planner-observations"))
+            observationRequests.push(request.url());
+    });
+
     await page.locator("[data-draw-room-step='furniture']").click();
     const auto = page.locator("[data-draw-room-auto-layout='true']");
     await auto.getByRole("button", { name: "Подобрать расстановку" }).click();
@@ -3338,6 +3331,9 @@ test("the selected room is furnished automatically and the variant can be undone
     });
     expect(rights).toHaveLength(4);
     rights.forEach((right) => expect(right).toBeLessThanOrEqual(6450));
+
+    await expect(auto.locator("[data-auto-layout-review]")).toHaveCount(0);
+    expect(observationRequests).toEqual([]);
 
     await page.keyboard.press("ControlOrMeta+z");
     await expect(pieces).toHaveCount(0);
@@ -3478,7 +3474,7 @@ test("partition region metrics stay SVG-native, readable and inside each clear b
     }
 });
 
-test("a compact closed L contour remains a room but is guarded from planner handoff", async ({
+test("a compact closed L contour remains a room with its face chains", async ({
     page,
 }, testInfo) => {
     test.skip(
@@ -3500,51 +3496,9 @@ test("a compact closed L contour remains a room but is guarded from planner hand
     const compactDimensions = await getArchitecturalDimensionGeometry(page);
     expect(compactDimensions.filter((dimension) => dimension.kind === "outer")).toHaveLength(6);
     expect(compactDimensions.filter((dimension) => dimension.kind === "inner")).toHaveLength(6);
-    await expect(page.locator("[data-draw-room-planner-eligibility='blocked']")).toContainText(
-        "Контур замкнут",
-    );
-    await expect(page.getByRole("button", { name: "Продолжить с комнатой" })).toBeDisabled();
     await expect(page.locator("[data-draw-room-status='contour']")).toContainText(
-        "Контур замкнут: 2,1 м × 1,1 м · S=1,44 м²",
+        "Контур готов: 2,1 м × 1,1 м · S=1,44 м²",
     );
-});
-
-test("an L contour off the 50 mm lattice is rounded on its way into the planner", async ({
-    page,
-}, testInfo) => {
-    test.skip(testInfo.project.name !== "desktop-chromium", "Desktop handoff is covered once");
-    await page.goto("/planner/draw", { waitUntil: "networkidle" });
-
-    // Freehand 10 mm centre lines: none of the clear-face corners lands on 50 mm.
-    const points = [
-        { x: 4020, y: 3010 },
-        { x: 11980, y: 3010 },
-        { x: 11980, y: 7520 },
-        { x: 8030, y: 7520 },
-        { x: 8030, y: 5010 },
-        { x: 4020, y: 5010 },
-        { x: 4020, y: 3010 },
-    ];
-    for (let index = 0; index < points.length - 1; index += 1) {
-        await dragOnBoardWorld(page, points[index], points[index + 1]);
-    }
-
-    await expect(page.locator("[data-draw-room-planner-eligibility='blocked']")).toHaveCount(0);
-    await expect(page.locator("[data-draw-room-planner-eligibility='rounded']")).toContainText(
-        "округлятся до 5 см",
-    );
-    await page.getByRole("button", { name: "Продолжить с комнатой" }).click();
-    await expect(page).toHaveURL(/\/planner/);
-
-    await expect(page.locator("[data-room-summary]")).toBeVisible();
-    const { width, depth } = await readRoomSize(page);
-    expect(width).toBeGreaterThanOrEqual(7800);
-    expect(width).toBeLessThanOrEqual(8000);
-    expect(depth).toBeGreaterThanOrEqual(4350);
-    expect(depth).toBeLessThanOrEqual(4500);
-    expect(width % 50).toBe(0);
-    expect(depth % 50).toBe(0);
-    await expect(page.locator("[data-room-summary]")).toContainText("Сложный контур");
 });
 
 test("closed rectangle and L-room keep dimension chains and the area card collision-free", async ({
@@ -4272,13 +4226,6 @@ test("every visible grid point remains drawable outside the former 16 by 10 m ar
             }),
         )
         .toBe(y);
-});
-
-test("planner's draw entry opens the separate room editor", async ({ page }) => {
-    await page.goto("/planner/layout", { waitUntil: "networkidle" });
-    await page.getByRole("link", { name: "Изменить комнату в чертеже" }).click();
-    await expect(page).toHaveURL(/\/planner\/draw$/);
-    await expect(page.locator("[data-draw-room-board='true']")).toBeVisible();
 });
 
 test("tablet drawing editor has no document overflow and keeps an explicit planner back action", async ({

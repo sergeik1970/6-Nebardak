@@ -6,6 +6,7 @@ import {
     type StyleFinderProjectDraft,
 } from "@/shared/lib/furniture-planner/project-draft";
 import { getRoomArea } from "@/shared/lib/furniture-planner/room-geometry";
+import { deriveDrawWallGraphRoom } from "@/shared/lib/furniture-planner/draw-room-wall-graph";
 import {
     parseDrawingProject,
     serializeDrawingProject,
@@ -186,14 +187,22 @@ export const isEmptyProjectDocument = (document: ProjectDocument): boolean =>
 
 export const summarizeProjectDocument = (document: ProjectDocument): ProjectSummary => {
     const furnitureCount = document.questionnaire.items.reduce((sum, item) => sum + item.count, 0);
-    const room = document.planner?.room;
-    const stage: ProjectStage = document.planner?.layout?.placements.length
-        ? "layout"
-        : room || hasDrawingContent(document.drawing)
-          ? "room"
-          : furnitureCount > 0
-            ? "questionnaire"
-            : "style";
+    // The apartment planner keeps walls and furniture in the drawing; an
+    // older project kept them in the layout step's room and saved layout.
+    const drawing = document.drawing;
+    const drawnRoom =
+        drawing && drawing.segments.length >= 4
+            ? deriveDrawWallGraphRoom(drawing.segments, drawing.wallThickness)?.room
+            : undefined;
+    const room = drawnRoom ?? document.planner?.room;
+    const stage: ProjectStage =
+        document.planner?.layout?.placements.length || drawing?.furniture?.length
+            ? "layout"
+            : room || hasDrawingContent(drawing)
+              ? "room"
+              : furnitureCount > 0
+                ? "questionnaire"
+                : "style";
 
     let areaM2: number | undefined;
     if (room) {

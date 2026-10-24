@@ -4,10 +4,6 @@ import { expect, test, type Page } from "@playwright/test";
 const PUBLIC_ROUTES = [
     { path: "/", name: "главная" },
     { path: "/test", name: "тест предпочтений" },
-    {
-        path: "/questionnaire?style=provence&styleLabel=%D0%9F%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D1%81",
-        name: "анкета",
-    },
     { path: "/planner", name: "планировщик" },
     { path: "/privacy", name: "политика обработки данных" },
     { path: "/consent", name: "согласие на обработку данных" },
