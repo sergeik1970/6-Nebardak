@@ -47,6 +47,7 @@ export default function FurnitureEditor({
     walls,
     thickness,
     doorObstacles,
+    radiatorObstacles,
     room,
     onChange,
 }: {
@@ -57,6 +58,8 @@ export default function FurnitureEditor({
     walls: DrawWallSegment[];
     thickness: number;
     doorObstacles: readonly Rect[];
+    /** Radiators with the free air in front of them. */
+    radiatorObstacles: readonly Rect[];
     /** Pieces are placed in this room only; others' furniture stays a quiet layer. */
     room: FurnitureRoom | null;
     onChange: (items: DrawFurniture[]) => void;
@@ -109,7 +112,7 @@ export default function FurnitureEditor({
         return matrix ? new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse()) : null;
     };
     const error = (item: DrawFurniture) =>
-        furnitureError(item, items, walls, thickness, doorObstacles, room);
+        furnitureError(item, items, walls, thickness, doorObstacles, room, radiatorObstacles);
     const inRoom = (item: DrawFurniture) => !room || furnitureBelongsToRoom(item, room);
     const settle = (item: DrawFurniture) => snapFurnitureToWalls(item, walls, thickness);
     const update = (item: DrawFurniture) => {
@@ -273,7 +276,17 @@ export default function FurnitureEditor({
         const own = ghost || inRoom(item);
         // Another room's furniture is judged on its own ground, not this room's.
         const invalid = Boolean(
-            own ? error(item) : furnitureError(item, items, walls, thickness, doorObstacles),
+            own
+                ? error(item)
+                : furnitureError(
+                      item,
+                      items,
+                      walls,
+                      thickness,
+                      doorObstacles,
+                      null,
+                      radiatorObstacles,
+                  ),
         );
         const editable = active && own && !ghost;
         const baseGeometry = furnitureGeometry({ ...item, rotation: 0 });
@@ -477,7 +490,15 @@ export default function FurnitureEditor({
     };
     const inspected = active ? preview ?? reposition ?? selected : null;
     const conflicts = inspected
-        ? furnitureConflicts(inspected, items, walls, thickness, doorObstacles, room)
+        ? furnitureConflicts(
+              inspected,
+              items,
+              walls,
+              thickness,
+              doorObstacles,
+              room,
+              radiatorObstacles,
+          )
         : [];
     const distances =
         selected && !pending && !preview && !reposition
@@ -554,7 +575,9 @@ export default function FurnitureEditor({
                                               ? "Предмет пересекает стену"
                                               : conflicts[0].kind === "room"
                                                 ? "За пределами выбранной комнаты"
-                                                : "Место занято другой мебелью"}
+                                                : conflicts[0].kind === "radiator"
+                                                  ? "Закрывает радиатор"
+                                                  : "Место занято другой мебелью"}
                                     </text>
                                 </g>
                             )}

@@ -4026,8 +4026,10 @@ const Planner: React.FC<PlannerProps> = ({ handoffId, drawRoomDraft = false }) =
             handoffId ? `/planner?handoff=${encodeURIComponent(handoffId)}` : "/planner",
         );
         const imported = result.placements;
-        // Radiators are placed only here; keep them while they still fit the new walls.
+        // A drawing with radiators is their source. An older drawing has none:
+        // keep the ones placed here while they still fit the new walls.
         const nextRoom = (current: Room): Room => {
+            if (result.value.radiators?.length) return result.value;
             const withRadiators = { ...result.value, radiators: current.radiators ?? [] };
             return validateRoomGeometry(withRadiators) ? result.value : withRadiators;
         };

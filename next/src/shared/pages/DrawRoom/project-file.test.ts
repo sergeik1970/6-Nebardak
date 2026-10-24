@@ -17,6 +17,17 @@ const scene: DrawingProjectScene = {
         },
     ],
     windows: [{ id: "window", wall: "top", offset: 2500, width: 1000 }],
+    radiators: [
+        {
+            id: "radiator-1",
+            drawingHostId: "wall",
+            wall: "top",
+            offset: 2600,
+            width: 800,
+            depth: 100,
+            clearanceDepth: 300,
+        },
+    ],
     wallThickness: 100,
     furniture: [
         {
@@ -51,6 +62,11 @@ describe("drawing project files", () => {
         { regions: { version: 1, items: [null] } },
         { regions: { version: 1, items: [{ signature: "room", name: "Гараж", kind: "garage" }] } },
         { wallThickness: 75 },
+        {
+            radiators: [
+                { id: "r", wall: "top", offset: 0, width: 800, depth: -1, clearanceDepth: 300 },
+            ],
+        },
         { furniture: [{ ...scene.furniture![0], locked: "yes" }] },
         { segments: [scene.segments[0], scene.segments[0]] },
     ])("rejects damaged objects without dropping them: %j", (patch) => {

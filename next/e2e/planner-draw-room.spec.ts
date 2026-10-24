@@ -3147,6 +3147,72 @@ test("a kitchen is fitted with base and upper units", async ({ page }, testInfo)
     await page.screenshot({ path: testInfo.outputPath("kitchen-units.png") });
 });
 
+test("a radiator is placed on the drawing, keeps furniture away and reaches the planner", async ({
+    page,
+}, testInfo) => {
+    test.skip(
+        testInfo.project.name !== "desktop-chromium",
+        "Radiators are covered once with real pointer input",
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 4000, 3000);
+    await page.getByRole("button", { name: "Вместить" }).click();
+
+    await page.locator("[data-draw-room-step='openings']").click();
+    await page.locator("[data-draw-room-tool='radiator']").click();
+    // A click on the bottom wall centres an 80 cm radiator there.
+    const bottomWall = await getBoardScreenPoint(page, 6000, 5000);
+    await page.mouse.click(bottomWall.x, bottomWall.y);
+    const radiator = page.locator("[data-draw-room-radiator]");
+    await expect(radiator).toHaveCount(1);
+    const card = page.locator("[data-draw-room-radiator-inspector='true']");
+    await expect(card).toBeVisible();
+    await expect(card.getByLabel("Ширина радиатора, мм")).toHaveValue("800");
+    await card.getByLabel("Ширина радиатора, мм").fill("1000");
+    await expect(card.getByLabel("Ширина радиатора, мм")).toHaveValue("1000");
+
+    // Moving the wall takes its radiator along.
+    const radiatorBody = radiator.locator("rect").nth(1);
+    const initialY = Number(await radiatorBody.getAttribute("y"));
+    const wallAway = await getBoardScreenPoint(page, 4600, 5000);
+    await page.mouse.click(wallAway.x, wallAway.y);
+    const grip = page.locator("[data-draw-room-wall-edit-grab='middle']");
+    await expect(grip).toHaveCount(1);
+    const gripX = Number(await grip.getAttribute("cx"));
+    const gripY = Number(await grip.getAttribute("cy"));
+    const from = await getBoardScreenPoint(page, gripX, gripY);
+    const to = await getBoardScreenPoint(page, gripX, gripY - 500);
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 10 });
+    await page.mouse.up();
+    await expect(radiator).toHaveCount(1);
+    expect(Number(await radiatorBody.getAttribute("y"))).toBe(initialY - 500);
+
+    // A radiator wants no furniture in front of it.
+    await page.locator("[data-draw-room-step='furniture']").click();
+    await page.locator("[data-add-furniture='single-bed']").click();
+    await page.keyboard.press("r");
+    const inFront = await getBoardScreenPoint(page, 6000, 3950);
+    await page.mouse.move(inFront.x, inFront.y);
+    await page.mouse.click(inFront.x, inFront.y);
+    await expect(page.locator("[data-draw-furniture^='furniture-']")).toHaveCount(0);
+    await expect(
+        page.locator("[aria-label='Мебель на чертеже']").getByRole("status"),
+    ).toContainText("закрывает радиатор");
+    await page.keyboard.press("Escape");
+
+    // The radiator stays in the drawing after a reload and goes to the planner.
+    await page.reload({ waitUntil: "networkidle" });
+    await expect(radiator).toHaveCount(1);
+    await page.getByRole("button", { name: "Продолжить с комнатой" }).click();
+    await page.waitForURL(/\/planner\?drawRoom=1|\/planner$/);
+    await expect(page.locator("[data-room-obstacle='radiator']")).toHaveCount(1);
+});
+
 test("a divider keeps the completed exterior and dimensions each room on its own", async ({
     page,
 }, testInfo) => {

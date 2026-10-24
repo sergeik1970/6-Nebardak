@@ -3,6 +3,7 @@ import {
     type DrawWallSegment,
     type DoorOpening,
     type WindowOpening,
+    type RadiatorObstacle,
     type Room,
 } from "@/shared/lib/furniture-planner";
 import { readFurniture, type DrawFurniture } from "./furniture";
@@ -11,6 +12,7 @@ export interface DrawingProjectScene {
     segments: DrawWallSegment[];
     doors: DoorOpening[];
     windows: WindowOpening[];
+    radiators?: RadiatorObstacle[];
     furniture?: DrawFurniture[];
     wallThickness?: Room["wallThickness"];
     regions?: Room["regions"];
@@ -91,6 +93,20 @@ export function parseDrawingProject(text: string): DrawingProjectScene {
         !s.windows.every(
             (v) => opening(v) && optionalEnum(v.windowKind, ["standard", "floor-to-ceiling"]),
         )
+    )
+        return fail();
+    if (
+        s.radiators !== undefined &&
+        (!Array.isArray(s.radiators) ||
+            !unique(s.radiators) ||
+            !s.radiators.every(
+                (v) =>
+                    opening(v) &&
+                    finite(v.depth) &&
+                    v.depth > 0 &&
+                    finite(v.clearanceDepth) &&
+                    v.clearanceDepth >= 0,
+            ))
     )
         return fail();
     if (s.wallThickness !== undefined && s.wallThickness !== 50 && s.wallThickness !== 100)

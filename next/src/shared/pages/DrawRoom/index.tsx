@@ -32,6 +32,8 @@ import {
     DRAW_ROOM_WALL_LANE_MM,
     getDoorMaterialCollisionError,
     getDoorFurnitureObstacles,
+    getRadiatorBody,
+    getRadiatorServiceObstacle,
     getDrawRoomGridPresentation,
     getDrawRoomWallFaceContours,
     ensureUniqueDrawWallSegmentIds,
@@ -54,6 +56,7 @@ import {
     type DoorOpening,
     type DrawRoomGridPresentationLevel,
     type DrawRoomRegion,
+    type RadiatorObstacle,
     type Room,
     type RoomBoundarySegment,
     type RoomKind,
@@ -70,7 +73,7 @@ import ProjectTools, { DEFAULT_DRAWING_LAYERS } from "./ProjectTools";
 import { useProjectHref } from "@/shared/lib/project-scope/ProjectScope";
 import { trackGoal } from "@/shared/lib/analytics";
 
-type Tool = "select" | "wall" | "door" | "window";
+type Tool = "select" | "wall" | "door" | "window" | "radiator";
 type ToolGroup = "walls" | "openings" | "rooms" | "furniture";
 
 /** The drawing is worked through in these steps, each its own layer of the plan. */
@@ -80,7 +83,7 @@ const DRAW_STEPS: { group: ToolGroup; label: string; controls?: string }[] = [
     { group: "rooms", label: "Помещения" },
     { group: "furniture", label: "Мебель" },
 ];
-type KeyboardTool = Exclude<Tool, "select">;
+type KeyboardTool = Exclude<Tool, "select" | "radiator">;
 type Point = { x: number; y: number };
 
 interface Scene {
@@ -88,6 +91,8 @@ interface Scene {
     segments: DrawWallSegment[];
     doors: DoorOpening[];
     windows: WindowOpening[];
+    /** Heating under a window or along a wall; missing in older drafts. */
+    radiators?: RadiatorObstacle[];
     /** Missing scenes are pre-constructive 50 mm drafts. */
     wallThickness?: Room["wallThickness"];
     regions?: Room["regions"];
@@ -246,6 +251,11 @@ const MIN_ZOOM = 0.25;
 const WHEEL_ZOOM_SENSITIVITY = 0.0022;
 const BOARD_ASPECT = BOARD_WIDTH_MM / BOARD_HEIGHT_MM;
 
+const RADIATOR_DEFAULT_WIDTH_MM = 800;
+const RADIATOR_DEPTH_MM = 100;
+/** Free air in front of a radiator; furniture must not stand in it. */
+const RADIATOR_CLEARANCE_MM = 300;
+
 const EMPTY_SCENE: Scene = {
     segments: [],
     doors: [],
@@ -344,6 +354,9 @@ const cloneScene = (scene: Scene): Scene => ({
     })),
     doors: scene.doors.map((door) => ({ ...door })),
     windows: scene.windows.map((window) => ({ ...window })),
+    ...(scene.radiators?.length
+        ? { radiators: scene.radiators.map((radiator) => ({ ...radiator })) }
+        : {}),
     ...(scene.wallThickness ? { wallThickness: scene.wallThickness } : {}),
     ...(scene.regions
         ? {
@@ -362,6 +375,16 @@ const isDraftPoint = (value: unknown): value is Point =>
             Number.isFinite((value as Point).x) &&
             Number.isFinite((value as Point).y),
     );
+
+const isDraftRadiator = (value: unknown): value is RadiatorObstacle => {
+    const item = value as RadiatorObstacle | null;
+    return Boolean(
+        item &&
+            typeof item.id === "string" &&
+            typeof item.wall === "string" &&
+            [item.offset, item.width, item.depth, item.clearanceDepth].every(Number.isFinite),
+    );
+};
 
 /** The editor cache is deliberately separate from the Planner handoff draft. */
 const readEditorSession = (): Scene | null => {
@@ -390,6 +413,9 @@ const readEditorSession = (): Scene | null => {
                 segments: ensureUniqueDrawWallSegmentIds(parsed.segments as DrawWallSegment[]),
                 doors: parsed.doors as DoorOpening[],
                 windows: parsed.windows as WindowOpening[],
+                ...(Array.isArray(parsed.radiators)
+                    ? { radiators: parsed.radiators.filter(isDraftRadiator) }
+                    : {}),
                 furniture: readFurniture(parsed.furniture),
                 ...(parsed.wallThickness === 50 || parsed.wallThickness === 100
                     ? { wallThickness: parsed.wallThickness }
@@ -593,6 +619,14 @@ const drawIcon = (name: Tool | "clear" | "reset" | "undo" | "redo" | "fit" | "ba
             <>
                 <rect {...common} x="4" y="5" width="16" height="14" rx="1" />
                 <path {...common} d="M12 5v14M4 12h16" />
+            </>
+        );
+    }
+    if (name === "radiator") {
+        return (
+            <>
+                <rect {...common} x="3" y="7" width="18" height="11" rx="1.5" />
+                <path {...common} d="M7.5 7v11M12 7v11M16.5 7v11M5 18v2M19 18v2" />
             </>
         );
     }
@@ -859,7 +893,13 @@ const regionPrefix = (preview: RoomPreview) => `building:${preview.wallIds?.[0]}
 const getRoomPreviews = (scene: Scene): RoomPreview[] => {
     const previews = getDrawWallComponents(scene.segments)
         .flatMap((segments) => {
-            const preview = getSingleRoomPreview({ ...scene, segments, doors: [], windows: [] });
+            const preview = getSingleRoomPreview({
+                ...scene,
+                segments,
+                doors: [],
+                windows: [],
+                radiators: [],
+            });
             return preview ? [{ ...preview, wallIds: segments.map((segment) => segment.id) }] : [];
         })
         .sort((a, b) => {
@@ -872,38 +912,53 @@ const getRoomPreviews = (scene: Scene): RoomPreview[] => {
                 );
             return area(b) - area(a);
         });
-    return previews.map((preview, index) => {
-        const owns = (item: DoorOpening | WindowOpening) =>
-            item.drawingHostId ? preview.wallIds.includes(item.drawingHostId) : index === 0;
-        return {
-            ...preview,
-            room: {
-                ...preview.room,
-                regions: materializeRoomRegionsState({
+    return previews
+        .map((preview, index) => {
+            const owns = (item: DoorOpening | WindowOpening) =>
+                item.drawingHostId ? preview.wallIds.includes(item.drawingHostId) : index === 0;
+            return {
+                ...preview,
+                room: {
                     ...preview.room,
-                    regions: {
-                        version: 1,
-                        items: (scene.regions?.items ?? []).flatMap((item) =>
-                            item.signature.startsWith(regionPrefix(preview))
-                                ? [
-                                      {
-                                          ...item,
-                                          signature: item.signature.slice(
-                                              regionPrefix(preview).length,
-                                          ),
-                                      },
-                                  ]
-                                : index === 0 && !item.signature.startsWith("building:")
-                                  ? [item]
-                                  : [],
-                        ),
-                    },
-                }),
-                doors: scene.doors.filter(owns),
-                windows: scene.windows.filter(owns),
-            },
-        };
-    });
+                    regions: materializeRoomRegionsState({
+                        ...preview.room,
+                        regions: {
+                            version: 1,
+                            items: (scene.regions?.items ?? []).flatMap((item) =>
+                                item.signature.startsWith(regionPrefix(preview))
+                                    ? [
+                                          {
+                                              ...item,
+                                              signature: item.signature.slice(
+                                                  regionPrefix(preview).length,
+                                              ),
+                                          },
+                                      ]
+                                    : index === 0 && !item.signature.startsWith("building:")
+                                      ? [item]
+                                      : [],
+                            ),
+                        },
+                    }),
+                    doors: scene.doors.filter(owns),
+                    windows: scene.windows.filter(owns),
+                },
+            };
+        })
+        .map((preview, index) => {
+            const owns = (item: RadiatorObstacle) =>
+                item.drawingHostId ? preview.wallIds.includes(item.drawingHostId) : index === 0;
+            // A radiator whose wall was redrawn away waits in the scene, off the
+            // room, until a wall can carry it again.
+            const radiators = (scene.radiators ?? [])
+                .filter(owns)
+                .reduce<
+                    RadiatorObstacle[]
+                >((kept, radiator) => (validateRoomGeometry({ ...preview.room, radiators: [...kept, radiator] }) ? kept : [...kept, radiator]), []);
+            return radiators.length
+                ? { ...preview, room: { ...preview.room, radiators } }
+                : preview;
+        });
 };
 const getRoomPreview = (scene: Scene) => getRoomPreviews(scene)[0] ?? null;
 const openingOwner = (previews: RoomPreview[], item: DoorOpening | WindowOpening) =>
@@ -914,10 +969,11 @@ const scopedOpeningScene = (scene: Scene, preview: RoomPreview): Scene => ({
     ...scene,
     doors: preview.room.doors,
     windows: preview.room.windows,
+    radiators: preview.room.radiators ?? [],
 });
 const bindLegacyOpenings = (scene: Scene): Scene => {
     const primary = getRoomPreview(scene);
-    const bind = <T extends DoorOpening | WindowOpening>(item: T): T =>
+    const bind = <T extends DoorOpening | WindowOpening | RadiatorObstacle>(item: T): T =>
         item.drawingHostId || !primary ? item : { ...item, drawingHostId: primary.wallIds?.[0] };
     return {
         ...scene,
@@ -932,6 +988,7 @@ const bindLegacyOpenings = (scene: Scene): Scene => {
         },
         doors: scene.doors.map(bind),
         windows: scene.windows.map(bind),
+        ...(scene.radiators ? { radiators: scene.radiators.map(bind) } : {}),
     };
 };
 const roomShapeKey = (room: Room) =>
@@ -1324,6 +1381,7 @@ const reanchorOpeningsForRoom = (
         segments: nextSegments,
         doors: [],
         windows: [],
+        radiators: [],
     };
 
     const targetFor = (
@@ -1427,6 +1485,24 @@ const reanchorOpeningsForRoom = (
         });
     }
 
+    for (const radiator of source.radiators ?? []) {
+        // A radiator follows its wall like a window; it may sit under one.
+        const target = targetFor(radiator, "window");
+        if (!target) return { error: "Радиатор потерял бы стену-основание. Перемещение отменено." };
+        const { segmentId: _segmentId, ...radiatorFields } = radiator;
+        reanchored.radiators!.push({
+            ...radiatorFields,
+            wall: target.segment.wall,
+            segmentId: target.segment.id,
+            // The target is the radiator's centre along the moved wall.
+            offset: clamp(
+                target.offset - radiator.width / 2,
+                0,
+                Math.max(0, target.segment.length - radiator.width),
+            ),
+        });
+    }
+
     return { scene: reanchored };
 };
 
@@ -1438,12 +1514,17 @@ const reanchorOpeningsAfterWallMove = (
     const afterRooms = getRoomPreviews({ ...source, segments: nextSegments });
     const doors: DoorOpening[] = [];
     const windows: WindowOpening[] = [];
+    const radiators: RadiatorObstacle[] = [];
     for (const before of beforeRooms) {
         const after = afterRooms.find((candidate) =>
             candidate.wallIds?.some((id) => before.wallIds?.includes(id)),
         );
         if (!after) {
-            if (before.room.doors.length || before.room.windows.length)
+            if (
+                before.room.doors.length ||
+                before.room.windows.length ||
+                before.room.radiators?.length
+            )
                 return {
                     error: "Перемещение лишило бы проём его постройки. Перемещение отменено.",
                 };
@@ -1468,10 +1549,29 @@ const reanchorOpeningsAfterWallMove = (
                 drawingHostId: window.drawingHostId ?? before.wallIds?.[0],
             })),
         );
+        radiators.push(
+            ...(result.scene.radiators ?? []).map((radiator) => ({
+                ...radiator,
+                drawingHostId: radiator.drawingHostId ?? before.wallIds?.[0],
+            })),
+        );
     }
     if (doors.length !== source.doors.length || windows.length !== source.windows.length)
         return { error: "Не удалось найти постройку одного из проёмов. Перемещение отменено." };
-    return { scene: { ...source, segments: nextSegments, doors, windows } };
+    // Radiators off every room (their wall redrawn away) keep waiting unchanged.
+    const placedRadiatorIds = new Set(radiators.map((radiator) => radiator.id));
+    const waitingRadiators = (source.radiators ?? []).filter(
+        (radiator) => !placedRadiatorIds.has(radiator.id),
+    );
+    return {
+        scene: {
+            ...source,
+            segments: nextSegments,
+            doors,
+            windows,
+            ...(source.radiators ? { radiators: [...radiators, ...waitingRadiators] } : {}),
+        },
+    };
 };
 
 const getOpeningCutPolygon = (
@@ -3847,6 +3947,7 @@ const DrawRoom: React.FC = () => {
     const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
     const [cursorPoint, setCursorPoint] = useState<Point | null>(null);
     const [selectedOpening, setSelectedOpening] = useState<SelectedOpening | null>(null);
+    const [selectedRadiatorId, setSelectedRadiatorId] = useState<string | null>(null);
     const [selectedContourWallEdge, setSelectedContourWallEdge] = useState<number | null>(null);
     const [selectedSegmentWallId, setSelectedSegmentWallId] = useState<string | null>(null);
     const [activeContourWallGrab, setActiveContourWallGrab] = useState<{
@@ -3886,6 +3987,22 @@ const DrawRoom: React.FC = () => {
             previews.flatMap((owner) =>
                 owner.room.doors.flatMap((door) =>
                     getDoorFurnitureObstacles(door, owner.room).map((rect) => ({
+                        ...rect,
+                        x: rect.x + owner.origin.x,
+                        y: rect.y + owner.origin.y,
+                    })),
+                ),
+            ),
+        [previews],
+    );
+    const furnitureRadiatorObstacles = useMemo(
+        () =>
+            previews.flatMap((owner) =>
+                (owner.room.radiators ?? []).flatMap((radiator) =>
+                    [
+                        getRadiatorBody(radiator, owner.room),
+                        getRadiatorServiceObstacle(radiator, owner.room),
+                    ].map((rect) => ({
                         ...rect,
                         x: rect.x + owner.origin.x,
                         y: rect.y + owner.origin.y,
@@ -5370,9 +5487,119 @@ const DrawRoom: React.FC = () => {
         ],
     );
 
+    const addRadiator = useCallback(
+        (point: Point) => {
+            if (!preview) {
+                setNotice("Сначала замкните контур комнаты — радиатор ставится к стене.");
+                return;
+            }
+            const target = openingTarget(previews, point);
+            if (!target) {
+                setNotice("Наведите курсор ближе к стене и нажмите ещё раз.");
+                return;
+            }
+            const owner = target.owner;
+            if (owner.room.partitions?.some((partition) => partition.id === target.segment.id)) {
+                setNotice("Радиатор ставится у внешней стены.");
+                return;
+            }
+            const width = Math.min(RADIATOR_DEFAULT_WIDTH_MM, target.segment.length);
+            const offset = clamp(
+                snapDrawRoomCoordinate(target.offset - width / 2, sceneSnapMm),
+                0,
+                target.segment.length - width,
+            );
+            const id = `radiator-${
+                Math.max(
+                    0,
+                    ...(scene.radiators ?? []).map(
+                        (radiator) => Number(radiator.id.split("-")[1]) || 0,
+                    ),
+                ) + 1
+            }`;
+            const radiator: RadiatorObstacle = {
+                id,
+                drawingHostId: owner.wallIds?.[0],
+                wall: target.segment.wall,
+                segmentId: target.segment.id,
+                offset,
+                width,
+                depth: RADIATOR_DEPTH_MM,
+                clearanceDepth: RADIATOR_CLEARANCE_MM,
+            };
+            const problem = validateRoomGeometry({
+                ...owner.room,
+                radiators: [...(owner.room.radiators ?? []), radiator],
+            });
+            if (problem) {
+                setNotice(`Радиатор не помещается здесь: ${problem}`);
+                return;
+            }
+            commitScene({ ...scene, radiators: [...(scene.radiators ?? []), radiator] });
+            setSelectedOpening(null);
+            setSelectedRadiatorId(id);
+            setTool("select");
+            setNotice("Радиатор добавлен. Ширину и отступ можно уточнить в карточке.");
+        },
+        [commitScene, preview, previews, scene, sceneSnapMm],
+    );
+
+    const selectedRadiatorData = useMemo(() => {
+        if (!selectedRadiatorId) return null;
+        for (const owner of previews) {
+            const radiator = owner.room.radiators?.find((item) => item.id === selectedRadiatorId);
+            const segment = radiator && getRoomSegment(owner.room, radiator);
+            if (radiator && segment) return { owner, radiator, segment };
+        }
+        return null;
+    }, [previews, selectedRadiatorId]);
+
+    const updateSelectedRadiator = useCallback(
+        (patch: Partial<Pick<RadiatorObstacle, "width" | "offset">>) => {
+            if (!selectedRadiatorData) return;
+            const { owner, radiator } = selectedRadiatorData;
+            if (
+                ![patch.width, patch.offset].every(
+                    (value) => value === undefined || Number.isFinite(value),
+                )
+            )
+                return;
+            const next = { ...radiator, ...patch };
+            const problem = validateRoomGeometry({
+                ...owner.room,
+                radiators: (owner.room.radiators ?? []).map((item) =>
+                    item.id === radiator.id ? next : item,
+                ),
+            });
+            if (problem) {
+                setNotice(`Радиатор так не помещается: ${problem}`);
+                return;
+            }
+            commitScene({
+                ...scene,
+                radiators: (scene.radiators ?? []).map((item) =>
+                    item.id === radiator.id ? next : item,
+                ),
+            });
+        },
+        [commitScene, scene, selectedRadiatorData],
+    );
+
+    const deleteSelectedRadiator = useCallback(() => {
+        if (!selectedRadiatorId) return;
+        commitScene({
+            ...scene,
+            radiators: (scene.radiators ?? []).filter((item) => item.id !== selectedRadiatorId),
+        });
+        setSelectedRadiatorId(null);
+        setNotice("Радиатор удалён.");
+    }, [commitScene, scene, selectedRadiatorId]);
+
     const openKeyboardEntry = useCallback(
         (requestedTool?: KeyboardTool) => {
-            const nextTool = requestedTool ?? (tool === "select" ? "wall" : tool);
+            // Radiators are placed on the plan only; typed entry starts a wall.
+            const nextTool =
+                requestedTool ?? (tool === "select" || tool === "radiator" ? "wall" : tool);
             const seed = cursorPoint ?? { x: 1000, y: 1000 };
             setKeyboardTool(nextTool);
             setKeyboardEntry((current) => ({
@@ -5831,6 +6058,7 @@ const DrawRoom: React.FC = () => {
                     setSelectedContourWallEdge(null);
                     setSelectedSegmentWallId(null);
                     setSelectedOpening(null);
+                    setSelectedRadiatorId(null);
                     if (activeToolGroup === "rooms" || activeToolGroup === "furniture") {
                         const point = pointFromEvent(event, false);
                         const hit =
@@ -5862,10 +6090,12 @@ const DrawRoom: React.FC = () => {
                 return;
             }
             if (tool === "door" || tool === "window") addOpening(tool, point);
+            if (tool === "radiator") addRadiator(point);
         },
         [
             activeToolGroup,
             addOpening,
+            addRadiator,
             beginWallDrawing,
             pointFromEvent,
             renderedRoomRegions,
@@ -6443,6 +6673,19 @@ const DrawRoom: React.FC = () => {
             if (isTyping) return;
             if (
                 (event.key === "Delete" || event.key === "Backspace") &&
+                selectedRadiatorData &&
+                !selectedOpening &&
+                !event.ctrlKey &&
+                !event.metaKey &&
+                !event.altKey &&
+                !keyboardEntryOpen
+            ) {
+                event.preventDefault();
+                deleteSelectedRadiator();
+                return;
+            }
+            if (
+                (event.key === "Delete" || event.key === "Backspace") &&
                 selectedOpening &&
                 !event.ctrlKey &&
                 !event.metaKey &&
@@ -6515,8 +6758,10 @@ const DrawRoom: React.FC = () => {
     }, [
         cancelContourWallDrag,
         deleteSelectedOpening,
+        deleteSelectedRadiator,
         deleteSelectedWall,
         selectedOpening,
+        selectedRadiatorData,
         hoverPoint,
         keyboardEntryOpen,
         openKeyboardEntry,
@@ -7061,7 +7306,9 @@ const DrawRoom: React.FC = () => {
                                   ? "Дверь"
                                   : tool === "window"
                                     ? "Окно"
-                                    : "Выбор"}
+                                    : tool === "radiator"
+                                      ? "Радиатор"
+                                      : "Выбор"}
                         </b>
                     </span>
                     <span className={styles.canvasNotice} data-draw-room-notice="true">
@@ -7217,6 +7464,20 @@ const DrawRoom: React.FC = () => {
                                         <span className={styles.toolCopy}>
                                             <b>Окно</b>
                                             <small>Только во внешней стене</small>
+                                        </span>
+                                    </button>
+                                    <span className={styles.toolGroupCaption}>Отопление</span>
+                                    <button
+                                        type="button"
+                                        className={styles.toolButton}
+                                        data-draw-room-tool="radiator"
+                                        aria-pressed={tool === "radiator"}
+                                        onClick={() => selectTool("radiator")}
+                                    >
+                                        <ToolIcon name="radiator" />
+                                        <span className={styles.toolCopy}>
+                                            <b>Радиатор</b>
+                                            <small>У внешней стены, можно под окном</small>
                                         </span>
                                     </button>
                                 </div>
@@ -7646,6 +7907,76 @@ const DrawRoom: React.FC = () => {
                                         ))}
                                     </g>
                                 </g>
+                            )}
+                            {previews.map((owner) =>
+                                (owner.room.radiators ?? []).map((radiator) => {
+                                    const body = getRadiatorBody(radiator, owner.room);
+                                    const service = getRadiatorServiceObstacle(
+                                        radiator,
+                                        owner.room,
+                                    );
+                                    const at = (rect: typeof body) => ({
+                                        x: rect.x + owner.origin.x,
+                                        y: rect.y + owner.origin.y,
+                                        width: rect.width,
+                                        height: rect.depth,
+                                    });
+                                    const selected = radiator.id === selectedRadiatorId;
+                                    const ribs = Math.max(
+                                        2,
+                                        Math.round(Math.max(body.width, body.depth) / 120),
+                                    );
+                                    const alongX = body.width >= body.depth;
+                                    return (
+                                        <g
+                                            key={radiator.id}
+                                            className={styles.radiator}
+                                            data-draw-room-radiator={radiator.id}
+                                            data-selected={selected}
+                                            style={{
+                                                pointerEvents:
+                                                    tool === "select" && !furnitureStep
+                                                        ? "auto"
+                                                        : "none",
+                                            }}
+                                            onPointerDown={(event) => {
+                                                if (tool !== "select" || event.button !== 0) return;
+                                                event.stopPropagation();
+                                                setSelectedOpening(null);
+                                                setSelectedContourWallEdge(null);
+                                                setSelectedSegmentWallId(null);
+                                                setSelectedRadiatorId(radiator.id);
+                                            }}
+                                        >
+                                            <rect
+                                                className={styles.radiatorClearance}
+                                                {...at(service)}
+                                            />
+                                            <rect className={styles.radiatorBody} {...at(body)} />
+                                            {Array.from({ length: ribs - 1 }, (_, index) => {
+                                                const rect = at(body);
+                                                const t = (index + 1) / ribs;
+                                                return alongX ? (
+                                                    <line
+                                                        key={index}
+                                                        x1={rect.x + rect.width * t}
+                                                        x2={rect.x + rect.width * t}
+                                                        y1={rect.y}
+                                                        y2={rect.y + rect.height}
+                                                    />
+                                                ) : (
+                                                    <line
+                                                        key={index}
+                                                        x1={rect.x}
+                                                        x2={rect.x + rect.width}
+                                                        y1={rect.y + rect.height * t}
+                                                        y2={rect.y + rect.height * t}
+                                                    />
+                                                );
+                                            })}
+                                        </g>
+                                    );
+                                }),
                             )}
                             {/* Furniture stands over the room fill and walls, under the dimensions. */}
                             <g data-draw-furniture-host="true" />
@@ -9353,6 +9684,7 @@ const DrawRoom: React.FC = () => {
                             walls={scene.segments}
                             thickness={renderedWallThickness}
                             doorObstacles={furnitureDoorObstacles}
+                            radiatorObstacles={furnitureRadiatorObstacles}
                             room={furnitureRoom}
                             onChange={(furniture) =>
                                 commitScene({ ...sceneForInteractionRef.current, furniture })
@@ -9452,6 +9784,82 @@ const DrawRoom: React.FC = () => {
                                             ))}
                                         </section>
                                     ))}
+                                </aside>
+                            )}
+                        {selectedRadiatorData &&
+                            !selectedOpeningData &&
+                            !selectedWallInspector &&
+                            !keyboardEntryOpen && (
+                                <aside
+                                    className={styles.openingInspector}
+                                    aria-label="Параметры: радиатор"
+                                    data-draw-room-radiator-inspector="true"
+                                >
+                                    <div className={styles.openingInspectorHeading}>
+                                        <span
+                                            className={styles.openingInspectorMark}
+                                            aria-hidden="true"
+                                        >
+                                            <ToolIcon name="radiator" />
+                                        </span>
+                                        <div>
+                                            <b>Радиатор</b>
+                                            <small>Перед ним 30 см остаются свободными</small>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className={styles.openingInspectorClose}
+                                            aria-label="Снять выделение радиатора"
+                                            onClick={() => setSelectedRadiatorId(null)}
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                    <label className={styles.openingControl}>
+                                        <span>Ширина, мм</span>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            aria-label="Ширина радиатора, мм"
+                                            min={300}
+                                            max={selectedRadiatorData.segment.length}
+                                            step={sceneSnapMm}
+                                            value={selectedRadiatorData.radiator.width}
+                                            onChange={(event) =>
+                                                updateSelectedRadiator({
+                                                    width: Number(event.target.value),
+                                                })
+                                            }
+                                        />
+                                    </label>
+                                    <label className={styles.openingControl}>
+                                        <span>От начала стены, мм</span>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            aria-label="Отступ радиатора от начала стены, мм"
+                                            min={0}
+                                            max={Math.max(
+                                                0,
+                                                selectedRadiatorData.segment.length -
+                                                    selectedRadiatorData.radiator.width,
+                                            )}
+                                            step={sceneSnapMm}
+                                            value={selectedRadiatorData.radiator.offset}
+                                            onChange={(event) =>
+                                                updateSelectedRadiator({
+                                                    offset: Number(event.target.value),
+                                                })
+                                            }
+                                        />
+                                    </label>
+                                    <button
+                                        type="button"
+                                        className={styles.deleteOpeningButton}
+                                        onClick={deleteSelectedRadiator}
+                                    >
+                                        Удалить радиатор
+                                    </button>
                                 </aside>
                             )}
                         {selectedWallInspector && !keyboardEntryOpen && (

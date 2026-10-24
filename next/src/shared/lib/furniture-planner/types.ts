@@ -280,6 +280,8 @@ export interface WindowOpening {
 
 export interface RadiatorObstacle {
     id: string;
+    /** DrawRoom ownership anchor: a stable wall ID in the connected building. */
+    drawingHostId?: string;
     wall: Wall;
     /** Required for orthogonal rooms; optional for legacy rectangular drafts. */
     segmentId?: string;
@@ -289,7 +291,6 @@ export interface RadiatorObstacle {
     clearanceDepth: number;
 }
 
-/** A user name attached to a stable, derived region geometry signature. */
 /** What a room is used for; it decides which furniture is offered first. */
 export type RoomKind =
     | "bedroom"
@@ -301,6 +302,7 @@ export type RoomKind =
     | "bathroom"
     | "other";
 
+/** A user name attached to a stable, derived region geometry signature. */
 export interface RoomRegionMetadata {
     signature: string;
     name: string;
