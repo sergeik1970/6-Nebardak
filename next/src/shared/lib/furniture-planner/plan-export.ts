@@ -28,6 +28,8 @@ export interface PlanSpecificationItem {
     y: number;
     rotation: Placement["rotation"];
     bodyRects: Rect[];
+    /** Drawing exports name the room each piece stands in. */
+    roomName?: string;
 }
 
 export interface PlanSpecificationCheck {
@@ -51,6 +53,8 @@ export interface PlanSpecification {
     removedItems: PlanSpecificationRemovedItem[];
     checks: PlanSpecificationCheck[];
     caveats: string[];
+    /** A hand-made apartment drawing rather than a solved layout. */
+    source?: "drawing";
 }
 
 interface BuildPlanSpecificationInput {
@@ -113,6 +117,93 @@ const getCatalogSourceRevision = (definitionId: string): string => {
         16,
     )}`;
 };
+
+const toSpecificationItem = (
+    placement: Placement,
+    priority: FurniturePriority,
+): PlanSpecificationItem => {
+    const definition = getFurniture(placement.definitionId);
+    const geometry = getRotatedGeometry(definition, placement.rotation, placement);
+    return {
+        instanceId: placement.instanceId,
+        definitionId: placement.definitionId,
+        name: definition.shortLabel,
+        width: geometry.width,
+        depth: geometry.depth,
+        priority,
+        x: placement.x,
+        y: placement.y,
+        rotation: placement.rotation,
+        bodyRects: getWorldBodyRects(placement).map((rect) => ({ ...rect })),
+    };
+};
+
+/** What the drawing editor enforces for every piece it accepts. */
+const DRAWING_CHECKS: PlanSpecificationCheck[] = [
+    {
+        id: "inside-room",
+        label: "Каждый предмет стоит внутри своей комнаты и не заходит в стены",
+        status: "passed",
+    },
+    {
+        id: "body-overlap",
+        label: "Корпуса не пересекаются; навесные шкафы висят над напольными",
+        status: "passed",
+    },
+    {
+        id: "openings",
+        label: "Проходы у дверей, открывание и зоны радиаторов свободны",
+        status: "passed",
+    },
+];
+
+interface BuildDrawingPlanSpecificationInput {
+    room: Room;
+    placements: (Placement & { roomName?: string })[];
+    /** Pieces the editor currently flags; their presence voids the checks. */
+    conflictCount: number;
+    caveats?: string[];
+    generatedAt: string;
+}
+
+/**
+ * The result document of a hand-made drawing. Unlike a solved layout it
+ * claims only what the editor checks, and only while no piece conflicts.
+ */
+export const buildDrawingPlanSpecification = ({
+    room,
+    placements,
+    conflictCount,
+    caveats = [],
+    generatedAt,
+}: BuildDrawingPlanSpecificationInput): PlanSpecification => ({
+    ...buildPlanSpecification({
+        room,
+        placements: [],
+        priorities: {},
+        validation: { valid: true, issues: [] },
+        generatedAt,
+    }),
+    catalogRevision:
+        uniqueNonEmpty(placements.map((item) => getCatalogSourceRevision(item.definitionId))).join(
+            ", ",
+        ) || "unversioned",
+    items: placements.map(({ roomName, ...placement }) => ({
+        ...toSpecificationItem(placement, "preferred"),
+        ...(roomName ? { roomName } : {}),
+    })),
+    checks: conflictCount === 0 ? DRAWING_CHECKS.map((check) => ({ ...check })) : [],
+    caveats: uniqueNonEmpty([
+        ...(conflictCount > 0
+            ? [
+                  `На плане ${conflictCount} ${conflictCount === 1 ? "предмет конфликтует" : "предмета конфликтуют"} со стенами, проходами или другой мебелью — проверки не пройдены.`,
+              ]
+            : []),
+        "Размеры мебели — типовые, сверяйте их с выбранными моделями перед покупкой.",
+        ...caveats,
+    ]),
+    source: "drawing",
+});
 
 export const buildPlanSpecification = ({
     room,
@@ -178,23 +269,9 @@ export const buildPlanSpecification = ({
                   }
                 : {}),
         },
-        items: placements.map((placement) => {
-            const definition = getFurniture(placement.definitionId);
-            const geometry = getRotatedGeometry(definition, placement.rotation, placement);
-
-            return {
-                instanceId: placement.instanceId,
-                definitionId: placement.definitionId,
-                name: definition.shortLabel,
-                width: geometry.width,
-                depth: geometry.depth,
-                priority: priorities[placement.definitionId] ?? "preferred",
-                x: placement.x,
-                y: placement.y,
-                rotation: placement.rotation,
-                bodyRects: getWorldBodyRects(placement).map((rect) => ({ ...rect })),
-            };
-        }),
+        items: placements.map((placement) =>
+            toSpecificationItem(placement, priorities[placement.definitionId] ?? "preferred"),
+        ),
         removedItems: removalValidation.value.map((record) => ({
             ...record,
             name: getFurniture(record.definitionId).shortLabel,
@@ -340,7 +417,12 @@ export const renderPlanSpecificationPng = async (
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = "#2f2a24";
     context.font = "700 44px Georgia, serif";
-    context.fillText("StyleFinder · план комнаты", 80, 78);
+    const drawing = specification.source === "drawing";
+    context.fillText(
+        drawing ? "StyleFinder · план квартиры" : "StyleFinder · план комнаты",
+        80,
+        78,
+    );
     context.font = "24px Arial, sans-serif";
     context.fillStyle = "#6f6559";
     context.fillText(
@@ -406,11 +488,19 @@ export const renderPlanSpecificationPng = async (
         drawRadiator(context, radiator, specification.room, planX, planY, scale),
     );
 
-    specification.items.forEach((item, index) => {
+    // Upper kitchen units overlie the base run: drawn last, dashed and see-through.
+    const isUpper = (item: PlanSpecificationItem) =>
+        getFurniture(item.definitionId).mounting === "upper";
+    const drawingOrder = [...specification.items].sort(
+        (first, second) => Number(isUpper(first)) - Number(isUpper(second)),
+    );
+    drawingOrder.forEach((item, index) => {
         const palette = ["#dfb77b", "#c8a989", "#afc2b5", "#d4b8ae"];
-        context.fillStyle = palette[index % palette.length];
+        const upper = isUpper(item);
+        context.fillStyle = upper ? "rgba(255, 253, 248, 0.55)" : palette[index % palette.length];
         context.strokeStyle = "#6f5540";
         context.lineWidth = 2;
+        context.setLineDash(upper ? [8, 6] : []);
         item.bodyRects.forEach((rect) => {
             const x = planX + rect.x * scale;
             const y = planY + rect.y * scale;
@@ -419,6 +509,7 @@ export const renderPlanSpecificationPng = async (
             context.fillRect(x, y, rectWidth, rectDepth);
             context.strokeRect(x, y, rectWidth, rectDepth);
         });
+        context.setLineDash([]);
         context.save();
         context.beginPath();
         context.rect(
@@ -484,7 +575,7 @@ export const renderPlanSpecificationPng = async (
     context.fillStyle = "#6f6559";
     context.fillText("Предмет", 80, cursorY);
     context.fillText("Размер", 650, cursorY);
-    context.fillText("Приоритет", 850, cursorY);
+    context.fillText(drawing ? "Помещение" : "Приоритет", 850, cursorY);
     context.fillText("Координаты и поворот", 1080, cursorY);
     cursorY += 32;
 
@@ -493,7 +584,11 @@ export const renderPlanSpecificationPng = async (
         context.fillStyle = "#2f2a24";
         context.fillText(item.name, 80, cursorY);
         context.fillText(`${item.width} × ${item.depth} мм`, 650, cursorY);
-        context.fillText(PRIORITY_LABELS[item.priority], 850, cursorY);
+        context.fillText(
+            drawing ? item.roomName ?? "—" : PRIORITY_LABELS[item.priority],
+            850,
+            cursorY,
+        );
         context.fillText(`X ${item.x}, Y ${item.y}, ${item.rotation}°`, 1080, cursorY);
         context.strokeStyle = "#dccfbe";
         context.lineWidth = 1;
@@ -538,6 +633,14 @@ export const renderPlanSpecificationPng = async (
     context.fillText("Проверено", 80, cursorY);
     cursorY += 38;
     context.font = "19px Arial, sans-serif";
+    if (!specification.checks.length) {
+        context.fillText(
+            "— Исправьте отмеченные предметы, чтобы план прошёл проверки.",
+            80,
+            cursorY,
+        );
+        cursorY += 32;
+    }
     specification.checks.forEach((check) => {
         context.fillText(`✓ ${check.label}`, 80, cursorY);
         cursorY += 32;

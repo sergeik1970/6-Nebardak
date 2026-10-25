@@ -3213,6 +3213,76 @@ test("a radiator is placed on the drawing, keeps furniture away and reaches the 
     await expect(page.locator("[data-room-obstacle='radiator']")).toHaveCount(1);
 });
 
+test("the result step lists each room's furniture, saves a PNG and prints the plan", async ({
+    page,
+}, testInfo) => {
+    test.skip(
+        testInfo.project.name !== "desktop-chromium",
+        "The result step is covered once in Chromium",
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 4000, 3000);
+    await openToolGroup(page, "walls");
+    await page.locator("[data-draw-room-tool='wall']").click();
+    await dragOnBoardWorld(page, { x: 4000, y: 3500 }, { x: 8000, y: 3500 });
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    const kinds = page.locator("[data-draw-room-region-item] select");
+    await kinds.nth(0).selectOption("kitchen");
+    await kinds.nth(1).selectOption("bedroom");
+
+    await page.locator("[data-draw-room-step='furniture']").click();
+    await page.locator("[data-add-furniture='kitchen-sink']").click();
+    const sink = await getBoardScreenPoint(page, 5000, 2400);
+    await page.mouse.move(sink.x, sink.y);
+    await page.mouse.click(sink.x, sink.y);
+    await expect(page.locator("[data-draw-furniture^='furniture-']")).toHaveCount(1);
+
+    await page.locator("[data-draw-room-step='result']").click();
+    const result = page.locator("[data-draw-room-result='true']");
+    await expect(result.locator("[data-draw-room-result-room]")).toHaveCount(2);
+    await expect(result.locator("[data-draw-room-result-room]").first()).toContainText(
+        "Мойка с тумбой 80 см",
+    );
+    await expect(result.locator("[data-draw-room-result-room]").nth(1)).toContainText(
+        "Мебели пока нет",
+    );
+
+    const download = page.waitForEvent("download");
+    await result.getByRole("button", { name: "Скачать PNG" }).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/\.png$/);
+    const bytes = await (await file.createReadStream()).toArray();
+    expect(Buffer.concat(bytes).subarray(1, 4).toString()).toBe("PNG");
+    await expect(result.getByRole("status")).toHaveText("PNG сохранён.");
+
+    // Printing waits for the sheet image, then only that sheet is on paper.
+    await page.evaluate(() => {
+        (window as unknown as { printed: number }).printed = 0;
+        window.print = () => {
+            (window as unknown as { printed: number }).printed += 1;
+        };
+    });
+    await result.getByRole("button", { name: "Печать" }).click();
+    await expect
+        .poll(() => page.evaluate(() => (window as unknown as { printed: number }).printed))
+        .toBe(1);
+    await page.emulateMedia({ media: "print" });
+    const visibility = await page.evaluate(() => ({
+        sheet: getComputedStyle(document.querySelector("[data-draw-room-print-sheet='true'] img")!)
+            .visibility,
+        editor: getComputedStyle(document.querySelector("[data-draw-room-board='true']")!)
+            .visibility,
+    }));
+    expect(visibility).toEqual({ sheet: "visible", editor: "hidden" });
+    await page.emulateMedia({ media: "screen" });
+    await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+    await expect(page.locator("[data-draw-room-print-sheet='true']")).toHaveCount(0);
+});
+
 test("a divider keeps the completed exterior and dimensions each room on its own", async ({
     page,
 }, testInfo) => {

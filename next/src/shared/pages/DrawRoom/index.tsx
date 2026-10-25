@@ -5,7 +5,7 @@ import {
     withProjectParam,
 } from "@/shared/lib/project-scope/storage";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -34,6 +34,9 @@ import {
     getDoorFurnitureObstacles,
     getRadiatorBody,
     getRadiatorServiceObstacle,
+    buildDrawingPlanSpecification,
+    getPlanExportFilename,
+    renderPlanSpecificationPng,
     getDrawRoomGridPresentation,
     getDrawRoomWallFaceContours,
     ensureUniqueDrawWallSegmentIds,
@@ -65,7 +68,16 @@ import {
 import styles from "./index.module.scss";
 import FurnitureEditor from "./FurnitureEditor";
 import MeasureTool from "./MeasureTool";
-import { readFurniture, type DrawFurniture, type FurnitureRoom } from "./furniture";
+import {
+    furnitureBelongsToRoom,
+    furnitureDefinition,
+    furnitureError,
+    furnitureGeometry,
+    readFurniture,
+    type DrawFurniture,
+    type FurnitureRoom,
+} from "./furniture";
+import ResultPanel, { type ResultItem, type ResultRoom } from "./ResultPanel";
 import Dialog from "@/shared/components/Dialog";
 import { RECT_TEMPLATE_LIMITS, createRectTemplateRoom, roomToDrawingScene } from "./room-template";
 
@@ -74,7 +86,7 @@ import { useProjectHref } from "@/shared/lib/project-scope/ProjectScope";
 import { trackGoal } from "@/shared/lib/analytics";
 
 type Tool = "select" | "wall" | "door" | "window" | "radiator";
-type ToolGroup = "walls" | "openings" | "rooms" | "furniture";
+type ToolGroup = "walls" | "openings" | "rooms" | "furniture" | "result";
 
 /** The drawing is worked through in these steps, each its own layer of the plan. */
 const DRAW_STEPS: { group: ToolGroup; label: string; controls?: string }[] = [
@@ -82,6 +94,7 @@ const DRAW_STEPS: { group: ToolGroup; label: string; controls?: string }[] = [
     { group: "openings", label: "Двери и окна", controls: "draw-room-opening-tools" },
     { group: "rooms", label: "Помещения" },
     { group: "furniture", label: "Мебель" },
+    { group: "result", label: "Итог" },
 ];
 type KeyboardTool = Exclude<Tool, "select" | "radiator">;
 type Point = { x: number; y: number };
@@ -6873,6 +6886,153 @@ const DrawRoom: React.FC = () => {
         renderedRoomRegions.find((region) => region.signature === selectedRegionSignature) ?? null;
     // Furniture goes into one room; without a choice yet, the first room is it.
     const furnitureRegion = selectedRegion ?? renderedRoomRegions[0] ?? null;
+    const regionRooms = useMemo(
+        () =>
+            renderedRoomRegions.map((region) => ({
+                region,
+                room: {
+                    name: region.name,
+                    kind: region.kind,
+                    rects: region.clearRects.map((rect) => ({
+                        left: region.origin.x + rect.left,
+                        right: region.origin.x + rect.right,
+                        top: region.origin.y + rect.top,
+                        bottom: region.origin.y + rect.bottom,
+                    })),
+                } satisfies FurnitureRoom,
+            })),
+        [renderedRoomRegions],
+    );
+    const resultStep = activeToolGroup === "result";
+    const resultSummary = useMemo(() => {
+        if (!resultStep) return null;
+        const items = scene.furniture ?? [];
+        const rooms: ResultRoom[] = regionRooms.map(({ region }) => ({
+            signature: region.signature,
+            name: region.name,
+            areaSquareMillimeters: region.areaSquareMillimeters,
+            items: [],
+        }));
+        const unassigned: ResultItem[] = [];
+        const placements: { item: DrawFurniture; roomName?: string }[] = [];
+        let conflictCount = 0;
+        items.forEach((item) => {
+            const index = regionRooms.findIndex(({ room }) => furnitureBelongsToRoom(item, room));
+            const owner = index >= 0 ? regionRooms[index] : null;
+            const conflict = Boolean(
+                furnitureError(
+                    item,
+                    items,
+                    scene.segments,
+                    renderedWallThickness,
+                    furnitureDoorObstacles,
+                    owner?.room ?? null,
+                    furnitureRadiatorObstacles,
+                ),
+            );
+            if (conflict) conflictCount += 1;
+            const { width, depth } = furnitureGeometry(item);
+            const entry: ResultItem = {
+                id: item.id,
+                label: furnitureDefinition(item.definitionId)?.label ?? item.definitionId,
+                width,
+                depth,
+                conflict,
+            };
+            if (index >= 0) rooms[index].items.push(entry);
+            else unassigned.push(entry);
+            // The file holds the main building; its rooms carry the prefix.
+            if (!preview || (owner && owner.region.buildingId === regionPrefix(preview)))
+                placements.push({ item, roomName: owner?.region.name });
+        });
+        return { rooms, unassigned, conflictCount, placements };
+    }, [
+        furnitureDoorObstacles,
+        furnitureRadiatorObstacles,
+        preview,
+        regionRooms,
+        renderedWallThickness,
+        resultStep,
+        scene.furniture,
+        scene.segments,
+    ]);
+    const [resultStatus, setResultStatus] = useState("");
+    const [resultBusy, setResultBusy] = useState(false);
+    const [printImageUrl, setPrintImageUrl] = useState<string | null>(null);
+    const renderResultPng = useCallback(async () => {
+        if (!preview || !resultSummary) throw new Error("Сначала замкните контур квартиры.");
+        const specification = buildDrawingPlanSpecification({
+            room: preview.room,
+            placements: resultSummary.placements.map(({ item, roomName }) => ({
+                instanceId: item.id,
+                definitionId: item.definitionId,
+                x: item.x - preview.origin.x,
+                y: item.y - preview.origin.y,
+                rotation: item.rotation,
+                width: item.width,
+                depth: item.depth,
+                ...(roomName ? { roomName } : {}),
+            })),
+            conflictCount: resultSummary.conflictCount,
+            caveats:
+                previews.length > 1
+                    ? ["В файл вошла основная постройка; отдельно стоящие контуры не показаны."]
+                    : [],
+            generatedAt: new Date().toISOString(),
+        });
+        return {
+            blob: await renderPlanSpecificationPng(specification),
+            filename: getPlanExportFilename(specification.generatedAt),
+            items: specification.items.length,
+        };
+    }, [preview, previews.length, resultSummary]);
+    const downloadResult = useCallback(async () => {
+        setResultBusy(true);
+        setResultStatus("Готовим PNG…");
+        try {
+            const { blob, filename, items } = await renderResultPng();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.setTimeout(() => URL.revokeObjectURL(url), 0);
+            setResultStatus("PNG сохранён.");
+            trackGoal("plan_png_export", { items, source: "drawing" });
+        } catch (error) {
+            setResultStatus(error instanceof Error ? error.message : "Не удалось сохранить PNG.");
+        } finally {
+            setResultBusy(false);
+        }
+    }, [renderResultPng]);
+    const printResult = useCallback(async () => {
+        setResultBusy(true);
+        setResultStatus("Готовим лист для печати…");
+        try {
+            const { blob } = await renderResultPng();
+            // The print sheet shows this image only; the dialog opens once it loads.
+            setPrintImageUrl(URL.createObjectURL(blob));
+            trackGoal("plan_print", { source: "drawing" });
+        } catch (error) {
+            setResultBusy(false);
+            setResultStatus(
+                error instanceof Error ? error.message : "Не удалось подготовить печать.",
+            );
+        }
+    }, [renderResultPng]);
+    useEffect(() => {
+        if (!printImageUrl) return;
+        const done = () => {
+            URL.revokeObjectURL(printImageUrl);
+            setPrintImageUrl(null);
+            setResultBusy(false);
+            setResultStatus("Лист отправлен в системный диалог печати.");
+        };
+        window.addEventListener("afterprint", done, { once: true });
+        return () => window.removeEventListener("afterprint", done);
+    }, [printImageUrl]);
     const furnitureRoom = useMemo<FurnitureRoom | null>(
         () =>
             furnitureRegion
@@ -6892,14 +7052,14 @@ const DrawRoom: React.FC = () => {
     // Opening the contour again takes away the rooms and the furniture step.
     const activeStepLost =
         (activeToolGroup === "rooms" && renderedRoomRegions.length === 0) ||
-        (activeToolGroup === "furniture" && !preview);
+        ((activeToolGroup === "furniture" || activeToolGroup === "result") && !preview);
     useEffect(() => {
         if (activeStepLost) setActiveToolGroup("walls");
     }, [activeStepLost]);
     const stepAvailable = (group: ToolGroup) =>
         group === "rooms"
             ? renderedRoomRegions.length > 0
-            : group === "furniture"
+            : group === "furniture" || group === "result"
               ? Boolean(preview)
               : true;
     const selectStep = (group: ToolGroup) => {
@@ -7375,7 +7535,7 @@ const DrawRoom: React.FC = () => {
                               ? "opening"
                               : selectedWallInspector
                                 ? "wall"
-                                : roomInspectorOpen
+                                : roomInspectorOpen || activeToolGroup === "result"
                                   ? "regions"
                                   : "tools"
                     }
@@ -9685,6 +9845,7 @@ const DrawRoom: React.FC = () => {
                             thickness={renderedWallThickness}
                             doorObstacles={furnitureDoorObstacles}
                             radiatorObstacles={furnitureRadiatorObstacles}
+                            presented={activeToolGroup === "result"}
                             room={furnitureRoom}
                             onChange={(furniture) =>
                                 commitScene({ ...sceneForInteractionRef.current, furniture })
@@ -9785,6 +9946,34 @@ const DrawRoom: React.FC = () => {
                                         </section>
                                     ))}
                                 </aside>
+                            )}
+                        {resultStep && resultSummary && (
+                            <ResultPanel
+                                rooms={resultSummary.rooms}
+                                unassigned={resultSummary.unassigned}
+                                conflictCount={resultSummary.conflictCount}
+                                status={resultStatus}
+                                busy={resultBusy}
+                                onDownload={() => void downloadResult()}
+                                onPrint={() => void printResult()}
+                            />
+                        )}
+                        {printImageUrl &&
+                            // On the body, so the editor's clipped panes never cut the sheet.
+                            createPortal(
+                                <div
+                                    className={styles.printSheet}
+                                    data-draw-room-print-sheet="true"
+                                >
+                                    {/* A generated object URL; next/image cannot optimise it. */}
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={printImageUrl}
+                                        alt="План квартиры для печати"
+                                        onLoad={() => window.print()}
+                                    />
+                                </div>,
+                                document.body,
                             )}
                         {selectedRadiatorData &&
                             !selectedOpeningData &&
