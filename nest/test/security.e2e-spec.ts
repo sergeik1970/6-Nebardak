@@ -1,4 +1,4 @@
-import { INestApplication } from "@nestjs/common";
+import { INestApplication, UnauthorizedException } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
@@ -19,6 +19,7 @@ import { AuthService } from "../src/services/AuthService/auth.service";
 import { SessionService } from "../src/services/SessionService/session.service";
 import { AccountRecoveryService } from "../src/services/AccountRecoveryService/account-recovery.service";
 import { AdminLoginCodeService } from "../src/services/AdminLoginCodeService/admin-login-code.service";
+import { TrustedDeviceService } from "../src/services/TrustedDeviceService/trusted-device.service";
 import { OperationalLogger } from "../src/services/OperationalLogger/operational-logger.service";
 
 interface HarnessOptions {
@@ -58,6 +59,11 @@ interface Harness {
         start: jest.Mock;
         confirm: jest.Mock;
     };
+    trustedDevices: {
+        issue: jest.Mock;
+        isTrusted: jest.Mock;
+        revokeAll: jest.Mock;
+    };
     databaseQuery: jest.Mock;
 }
 
@@ -65,6 +71,7 @@ const activeApps: INestApplication[] = [];
 const SESSION_TOKEN = "s".repeat(43);
 const VALID_LINK_TOKEN = "v".repeat(43);
 const CHALLENGE_TOKEN = "c".repeat(43);
+const DEVICE_TOKEN = "d".repeat(43);
 const originalEnvironment = {
     NODE_ENV: process.env.NODE_ENV,
     AUTH_ENABLED: process.env.AUTH_ENABLED,
@@ -350,16 +357,106 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
         await confirm("x".repeat(43), "123456").expect(410);
         expect(harness.sessionService.create).not.toHaveBeenCalled();
 
+        expect(harness.trustedDevices.issue).not.toHaveBeenCalled();
+
         const accepted = await confirm(CHALLENGE_TOKEN, "123 456").expect(200);
-        expect(String(accepted.headers["set-cookie"])).toContain(
-            `sf_session=${SESSION_TOKEN}`,
+        const cookies = String(accepted.headers["set-cookie"]);
+        expect(cookies).toContain(`sf_session=${SESSION_TOKEN}`);
+        expect(cookies).toMatch(
+            new RegExp(
+                `sf_trusted_device=${DEVICE_TOKEN}; Path=/; Expires=Sun, 22 Nov 2026 12:00:00 GMT; HttpOnly; SameSite=Lax`,
+            ),
         );
+        expect(harness.trustedDevices.issue).toHaveBeenCalledWith(1);
         expect(accepted.body.user).toMatchObject({ id: 1, role: "admin" });
         expect(harness.sessionService.create).toHaveBeenCalledWith(
             expect.objectContaining({ id: 1 }),
             undefined,
             expect.any(Date),
             { secondFactor: true },
+        );
+    });
+
+    it("lets a remembered device skip the code but not the password", async () => {
+        const harness = await createHarness({
+            authEnabled: true,
+            role: "admin",
+        });
+        const login = (cookie: string) =>
+            request(harness.baseUrl)
+                .post("/api/auth/login")
+                .set("X-Requested-With", "stylefinder")
+                .set("Cookie", cookie)
+                .send({
+                    email: "maria@example.com",
+                    password: "safe-password",
+                });
+
+        const unknown = await login(`sf_trusted_device=${"x".repeat(43)}`);
+        expect(unknown.body.secondFactor).toBeDefined();
+        expect(harness.sessionService.create).not.toHaveBeenCalled();
+
+        const remembered = await login(
+            `sf_trusted_device=${DEVICE_TOKEN}`,
+        ).expect(200);
+        expect(remembered.body.user).toMatchObject({ id: 1, role: "admin" });
+        expect(harness.trustedDevices.isTrusted).toHaveBeenLastCalledWith(
+            1,
+            DEVICE_TOKEN,
+        );
+        expect(harness.loginCodes.start).toHaveBeenCalledTimes(1);
+        expect(harness.sessionService.create).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 1 }),
+            undefined,
+            expect.any(Date),
+            { secondFactor: true },
+        );
+
+        harness.authService.login.mockRejectedValueOnce(
+            new UnauthorizedException("Неверный email или пароль"),
+        );
+        await login(`sf_trusted_device=${DEVICE_TOKEN}`).expect(401);
+        expect(harness.sessionService.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("never asks a designer for a code or checks devices", async () => {
+        const harness = await createHarness({ authEnabled: true });
+
+        await request(harness.baseUrl)
+            .post("/api/auth/login")
+            .set("X-Requested-With", "stylefinder")
+            .set("Cookie", `sf_trusted_device=${DEVICE_TOKEN}`)
+            .send({ email: "maria@example.com", password: "safe-password" })
+            .expect(200);
+
+        expect(harness.trustedDevices.isTrusted).not.toHaveBeenCalled();
+        expect(harness.sessionService.create).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 1 }),
+            undefined,
+            expect.any(Date),
+            { secondFactor: false },
+        );
+    });
+
+    it("forgets remembered devices when signing out everywhere", async () => {
+        const harness = await createHarness({
+            authEnabled: true,
+            role: "admin",
+        });
+
+        const response = await request(harness.baseUrl)
+            .post("/api/auth/logout-all")
+            .set("X-Requested-With", "stylefinder")
+            .set(
+                "Cookie",
+                `sf_session=${SESSION_TOKEN}; sf_trusted_device=${DEVICE_TOKEN}`,
+            )
+            .expect(204);
+
+        expect(harness.sessionService.revokeAll).toHaveBeenCalledWith(1);
+        expect(harness.trustedDevices.revokeAll).toHaveBeenCalledWith(1);
+        expect(String(response.headers["set-cookie"])).toMatch(
+            /sf_trusted_device=;[^,]*Expires=Thu, 01 Jan 1970/,
         );
     });
 
@@ -604,6 +701,7 @@ describe("Nest 11 / Express 5 security HTTP behavior", () => {
             1,
             "session-1",
         );
+        expect(harness.trustedDevices.revokeAll).toHaveBeenCalledWith(1);
     });
 
     it("deletes the account only with the password and clears the cookie", async () => {
@@ -724,6 +822,16 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
                 : { status: "wrong", attemptsLeft: 4 };
         }),
     };
+    const trustedDevices = {
+        issue: jest.fn().mockResolvedValue({
+            token: DEVICE_TOKEN,
+            expiresAt: new Date("2026-11-22T12:00:00.000Z"),
+        }),
+        isTrusted: jest.fn(
+            async (_userId: number, token?: string) => token === DEVICE_TOKEN,
+        ),
+        revokeAll: jest.fn().mockResolvedValue(undefined),
+    };
     const databaseQuery =
         options.databaseQuery ?? jest.fn().mockResolvedValue([{ ok: 1 }]);
     const dataSource = {
@@ -750,6 +858,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
             { provide: SessionService, useValue: sessionService },
             { provide: AccountRecoveryService, useValue: recovery },
             { provide: AdminLoginCodeService, useValue: loginCodes },
+            { provide: TrustedDeviceService, useValue: trustedDevices },
             {
                 provide: EmailTokenService,
                 useValue: { revoke: jest.fn() },
@@ -779,6 +888,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
         sessionService,
         recovery,
         loginCodes,
+        trustedDevices,
         databaseQuery,
     };
 }

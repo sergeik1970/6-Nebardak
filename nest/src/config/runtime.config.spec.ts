@@ -57,7 +57,11 @@ describe("runtime configuration", () => {
             authEnabled: false,
             registrationEnabled: false,
             publicOrigin: "http://localhost:3000",
-            session: { cookieName: "sf_session", secureCookie: false },
+            session: {
+                cookieName: "sf_session",
+                trustedDeviceCookieName: "sf_trusted_device",
+                secureCookie: false,
+            },
             mail: {
                 host: "127.0.0.1",
                 port: 1025,
@@ -210,7 +214,11 @@ describe("runtime configuration", () => {
         process.env.PUBLIC_ORIGIN = "https://stylefinder.example/";
         expect(getRuntimeConfig()).toMatchObject({
             publicOrigin: "https://stylefinder.example",
-            session: { cookieName: "__Host-sf_session", secureCookie: true },
+            session: {
+                cookieName: "__Host-sf_session",
+                trustedDeviceCookieName: "__Host-sf_trusted_device",
+                secureCookie: true,
+            },
         });
     });
 

@@ -40,6 +40,8 @@ export interface MailRuntimeConfig {
 
 export interface SessionRuntimeConfig {
     cookieName: string;
+    /** Marks a browser that already passed an administrator's emailed code. */
+    trustedDeviceCookieName: string;
     secureCookie: boolean;
 }
 
@@ -357,6 +359,9 @@ export function getRuntimeConfig(): RuntimeConfig {
         session: {
             // `__Host-` binds the cookie to this exact origin over HTTPS only.
             cookieName: secureCookie ? "__Host-sf_session" : "sf_session",
+            trustedDeviceCookieName: secureCookie
+                ? "__Host-sf_trusted_device"
+                : "sf_trusted_device",
             secureCookie,
         },
         mail,

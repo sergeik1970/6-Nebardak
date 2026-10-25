@@ -4,7 +4,9 @@ import { User } from "../../entities/User/user.entity";
 import { UserSession } from "../../entities/UserSession/user-session.entity";
 import { EmailToken } from "../../entities/EmailToken/email-token.entity";
 import { LoginChallenge } from "../../entities/LoginChallenge/login-challenge.entity";
+import { TrustedDevice } from "../../entities/TrustedDevice/trusted-device.entity";
 import { AdminLoginCodeService } from "../../services/AdminLoginCodeService/admin-login-code.service";
+import { TrustedDeviceService } from "../../services/TrustedDeviceService/trusted-device.service";
 import { EmailTokenService } from "../../services/EmailTokenService/email-token.service";
 import { MailService } from "../../services/MailService/mail.service";
 import { AccountRecoveryService } from "../../services/AccountRecoveryService/account-recovery.service";
@@ -25,6 +27,7 @@ import { AuthEnabledGuard } from "../../guards/auth-enabled.guard";
             UserSession,
             EmailToken,
             LoginChallenge,
+            TrustedDevice,
         ]),
     ],
     controllers: [AuthController, AccountController],
@@ -35,6 +38,7 @@ import { AuthEnabledGuard } from "../../guards/auth-enabled.guard";
         MailService,
         AccountRecoveryService,
         AdminLoginCodeService,
+        TrustedDeviceService,
         AccountMaintenanceService,
         OperationalLogger,
         AuthGuard,

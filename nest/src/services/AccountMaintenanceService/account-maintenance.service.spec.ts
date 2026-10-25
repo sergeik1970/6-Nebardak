@@ -42,11 +42,16 @@ describe("AccountMaintenanceService", () => {
         ]);
     });
 
-    it("purges sessions, links and codes and reports counts only", async () => {
-        const { service, emailTokens, loginCodes, logger } = makeService();
+    it("purges sessions, devices, links and codes and reports counts only", async () => {
+        const { service, query, emailTokens, loginCodes, logger } =
+            makeService();
 
         await service.runOnce(now);
 
+        expect(query).toHaveBeenCalledWith(
+            `DELETE FROM "trusted_device" WHERE "expires_at" <= $1`,
+            [now],
+        );
         expect(emailTokens.purge).toHaveBeenCalledWith(now);
         expect(loginCodes.purge).toHaveBeenCalledWith(now);
         expect(logger.event).toHaveBeenCalledWith("account.maintenance", {

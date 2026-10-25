@@ -27,6 +27,7 @@ import {
 import { EmailTokenService } from "../../services/EmailTokenService/email-token.service";
 import { OperationalLogger } from "../../services/OperationalLogger/operational-logger.service";
 import { SessionService } from "../../services/SessionService/session.service";
+import { TrustedDeviceService } from "../../services/TrustedDeviceService/trusted-device.service";
 
 const SENSITIVE_THROTTLE = {
     default: { limit: 5, ttl: 15 * 60_000, blockDuration: 15 * 60_000 },
@@ -38,6 +39,7 @@ export class AccountController {
     constructor(
         private readonly authService: AuthService,
         private readonly sessionService: SessionService,
+        private readonly trustedDevices: TrustedDeviceService,
         private readonly emailTokens: EmailTokenService,
         private readonly logger: OperationalLogger,
     ) {}
@@ -54,7 +56,10 @@ export class AccountController {
         return { user: toPublicUser(user ?? request.user) };
     }
 
-    /** Keeps this device signed in and ends every other session. */
+    /**
+     * Keeps this device signed in and ends every other session; an
+     * administrator enters the emailed code again on the next sign-in.
+     */
     @Throttle(SENSITIVE_THROTTLE)
     @HttpCode(204)
     @Post("password")
@@ -69,6 +74,7 @@ export class AccountController {
             request.user.id,
             request.session.id,
         );
+        await this.trustedDevices.revokeAll(request.user.id);
         await this.emailTokens.revoke(request.user.id, "reset-password");
         this.logger.event("account.password_changed", {
             userId: request.user.id,

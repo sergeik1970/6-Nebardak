@@ -17,6 +17,7 @@ import { CsrfGuard } from "../src/guards/csrf.guard";
 import { RegistrationEnabledGuard } from "../src/guards/registration-enabled.guard";
 import { AccountRecoveryService } from "../src/services/AccountRecoveryService/account-recovery.service";
 import { AdminLoginCodeService } from "../src/services/AdminLoginCodeService/admin-login-code.service";
+import { TrustedDeviceService } from "../src/services/TrustedDeviceService/trusted-device.service";
 import { AuthService } from "../src/services/AuthService/auth.service";
 import { ProjectService } from "../src/services/ProjectService/project.service";
 import { SessionService } from "../src/services/SessionService/session.service";
@@ -90,6 +91,7 @@ describe("projects HTTP contract", () => {
                 { provide: AuthService, useValue: { login: jest.fn() } },
                 { provide: AccountRecoveryService, useValue: {} },
                 { provide: AdminLoginCodeService, useValue: {} },
+                { provide: TrustedDeviceService, useValue: {} },
                 { provide: APP_GUARD, useClass: CsrfGuard },
                 { provide: APP_GUARD, useClass: ThrottlerGuard },
             ],

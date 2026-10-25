@@ -13,13 +13,13 @@ function cookieOptions(): CookieOptions {
 }
 
 /** Reads one cookie without trusting malformed or duplicated values. */
-export function readSessionToken(
+function readCookie(
     request: Pick<Request, "headers">,
+    name: string,
 ): string | undefined {
     const header = request.headers.cookie;
     if (typeof header !== "string") return undefined;
 
-    const name = getRuntimeConfig().session.cookieName;
     const values = header
         .split(";")
         .map((part) => part.trim())
@@ -27,6 +27,21 @@ export function readSessionToken(
         .map((part) => part.slice(name.length + 1));
 
     return values.length === 1 && values[0] ? values[0] : undefined;
+}
+
+export function readSessionToken(
+    request: Pick<Request, "headers">,
+): string | undefined {
+    return readCookie(request, getRuntimeConfig().session.cookieName);
+}
+
+export function readTrustedDeviceToken(
+    request: Pick<Request, "headers">,
+): string | undefined {
+    return readCookie(
+        request,
+        getRuntimeConfig().session.trustedDeviceCookieName,
+    );
 }
 
 /**
@@ -47,6 +62,24 @@ export function setSessionCookie(
 export function clearSessionCookie(response: Response): void {
     response.clearCookie(
         getRuntimeConfig().session.cookieName,
+        cookieOptions(),
+    );
+}
+
+export function setTrustedDeviceCookie(
+    response: Response,
+    token: string,
+    expiresAt: Date,
+): void {
+    response.cookie(getRuntimeConfig().session.trustedDeviceCookieName, token, {
+        ...cookieOptions(),
+        expires: expiresAt,
+    });
+}
+
+export function clearTrustedDeviceCookie(response: Response): void {
+    response.clearCookie(
+        getRuntimeConfig().session.trustedDeviceCookieName,
         cookieOptions(),
     );
 }
