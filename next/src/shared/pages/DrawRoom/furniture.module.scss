@@ -160,6 +160,17 @@
         padding: 4px;
     }
 }
+// Standard sizes from the designer's drawings, one tap each.
+.presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    button {
+        min-height: 32px;
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+}
 @media (max-width: 700px) {
     .panel {
         top: auto;

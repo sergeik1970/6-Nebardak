@@ -3086,6 +3086,41 @@ test("furniture goes into the selected room, against its walls", async ({ page }
     await expect(pieces).toHaveCount(3);
 });
 
+test("a piece takes a standard size from the designer's drawings", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Size presets are covered once");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 4000, 3500);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("living");
+    await page.locator("[data-draw-room-step='furniture']").click();
+
+    const panel = page.locator("[aria-label='Мебель на чертеже']");
+    await page.locator("[data-add-furniture='sofa-bed']").click();
+    const centre = await getBoardScreenPoint(page, 6000, 3750);
+    await page.mouse.move(centre.x, centre.y);
+    await page.mouse.click(centre.x, centre.y);
+    const piece = page.locator("[data-draw-furniture^='furniture-']");
+    await expect(piece).toHaveCount(1);
+
+    const presets = panel.getByRole("group", { name: "Типовые размеры" });
+    await expect(presets.getByRole("button")).toHaveText(["1400 × 1000", "2000 × 1000"]);
+    await expect(presets.getByRole("button", { name: "2000 × 1000" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+    );
+    await presets.getByRole("button", { name: "1400 × 1000" }).click();
+    await expect(piece.locator("[data-furniture-size='width']")).toHaveText("140");
+    await expect(panel.getByLabel("Ширина, мм")).toHaveValue("1400");
+    await expect(presets.getByRole("button", { name: "1400 × 1000" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+    );
+});
+
 test("a kitchen is fitted with base and upper units", async ({ page }, testInfo) => {
     test.skip(
         testInfo.project.name !== "desktop-chromium",

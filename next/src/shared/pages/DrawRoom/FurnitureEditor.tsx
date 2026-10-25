@@ -661,6 +661,37 @@ export default function FurnitureEditor({
                                     )}
                                 </div>
                             )}
+                            {furnitureDefinition(editing.definitionId)?.sizes && (
+                                <div
+                                    className={styles.presets}
+                                    role="group"
+                                    aria-label="Типовые размеры"
+                                >
+                                    {furnitureDefinition(editing.definitionId)!.sizes!.map(
+                                        ({ width, depth }) => (
+                                            <button
+                                                key={`${width}x${depth}`}
+                                                type="button"
+                                                data-furniture-preset={`${width}x${depth}`}
+                                                disabled={Boolean(editing.locked)}
+                                                aria-pressed={
+                                                    editing.width === width &&
+                                                    editing.depth === depth
+                                                }
+                                                onClick={() => {
+                                                    const next = { ...editing, width, depth };
+                                                    if (pending) {
+                                                        setPending(next);
+                                                        setPreview(null);
+                                                    } else update(next);
+                                                }}
+                                            >
+                                                {width} × {depth}
+                                            </button>
+                                        ),
+                                    )}
+                                </div>
+                            )}
                             <div className={styles.sizes}>
                                 {(["width", "depth"] as const).map((field) => (
                                     <label key={`${editing.id}-${field}`}>
