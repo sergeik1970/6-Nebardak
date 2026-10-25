@@ -101,7 +101,7 @@ test("planner change-answers round trip keeps the questionnaire prefilled", asyn
         .toBeGreaterThan(0);
 
     await Promise.all([
-        page.waitForURL(/\/planner\?handoff=/, { timeout: 60_000, waitUntil: "commit" }),
+        page.waitForURL(/\/planner\/layout\?handoff=/, { timeout: 60_000, waitUntil: "commit" }),
         page.getByRole("button", { name: "Перейти к расстановке" }).click(),
     ]);
     await expect(page.getByText(/2 предмета в наборе/)).toBeVisible();
@@ -224,7 +224,7 @@ test("planner wardrobe choices round-trip through the questionnaire without losi
         });
 
     await Promise.all([
-        page.waitForURL(/\/planner\?handoff=/, { timeout: 60_000, waitUntil: "commit" }),
+        page.waitForURL(/\/planner\/layout\?handoff=/, { timeout: 60_000, waitUntil: "commit" }),
         page.getByRole("button", { name: "Перейти к расстановке" }).click(),
     ]);
     await expect(page.getByRole("checkbox", { name: /Шкаф 1500 мм/ })).toBeChecked();
@@ -342,7 +342,7 @@ test("keyboard-only workflow generates, edits, undoes and exports without mouse 
     const openPlanner = page.getByRole("button", { name: "Продолжить с комнатой" });
     await expect(openPlanner).toBeEnabled();
     await Promise.all([
-        page.waitForURL(/\/planner\?(?:drawRoom=1&)?handoff=/, {
+        page.waitForURL(/\/planner\/layout\?(?:drawRoom=1&)?handoff=/, {
             timeout: 60_000,
             waitUntil: "commit",
         }),

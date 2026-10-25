@@ -14,17 +14,11 @@ export const STAGE_LABELS: Record<NonNullable<ProjectSummary["stage"]>, string> 
     layout: "Есть расстановка",
 };
 
-/** Opens a project on the step that comes next for it. */
+/** Opens a project on the step that comes next for it: the style test, then the planner. */
 export const projectEntryHref = (projectId: string, summary: ProjectSummary): string => {
-    const path =
-        summary.stage === "layout" || summary.stage === "room"
-            ? "/planner"
-            : summary.stage === "questionnaire"
-              ? "/planner/draw"
-              : summary.furnitureCount
-                ? "/planner/draw"
-                : "/test";
-    return withProjectParam(path, projectId);
+    const started =
+        summary.stage !== "style" || Boolean(summary.furnitureCount || summary.styleLabel);
+    return withProjectParam(started ? "/planner" : "/test", projectId);
 };
 
 export const describeProject = (summary: ProjectSummary): string[] =>

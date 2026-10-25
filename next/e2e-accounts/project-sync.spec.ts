@@ -43,7 +43,7 @@ test("edits made offline are kept and saved once the network returns", async ({
 }) => {
     await registerByApi(page);
     const project = await createProjectByApi(page, projectDocument(), "Офлайн");
-    await page.goto(`/planner?project=${project.id}`, { waitUntil: "networkidle" });
+    await page.goto(`/planner/layout?project=${project.id}`, { waitUntil: "networkidle" });
     await expectSaved(page);
 
     await context.setOffline(true);
@@ -67,7 +67,7 @@ test("another tab sees a newer save and picks it up", async ({ page, context }) 
     const project = await createProjectByApi(page, projectDocument(), "Две вкладки");
     const second = await context.newPage();
     for (const tab of [page, second]) {
-        await tab.goto(`/planner?project=${project.id}`, { waitUntil: "networkidle" });
+        await tab.goto(`/planner/layout?project=${project.id}`, { waitUntil: "networkidle" });
         await expectSaved(tab);
     }
 
@@ -97,7 +97,7 @@ test("simultaneous edits on two devices ask what to keep instead of overwriting"
     expect((await loginByApi(laptop.request, account)).status()).toBe(200);
 
     for (const device of [page, laptop]) {
-        await device.goto(`/planner?project=${project.id}`, { waitUntil: "networkidle" });
+        await device.goto(`/planner/layout?project=${project.id}`, { waitUntil: "networkidle" });
         await expectSaved(device);
     }
 

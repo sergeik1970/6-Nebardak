@@ -11,7 +11,13 @@ import {
 } from "@/shared/lib/project-sync/guest-import";
 import { withProjectParam } from "@/shared/lib/project-scope/storage";
 
-const FLOW_PAGES = new Set(["/test", "/questionnaire", "/planner", "/planner/draw"]);
+const FLOW_PAGES = new Set([
+    "/test",
+    "/questionnaire",
+    "/planner",
+    "/planner/draw",
+    "/planner/layout",
+]);
 
 type Prompt =
     | { kind: "ask" }

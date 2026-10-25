@@ -5,7 +5,7 @@ test("planner number fields allow an empty draft and reject values above their m
 }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "Detailed editor flow runs once");
 
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
 
     // Room sizes come from the drawing step; the planner only reports them.
     await expect(page.locator("[data-room-summary] [data-room-width]")).toHaveAttribute(
@@ -45,7 +45,7 @@ test("shrinking a room keeps an oversized opening visible and offers an explicit
 }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium", "Detailed editor flow runs once");
 
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
     await page.locator("summary").filter({ hasText: "Проёмы и отопление" }).click();
 
     const doorWidth = page.locator('input[name="door-door-main-width"]');
@@ -73,7 +73,7 @@ test("shrinking a room keeps an oversized opening visible and offers an explicit
 test("planner edits room items directly and Escape restores an unfinished gesture", async ({
     page,
 }) => {
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
     await page.locator("summary").filter({ hasText: "Проёмы и отопление" }).click();
 
     const radiatorsEditor = page.locator("section").filter({ hasText: /^Радиаторы/ });

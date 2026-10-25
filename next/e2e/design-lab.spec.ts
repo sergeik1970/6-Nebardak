@@ -11,7 +11,7 @@ test("designer observations are not kept as local comments when database access 
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((key) => localStorage.removeItem(key), PROJECT_DRAFT_KEY);
 
-    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.goto("/planner/layout", { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Уместить всё" }).click();
     await expect(page.getByRole("button", { name: "Уместить всё" })).toBeEnabled({
         timeout: 60_000,

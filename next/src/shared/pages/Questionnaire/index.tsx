@@ -369,7 +369,7 @@ const Questionnaire: React.FC = () => {
 
         try {
             const navigated = await router.push({
-                pathname: hasRoom ? "/planner" : "/planner/draw",
+                pathname: hasRoom ? "/planner/layout" : "/planner/draw",
                 query: withProjectQuery({ handoff: result.id }),
             });
             if (!navigated) {

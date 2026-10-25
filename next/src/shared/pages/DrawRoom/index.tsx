@@ -43,6 +43,7 @@ import {
     snapDrawRoomCoordinate,
     snapDrawRoomWallLaneCentre,
     snapRoomToPlannerGrid,
+    validateLayout,
     validateRoomGeometry,
     resolveDrawWallAnchor,
     moveDrawWallContourSegment,
@@ -1087,6 +1088,19 @@ const getNewerPlannerRoom = (scene: Scene, plannerRoom: Room): Room | null => {
 const readPlannerRoom = (): Room | null => {
     const draft = readProjectDraft();
     return draft.status === "success" ? draft.value.planner?.room ?? null : null;
+};
+
+/**
+ * The pieces of that project's saved layout, to carry onto the drawing. A
+ * layout that no longer passes the room's checks (a stale or damaged save)
+ * stays behind rather than putting pieces into walls.
+ */
+const readPlannerLayout = (): Placement[] => {
+    const draft = readProjectDraft();
+    if (draft.status !== "success") return [];
+    const room = draft.value.planner?.room;
+    const placements = draft.value.planner?.layout?.placements ?? [];
+    return room && placements.length && validateLayout(room, placements).valid ? placements : [];
 };
 
 const parseMeters = (value: string): number | null => {
@@ -4729,7 +4743,23 @@ const DrawRoom: React.FC = () => {
         const saved = readEditorSession();
         const plannerRoom = readPlannerRoom();
         if (saved) {
-            const restored = plannerRoom ? takePlannerOpenings(saved, plannerRoom) : saved;
+            const withOpenings = plannerRoom ? takePlannerOpenings(saved, plannerRoom) : saved;
+            // A layout made on the former layout step lives beside the drawing;
+            // when the drawing has no furniture yet and shows that very room,
+            // its pieces join the drawing where they stood.
+            const layout = readPlannerLayout();
+            const host =
+                plannerRoom && layout.length && !(withOpenings.furniture ?? []).length
+                    ? getRoomPreviews(withOpenings).find(
+                          (preview) => roomShapeKey(preview.room) === roomShapeKey(plannerRoom),
+                      )
+                    : undefined;
+            const restored = host
+                ? {
+                      ...withOpenings,
+                      furniture: solvedToDrawFurniture(layout, host.origin, "furniture-layout"),
+                  }
+                : withOpenings;
             if (plannerRoom) setNewerPlannerRoom(getNewerPlannerRoom(restored, plannerRoom));
             sceneForInteractionRef.current = restored;
             setHistory({ past: [], present: restored, future: [] });
@@ -4738,14 +4768,18 @@ const DrawRoom: React.FC = () => {
                 "Восстановлен сохранённый чертёж. Имена помещений и проёмы можно продолжать редактировать.",
             );
         } else if (plannerRoom) {
-            const converted = roomToDrawingScene(plannerRoom);
+            const converted = roomToDrawingScene(plannerRoom, readPlannerLayout());
             if (converted) {
                 const scene = bindLegacyOpenings(cloneScene(converted));
                 sceneForInteractionRef.current = scene;
                 setHistory({ past: [], present: scene, future: [] });
                 setTool("select");
                 fitAfterSceneChangeRef.current = true;
-                setNotice("Комната перенесена с шага расстановки. Её стены и проёмы можно менять.");
+                setNotice(
+                    converted.furniture?.length
+                        ? "Комната и расстановка перенесены в планировщик. Стены, проёмы и мебель можно менять."
+                        : "Комната перенесена с шага расстановки. Её стены и проёмы можно менять.",
+                );
             }
         }
         setEditorSessionReady(true);
@@ -6686,7 +6720,7 @@ const DrawRoom: React.FC = () => {
         const questionnaireHandoff = isQuestionnairePlannerHandoffId(router.query.handoff)
             ? `&handoff=${router.query.handoff}`
             : "";
-        void router.push(withProjectParam(`/planner?drawRoom=1${questionnaireHandoff}`));
+        void router.push(withProjectParam(`/planner/layout?drawRoom=1${questionnaireHandoff}`));
     }, [plannerEligibilityError, plannerGridSnap, plannerPreview, router, scene.furniture]);
 
     useEffect(() => {
@@ -7246,6 +7280,14 @@ const DrawRoom: React.FC = () => {
     useEffect(() => {
         if (activeStepLost) setActiveToolGroup("walls");
     }, [activeStepLost]);
+    // «Итог» in the project steps opens the planner on its result step, also
+    // when the planner is already open and only the address changes.
+    const handledStepLink = useRef<string | null>(null);
+    useEffect(() => {
+        if (!router.isReady || !preview || handledStepLink.current === router.asPath) return;
+        handledStepLink.current = router.asPath;
+        if (router.query.step === "result") setActiveToolGroup("result");
+    }, [preview, router.asPath, router.isReady, router.query.step]);
     const stepAvailable = (group: ToolGroup) =>
         group === "rooms"
             ? renderedRoomRegions.length > 0
@@ -7306,10 +7348,10 @@ const DrawRoom: React.FC = () => {
     return (
         <>
             <Head>
-                <title>Чертёж комнаты · StyleFinder</title>
+                <title>Планировщик квартиры · StyleFinder</title>
                 <meta
                     name="description"
-                    content="Нарисуйте точный контур комнаты для планировщика StyleFinder."
+                    content="Нарисуйте квартиру, расставьте мебель по комнатам и получите план с проверкой проходов."
                 />
                 <meta name="robots" content="noindex,follow" />
             </Head>
@@ -7324,12 +7366,12 @@ const DrawRoom: React.FC = () => {
                 <header className={styles.appBar}>
                     <div className={styles.identity}>
                         <Link
-                            href={projectHref("/planner")}
+                            href="/projects"
                             className={styles.backButton}
-                            aria-label="Назад к планировщику"
+                            aria-label="Назад к проектам"
                         >
                             <ToolIcon name="back" />
-                            <span>К планировщику</span>
+                            <span>К проектам</span>
                         </Link>
                         <Link
                             href="/"
@@ -7342,9 +7384,9 @@ const DrawRoom: React.FC = () => {
                             <span>StyleFinder</span>
                         </Link>
                         <span className={styles.crumb}>
-                            Планировщик <b>/</b> Новый контур
+                            Планировщик <b>/</b> Квартира
                         </span>
-                        <h1>Чертёж комнаты</h1>
+                        <h1>Планировщик квартиры</h1>
                     </div>
                     <div className={styles.topTools} aria-label="Действия чертежа">
                         <button
@@ -10697,9 +10739,6 @@ const DrawRoom: React.FC = () => {
                             ? `X ${cursorPoint.x} · Y ${cursorPoint.y} мм`
                             : "Наведите курсор на поле"}
                     </span>
-                    <Link href={projectHref("/planner")} data-draw-room-status="planner-link">
-                        Вернуться к планировщику
-                    </Link>
                 </footer>
             </main>
         </>
