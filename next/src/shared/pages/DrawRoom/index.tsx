@@ -2778,8 +2778,10 @@ const keepDimensionLabelInView = <
     const viewEnd = viewStart + (horizontal ? view.width : view.height);
     const halfLabel = dimension.labelWidth / 2 + margin;
     const low =
-        Math.max(Math.min(dimension.dimensionStart[axis], dimension.dimensionEnd[axis]), viewStart) +
-        halfLabel;
+        Math.max(
+            Math.min(dimension.dimensionStart[axis], dimension.dimensionEnd[axis]),
+            viewStart,
+        ) + halfLabel;
     const high =
         Math.min(Math.max(dimension.dimensionStart[axis], dimension.dimensionEnd[axis]), viewEnd) -
         halfLabel;
@@ -8607,120 +8609,130 @@ const DrawRoom: React.FC = () => {
                                         }
                                         aria-hidden="true"
                                     >
-                                        {visiblePersistentWallDimensions.map(inView).map((dimension) => (
-                                            <g
-                                                key={`dimension-${dimension.segmentId}-${dimension.id}`}
-                                                data-draw-room-persistent-wall={dimension.segmentId}
-                                                data-draw-room-persistent-dimension={dimension.id}
-                                                data-draw-room-dimension-chain="persistent"
-                                                data-draw-room-persistent-dimension-kind={
-                                                    dimension.dimensionKind
-                                                }
-                                            >
-                                                <line
-                                                    className={styles.persistentDimensionExtension}
-                                                    data-draw-room-persistent-dimension-extension="start"
-                                                    x1={dimension.extensionStart.x}
-                                                    y1={dimension.extensionStart.y}
-                                                    x2={dimension.dimensionStart.x}
-                                                    y2={dimension.dimensionStart.y}
-                                                />
-                                                <line
-                                                    className={styles.persistentDimensionExtension}
-                                                    data-draw-room-persistent-dimension-extension="end"
-                                                    x1={dimension.extensionEnd.x}
-                                                    y1={dimension.extensionEnd.y}
-                                                    x2={dimension.dimensionEnd.x}
-                                                    y2={dimension.dimensionEnd.y}
-                                                />
-                                                <line
-                                                    className={styles.persistentDimensionLine}
-                                                    data-draw-room-persistent-dimension-line="true"
-                                                    x1={dimension.dimensionStart.x}
-                                                    y1={dimension.dimensionStart.y}
-                                                    x2={dimension.dimensionEnd.x}
-                                                    y2={dimension.dimensionEnd.y}
-                                                />
-                                                <line
-                                                    className={styles.persistentDimensionTick}
-                                                    data-draw-room-persistent-dimension-tick="start"
-                                                    x1={dimension.tickStart.x}
-                                                    y1={dimension.tickStart.y}
-                                                    x2={
-                                                        dimension.tickStart.x +
-                                                        (dimension.vertical
-                                                            ? dimension.labelHeight * 0.3
-                                                            : 0)
-                                                    }
-                                                    y2={
-                                                        dimension.tickStart.y +
-                                                        (dimension.vertical
-                                                            ? 0
-                                                            : dimension.labelHeight * 0.3)
-                                                    }
-                                                />
-                                                <line
-                                                    className={styles.persistentDimensionTick}
-                                                    data-draw-room-persistent-dimension-tick="end"
-                                                    x1={dimension.tickEnd.x}
-                                                    y1={dimension.tickEnd.y}
-                                                    x2={
-                                                        dimension.tickEnd.x -
-                                                        (dimension.vertical
-                                                            ? dimension.labelHeight * 0.3
-                                                            : 0)
-                                                    }
-                                                    y2={
-                                                        dimension.tickEnd.y -
-                                                        (dimension.vertical
-                                                            ? 0
-                                                            : dimension.labelHeight * 0.3)
-                                                    }
-                                                />
+                                        {visiblePersistentWallDimensions
+                                            .map(inView)
+                                            .map((dimension) => (
                                                 <g
-                                                    transform={
-                                                        dimension.vertical
-                                                            ? `rotate(-90 ${dimension.label.x} ${dimension.label.y})`
-                                                            : undefined
+                                                    key={`dimension-${dimension.segmentId}-${dimension.id}`}
+                                                    data-draw-room-persistent-wall={
+                                                        dimension.segmentId
+                                                    }
+                                                    data-draw-room-persistent-dimension={
+                                                        dimension.id
+                                                    }
+                                                    data-draw-room-dimension-chain="persistent"
+                                                    data-draw-room-persistent-dimension-kind={
+                                                        dimension.dimensionKind
                                                     }
                                                 >
-                                                    <rect
+                                                    <line
                                                         className={
-                                                            styles.persistentDimensionKnockout
+                                                            styles.persistentDimensionExtension
                                                         }
-                                                        x={
-                                                            dimension.label.x -
-                                                            dimension.labelWidth / 2
-                                                        }
-                                                        y={
-                                                            dimension.label.y -
-                                                            dimension.labelHeight / 2
-                                                        }
-                                                        width={dimension.labelWidth}
-                                                        height={dimension.labelHeight}
-                                                        rx={dimension.labelHeight * 0.18}
+                                                        data-draw-room-persistent-dimension-extension="start"
+                                                        x1={dimension.extensionStart.x}
+                                                        y1={dimension.extensionStart.y}
+                                                        x2={dimension.dimensionStart.x}
+                                                        y2={dimension.dimensionStart.y}
                                                     />
-                                                    <text
+                                                    <line
                                                         className={
-                                                            styles.persistentWallDimensionLabel
+                                                            styles.persistentDimensionExtension
                                                         }
-                                                        data-draw-room-wall-dimension="persistent"
-                                                        data-draw-room-persistent-dimension-label={
-                                                            dimension.id
+                                                        data-draw-room-persistent-dimension-extension="end"
+                                                        x1={dimension.extensionEnd.x}
+                                                        y1={dimension.extensionEnd.y}
+                                                        x2={dimension.dimensionEnd.x}
+                                                        y2={dimension.dimensionEnd.y}
+                                                    />
+                                                    <line
+                                                        className={styles.persistentDimensionLine}
+                                                        data-draw-room-persistent-dimension-line="true"
+                                                        x1={dimension.dimensionStart.x}
+                                                        y1={dimension.dimensionStart.y}
+                                                        x2={dimension.dimensionEnd.x}
+                                                        y2={dimension.dimensionEnd.y}
+                                                    />
+                                                    <line
+                                                        className={styles.persistentDimensionTick}
+                                                        data-draw-room-persistent-dimension-tick="start"
+                                                        x1={dimension.tickStart.x}
+                                                        y1={dimension.tickStart.y}
+                                                        x2={
+                                                            dimension.tickStart.x +
+                                                            (dimension.vertical
+                                                                ? dimension.labelHeight * 0.3
+                                                                : 0)
                                                         }
-                                                        x={dimension.label.x}
-                                                        y={dimension.label.y}
-                                                        style={{
-                                                            fontSize: dimensionFontSize * 1.08,
-                                                        }}
-                                                        textAnchor="middle"
-                                                        dominantBaseline="middle"
+                                                        y2={
+                                                            dimension.tickStart.y +
+                                                            (dimension.vertical
+                                                                ? 0
+                                                                : dimension.labelHeight * 0.3)
+                                                        }
+                                                    />
+                                                    <line
+                                                        className={styles.persistentDimensionTick}
+                                                        data-draw-room-persistent-dimension-tick="end"
+                                                        x1={dimension.tickEnd.x}
+                                                        y1={dimension.tickEnd.y}
+                                                        x2={
+                                                            dimension.tickEnd.x -
+                                                            (dimension.vertical
+                                                                ? dimension.labelHeight * 0.3
+                                                                : 0)
+                                                        }
+                                                        y2={
+                                                            dimension.tickEnd.y -
+                                                            (dimension.vertical
+                                                                ? 0
+                                                                : dimension.labelHeight * 0.3)
+                                                        }
+                                                    />
+                                                    <g
+                                                        transform={
+                                                            dimension.vertical
+                                                                ? `rotate(-90 ${dimension.label.x} ${dimension.label.y})`
+                                                                : undefined
+                                                        }
                                                     >
-                                                        {dimension.labelValue}
-                                                    </text>
+                                                        <rect
+                                                            className={
+                                                                styles.persistentDimensionKnockout
+                                                            }
+                                                            x={
+                                                                dimension.label.x -
+                                                                dimension.labelWidth / 2
+                                                            }
+                                                            y={
+                                                                dimension.label.y -
+                                                                dimension.labelHeight / 2
+                                                            }
+                                                            width={dimension.labelWidth}
+                                                            height={dimension.labelHeight}
+                                                            rx={dimension.labelHeight * 0.18}
+                                                        />
+                                                        <text
+                                                            className={
+                                                                styles.persistentWallDimensionLabel
+                                                            }
+                                                            data-draw-room-wall-dimension="persistent"
+                                                            data-draw-room-persistent-dimension-label={
+                                                                dimension.id
+                                                            }
+                                                            x={dimension.label.x}
+                                                            y={dimension.label.y}
+                                                            style={{
+                                                                fontSize: dimensionFontSize * 1.08,
+                                                            }}
+                                                            textAnchor="middle"
+                                                            dominantBaseline="middle"
+                                                        >
+                                                            {dimension.labelValue}
+                                                        </text>
+                                                    </g>
                                                 </g>
-                                            </g>
-                                        ))}
+                                            ))}
                                     </g>
                                 )}
                             {preview &&
