@@ -49,6 +49,7 @@ import {
     type DoorKind,
     type DoorOpening,
     type DrawRoomGridPresentationLevel,
+    type DrawRoomRegion,
     type Room,
     type RoomBoundarySegment,
     type WindowOpening,
@@ -3266,49 +3267,79 @@ const getClosedRoomDimensions = (
 };
 
 /**
- * On the phone canvas a full-height divider needs both its clear-span chain
- * and the two vertical clear-face values. Keeping the latter inside a narrow
- * bay consumes the only place where an H/S metric can be honestly legible.
- * Give those vertical face values their own exterior CAD lane; geometry and
- * values remain unchanged, only their presentation track moves.
+ * Once partitions split the contour, every room is dimensioned on its own:
+ * each clear face of the room gets one value inside that room, as on a
+ * measured apartment plan. A single clear total across several rooms, or a
+ * clear | partition | clear chain through them, would only sit on top of
+ * these values and repeat what they already say.
  */
-const moveInnerVerticalDimensionToExteriorLane = (
-    dimension: ArchitecturalDimension,
-    thickness: number,
+const getRoomRegionInnerDimensions = (
+    regions: readonly Pick<DrawRoomRegion, "signature" | "clearEdges" | "bounds">[],
+    origin: Point,
     millimetersPerPixel: number,
-): ArchitecturalDimension => {
-    if (!dimension.vertical) return dimension;
-    const deltaFromFace = {
-        x: dimension.dimensionStart.x - dimension.extensionStart.x,
-        y: dimension.dimensionStart.y - dimension.extensionStart.y,
-    };
-    const inwardLength = Math.hypot(deltaFromFace.x, deltaFromFace.y);
-    if (!inwardLength) return dimension;
-    const exterior = {
-        x: -deltaFromFace.x / inwardLength,
-        y: -deltaFromFace.y / inwardLength,
-    };
-    const exteriorDistance = thickness + Math.max(300, millimetersPerPixel * 40);
-    const targetStart = {
-        x: dimension.extensionStart.x + exterior.x * exteriorDistance,
-        y: dimension.extensionStart.y + exterior.y * exteriorDistance,
-    };
-    const translation = {
-        x: targetStart.x - dimension.dimensionStart.x,
-        y: targetStart.y - dimension.dimensionStart.y,
-    };
-    const move = (point: Point) => ({
-        x: point.x + translation.x,
-        y: point.y + translation.y,
-    });
-    return {
-        ...dimension,
-        dimensionStart: move(dimension.dimensionStart),
-        dimensionEnd: move(dimension.dimensionEnd),
-        tickStart: move(dimension.tickStart),
-        tickEnd: move(dimension.tickEnd),
-        label: move(dimension.label),
-    };
+): ArchitecturalDimension[] => {
+    const offset = Math.max(80, millimetersPerPixel * 10);
+    const tickHalf = Math.max(38, millimetersPerPixel * 4);
+    const labelHeight = Math.max(115, millimetersPerPixel * 18);
+    // Two opposite values must leave the room's H/S label its own middle
+    // band. Zoomed out too far for that, a room keeps its label and shows
+    // these values again once the person zooms in.
+    const lanesDepth = 2 * (offset + labelHeight);
+    const minimumWidth = lanesDepth + millimetersPerPixel * 72;
+    const minimumHeight = lanesDepth + millimetersPerPixel * 44;
+    return regions.flatMap((region, regionIndex) =>
+        region.clearEdges.flatMap((edge, edgeIndex) => {
+            const vertical = edge.start.x === edge.end.x;
+            const across = vertical
+                ? region.bounds.right - region.bounds.left
+                : region.bounds.bottom - region.bounds.top;
+            if (across < (vertical ? minimumWidth : minimumHeight)) return [];
+            const length =
+                Math.abs(edge.end.x - edge.start.x) + Math.abs(edge.end.y - edge.start.y);
+            const labelValue = formatWallLength(length);
+            const labelWidth = Math.max(
+                labelHeight * 1.45,
+                millimetersPerPixel * (labelValue.length * 8.2 + 14),
+            );
+            // A partition end or a short jog has no room for a readable value;
+            // the neighbouring faces already locate it.
+            if (length < labelWidth + tickHalf * 2) return [];
+            const start = { x: origin.x + edge.start.x, y: origin.y + edge.start.y };
+            const end = { x: origin.x + edge.end.x, y: origin.y + edge.end.y };
+            const { inward } = edge;
+            const dimensionStart = {
+                x: start.x + inward.x * offset,
+                y: start.y + inward.y * offset,
+            };
+            const dimensionEnd = { x: end.x + inward.x * offset, y: end.y + inward.y * offset };
+            return [
+                {
+                    id: `inner-room-${regionIndex}-${edgeIndex}`,
+                    kind: "inner" as const,
+                    dimensionStart,
+                    dimensionEnd,
+                    extensionStart: start,
+                    extensionEnd: end,
+                    tickStart: {
+                        x: dimensionStart.x - inward.x * tickHalf,
+                        y: dimensionStart.y - inward.y * tickHalf,
+                    },
+                    tickEnd: {
+                        x: dimensionEnd.x + inward.x * tickHalf,
+                        y: dimensionEnd.y + inward.y * tickHalf,
+                    },
+                    label: {
+                        x: (dimensionStart.x + dimensionEnd.x) / 2,
+                        y: (dimensionStart.y + dimensionEnd.y) / 2,
+                    },
+                    labelValue,
+                    vertical,
+                    labelWidth,
+                    labelHeight,
+                },
+            ];
+        }),
+    );
 };
 
 interface ClosedBranchDimension extends LiveWallDimension {
@@ -3317,132 +3348,10 @@ interface ClosedBranchDimension extends LiveWallDimension {
 }
 
 /**
- * A divider spanning a rectangular room owns the two clear spans it creates,
- * not a duplicate of the room depth/width. The shared perpendicular clear
- * dimension remains on the room chain, while these two local values let a
- * person size each side of the partition independently.
- */
-const getPartitionClearSpanDimensions = (
-    segment: DrawWallSegment,
-    contour: Point[],
-    thickness: number,
-    millimetersPerPixel: number,
-    placeOutside = false,
-): ClosedBranchDimension[] => {
-    if (contour.length !== 4) return [];
-    const faces = getDrawRoomWallFaceContours(contour, thickness);
-    const envelope = getWallEnvelopeFromPoints(segment.start, segment.end, thickness);
-    if (!faces || !envelope) return [];
-
-    const inner = getContourBounds(faces.innerFaceContour);
-    const outer = getContourBounds(faces.outerFaceContour);
-    const verticalPartition = segment.start.x === segment.end.x;
-    const crossesClearRoom = verticalPartition
-        ? envelope.top <= inner.top && envelope.bottom >= inner.bottom
-        : envelope.left <= inner.left && envelope.right >= inner.right;
-    if (!crossesClearRoom) return [];
-
-    const offset = Math.max(100, millimetersPerPixel * 9);
-    const tickHalf = Math.max(28, millimetersPerPixel * 4);
-    const makeDimension = (
-        dimensionId: string,
-        start: Point,
-        end: Point,
-        coordinate: number,
-    ): ClosedBranchDimension | null => {
-        const length = Math.abs(end.x - start.x) + Math.abs(end.y - start.y);
-        if (!length) return null;
-        const vertical = !verticalPartition;
-        const dimensionStart = vertical
-            ? { x: coordinate, y: start.y }
-            : { x: start.x, y: coordinate };
-        const dimensionEnd = vertical ? { x: coordinate, y: end.y } : { x: end.x, y: coordinate };
-        const labelValue = formatWallLength(length);
-        const labelSize = getLiveWallDimensionLabelSize(labelValue, millimetersPerPixel);
-        return {
-            id: "length-first",
-            dimensionId,
-            segmentId: segment.id,
-            extensionStart: start,
-            extensionEnd: end,
-            dimensionStart,
-            dimensionEnd,
-            tickStart: vertical
-                ? { x: dimensionStart.x - tickHalf, y: dimensionStart.y }
-                : { x: dimensionStart.x, y: dimensionStart.y - tickHalf },
-            tickEnd: vertical
-                ? { x: dimensionEnd.x + tickHalf, y: dimensionEnd.y }
-                : { x: dimensionEnd.x, y: dimensionEnd.y + tickHalf },
-            label: {
-                x: (dimensionStart.x + dimensionEnd.x) / 2,
-                y: (dimensionStart.y + dimensionEnd.y) / 2,
-            },
-            labelValue,
-            vertical,
-            ...labelSize,
-        };
-    };
-
-    if (verticalPartition) {
-        // A full-width three-part chain cannot share a 78 cm clear bay with
-        // two 14 px H/S metrics on a phone. Give it a dedicated exterior
-        // lane above the outer reference instead of letting either source of
-        // construction data cover the other.
-        const coordinate = placeOutside
-            ? outer.top - Math.max(300, millimetersPerPixel * 40)
-            : inner.top + offset;
-        return [
-            makeDimension(
-                "partition-leading-clear-span",
-                { x: inner.left, y: inner.top },
-                { x: envelope.left, y: inner.top },
-                coordinate,
-            ),
-            makeDimension(
-                "partition-material-thickness",
-                { x: envelope.left, y: inner.top },
-                { x: envelope.right, y: inner.top },
-                coordinate,
-            ),
-            makeDimension(
-                "partition-trailing-clear-span",
-                { x: envelope.right, y: inner.top },
-                { x: inner.right, y: inner.top },
-                coordinate,
-            ),
-        ].filter((dimension): dimension is ClosedBranchDimension => Boolean(dimension));
-    }
-
-    const coordinate = placeOutside
-        ? outer.left - Math.max(300, millimetersPerPixel * 40)
-        : inner.left + offset;
-    return [
-        makeDimension(
-            "partition-leading-clear-span",
-            { x: inner.left, y: inner.top },
-            { x: inner.left, y: envelope.top },
-            coordinate,
-        ),
-        makeDimension(
-            "partition-material-thickness",
-            { x: inner.left, y: envelope.top },
-            { x: inner.left, y: envelope.bottom },
-            coordinate,
-        ),
-        makeDimension(
-            "partition-trailing-clear-span",
-            { x: inner.left, y: envelope.bottom },
-            { x: inner.left, y: inner.bottom },
-            coordinate,
-        ),
-    ].filter((dimension): dimension is ClosedBranchDimension => Boolean(dimension));
-};
-
-/**
- * Closed-room chains own the perimeter. A full divider contributes its two
- * clear-side spans; an attached T wall contributes one concise auxiliary
- * length. Neither case revives the open-graph persistent layer or its
- * scattered thickness labels.
+ * Closed-room chains own the perimeter. An attached T wall in an undivided
+ * room contributes one concise auxiliary length; once walls split the room,
+ * the rooms' own clear faces carry every value instead. Neither case revives
+ * the open-graph persistent layer or its scattered thickness labels.
  */
 const getClosedBranchDimensions = (
     segments: DrawWallSegment[],
@@ -3450,7 +3359,6 @@ const getClosedBranchDimensions = (
     thickness: number,
     millimetersPerPixel: number,
     viewport: CanvasViewBox,
-    placePartitionClearSpansOutside = false,
 ): ClosedBranchDimension[] =>
     segments.flatMap((segment) => {
         const dimensions = getLiveWallDimensions(
@@ -3484,17 +3392,6 @@ const getClosedBranchDimensions = (
             })
             .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
 
-        // The divider's own full length would duplicate the room's clear span.
-        // Show the useful values instead: the two clear spans it creates.
-        if (attachments.length === 2) {
-            return getPartitionClearSpanDimensions(
-                segment,
-                contour,
-                thickness,
-                millimetersPerPixel,
-                placePartitionClearSpansOutside,
-            );
-        }
         if (attachments.length !== 1) return [];
         const [attachment] = attachments;
 
@@ -4354,16 +4251,27 @@ const DrawRoom: React.FC = () => {
                 : [],
         [annotationMillimetersPerPixel, preview, previewContourPoints, renderedWallThickness],
     );
+    // Partitions that split the contour hand the clear values over to each room.
+    const roomRegionInnerDimensions = useMemo(
+        () =>
+            preview && roomRegions.length > 1
+                ? getRoomRegionInnerDimensions(
+                      roomRegions,
+                      preview.origin,
+                      annotationMillimetersPerPixel,
+                  )
+                : [],
+        [annotationMillimetersPerPixel, preview, roomRegions],
+    );
     const closedBranchDimensions = useMemo(
         () =>
-            preview
+            preview && roomRegionInnerDimensions.length === 0
                 ? getClosedBranchDimensions(
                       closedRoomBranchSegments,
                       previewContourPoints,
                       renderedWallThickness,
                       annotationMillimetersPerPixel,
                       dimensionLayoutBounds,
-                      canvasSize.width > 0 && canvasSize.width <= 480,
                   )
                 : [],
         [
@@ -4373,49 +4281,19 @@ const DrawRoom: React.FC = () => {
             previewContourPoints,
             renderedWallThickness,
             dimensionLayoutBounds,
-            canvasSize.width,
+            roomRegionInnerDimensions.length,
         ],
     );
-    const displayedClosedRoomDimensions = useMemo(() => {
-        const fullVerticalPartition = closedRoomBranchSegments.find((segment) => {
-            const vertical = segment.start.x === segment.end.x;
-            const contourBounds = getContourBounds(previewContourPoints);
-            return vertical
-                ? segment.start.y <= contourBounds.top && segment.end.y >= contourBounds.bottom
-                : segment.start.x <= contourBounds.left && segment.end.x >= contourBounds.right;
-        });
-        if (!fullVerticalPartition) return closedRoomDimensions;
-        const splitAxisIsVertical = fullVerticalPartition.start.y === fullVerticalPartition.end.y;
-        // A through-partition replaces the matching clear total with a
-        // material-aware chain (clear + 10 + clear). Keep the exterior
-        // reference, but never present a competing inner total beside it.
-        const dimensions = closedRoomDimensions.filter(
-            (dimension) => dimension.kind !== "inner" || dimension.vertical !== splitAxisIsVertical,
-        );
-        // At a narrow-phone canvas, the two remaining vertical inner lanes
-        // would run through the only clear bays. Shift them outside the
-        // structural ring so the complete face chain and readable H/S marks
-        // coexist instead of covering one another.
-        const compactPhonePartition = canvasSize.width > 0 && canvasSize.width <= 480;
-        return compactPhonePartition
-            ? dimensions.map((dimension) =>
-                  dimension.kind === "inner" && dimension.vertical
-                      ? moveInnerVerticalDimensionToExteriorLane(
-                            dimension,
-                            renderedWallThickness,
-                            annotationMillimetersPerPixel,
-                        )
-                      : dimension,
-              )
-            : dimensions;
-    }, [
-        canvasSize.width,
-        closedRoomBranchSegments,
-        closedRoomDimensions,
-        annotationMillimetersPerPixel,
-        previewContourPoints,
-        renderedWallThickness,
-    ]);
+    const displayedClosedRoomDimensions = useMemo(
+        () =>
+            roomRegionInnerDimensions.length
+                ? [
+                      ...closedRoomDimensions.filter((dimension) => dimension.kind === "outer"),
+                      ...roomRegionInnerDimensions,
+                  ]
+                : closedRoomDimensions,
+        [closedRoomDimensions, roomRegionInnerDimensions],
+    );
     const compactClosedDimensionFallback =
         Boolean(preview) &&
         previewContourPoints.length > 0 &&

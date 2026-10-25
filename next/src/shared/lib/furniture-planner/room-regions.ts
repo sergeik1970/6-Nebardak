@@ -21,6 +21,19 @@ export interface DrawRoomRegion {
     bounds: { left: number; top: number; right: number; bottom: number };
     /** Largest uninterrupted clear cell; canvas labels must remain inside it. */
     labelBounds: { left: number; top: number; right: number; bottom: number };
+    /**
+     * Maximal straight pieces of the region's clear outline. Each is a face
+     * of a wall or partition as seen from inside this region, so a room's own
+     * dimensions can be taken from it instead of from the whole contour.
+     */
+    clearEdges: RegionClearEdge[];
+}
+
+export interface RegionClearEdge {
+    start: Point;
+    end: Point;
+    /** Unit normal pointing from the face into the region. */
+    inward: Point;
 }
 
 const REGION_NAME_MAX_LENGTH = 80;
@@ -70,6 +83,69 @@ export const normalizeRoomRegionsState = (input: unknown): RoomRegionsState | un
 };
 
 const cellKey = (xIndex: number, yIndex: number) => `${xIndex}:${yIndex}`;
+
+/**
+ * Collects the cell sides that face something other than the region itself
+ * and joins contiguous collinear sides that look the same way. A partition
+ * stub inside a room therefore yields its two long faces and its end.
+ */
+const getRegionClearEdges = (cellsInRegion: RegionCell[]): RegionClearEdge[] => {
+    const own = new Set(cellsInRegion.map((cell) => cellKey(cell.xIndex, cell.yIndex)));
+    const pieces = new Map<string, { from: number; to: number; line: number; inward: Point }[]>();
+    const add = (vertical: boolean, line: number, from: number, to: number, inward: Point) => {
+        const key = `${vertical ? "v" : "h"}:${line}:${inward.x}:${inward.y}`;
+        const list = pieces.get(key) ?? [];
+        list.push({ from, to, line, inward });
+        pieces.set(key, list);
+    };
+    cellsInRegion.forEach((cell) => {
+        if (!own.has(cellKey(cell.xIndex, cell.yIndex - 1)))
+            add(false, cell.top, cell.left, cell.right, { x: 0, y: 1 });
+        if (!own.has(cellKey(cell.xIndex, cell.yIndex + 1)))
+            add(false, cell.bottom, cell.left, cell.right, { x: 0, y: -1 });
+        if (!own.has(cellKey(cell.xIndex - 1, cell.yIndex)))
+            add(true, cell.left, cell.top, cell.bottom, { x: 1, y: 0 });
+        if (!own.has(cellKey(cell.xIndex + 1, cell.yIndex)))
+            add(true, cell.right, cell.top, cell.bottom, { x: -1, y: 0 });
+    });
+
+    const edges: RegionClearEdge[] = [];
+    pieces.forEach((list, key) => {
+        const vertical = key.startsWith("v");
+        list.sort((first, second) => first.from - second.from);
+        let current = { ...list[0] };
+        const flush = () =>
+            edges.push(
+                vertical
+                    ? {
+                          start: { x: current.line, y: current.from },
+                          end: { x: current.line, y: current.to },
+                          inward: current.inward,
+                      }
+                    : {
+                          start: { x: current.from, y: current.line },
+                          end: { x: current.to, y: current.line },
+                          inward: current.inward,
+                      },
+            );
+        list.slice(1).forEach((piece) => {
+            if (piece.from === current.to) {
+                current.to = piece.to;
+                return;
+            }
+            flush();
+            current = { ...piece };
+        });
+        flush();
+    });
+    return edges.sort(
+        (first, second) =>
+            first.start.y - second.start.y ||
+            first.start.x - second.start.x ||
+            first.end.y - second.end.y ||
+            first.end.x - second.end.x,
+    );
+};
 
 /**
  * Region detection works from the same orthogonal room and partition geometry
@@ -211,6 +287,7 @@ export const getDrawRoomRegions = (room: Room): DrawRoomRegion[] => {
                 right: labelCell.right,
                 bottom: labelCell.bottom,
             },
+            clearEdges: getRegionClearEdges(cellsInRegion),
         };
     });
 
