@@ -21,11 +21,11 @@
         border-color: var(--sf-color-brand-hover);
     }
 
+    // Тонкая оранжевая обводка по контуру поля вместо двойного кольца.
     &:focus-visible {
-        border-color: var(--sf-color-focus);
-        outline: 3px solid var(--sf-color-focus);
-        outline-offset: 2px;
-        box-shadow: var(--sf-focus-ring);
+        border-color: var(--sf-color-brand);
+        outline: none;
+        box-shadow: 0 0 0 1px var(--sf-color-brand);
     }
 
     &:disabled {
@@ -39,6 +39,10 @@
     &[aria-invalid="true"] {
         border-color: var(--sf-color-error);
         background-color: var(--sf-color-error-surface);
+
+        &:focus-visible {
+            box-shadow: 0 0 0 1px var(--sf-color-error);
+        }
     }
 }
 
