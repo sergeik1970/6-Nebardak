@@ -3,6 +3,8 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { User } from "../../entities/User/user.entity";
 import { UserSession } from "../../entities/UserSession/user-session.entity";
 import { EmailToken } from "../../entities/EmailToken/email-token.entity";
+import { LoginChallenge } from "../../entities/LoginChallenge/login-challenge.entity";
+import { AdminLoginCodeService } from "../../services/AdminLoginCodeService/admin-login-code.service";
 import { EmailTokenService } from "../../services/EmailTokenService/email-token.service";
 import { MailService } from "../../services/MailService/mail.service";
 import { AccountRecoveryService } from "../../services/AccountRecoveryService/account-recovery.service";
@@ -17,7 +19,14 @@ import { RegistrationEnabledGuard } from "../../guards/registration-enabled.guar
 import { AuthEnabledGuard } from "../../guards/auth-enabled.guard";
 
 @Module({
-    imports: [TypeOrmModule.forFeature([User, UserSession, EmailToken])],
+    imports: [
+        TypeOrmModule.forFeature([
+            User,
+            UserSession,
+            EmailToken,
+            LoginChallenge,
+        ]),
+    ],
     controllers: [AuthController, AccountController],
     providers: [
         AuthService,
@@ -25,6 +34,7 @@ import { AuthEnabledGuard } from "../../guards/auth-enabled.guard";
         EmailTokenService,
         MailService,
         AccountRecoveryService,
+        AdminLoginCodeService,
         AccountMaintenanceService,
         OperationalLogger,
         AuthGuard,

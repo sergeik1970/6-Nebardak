@@ -32,7 +32,10 @@
         "typeorm:create-migration": "npm run typeorm -- migration:create ./migrations/$npm_config_name",
         "typeorm:revert-migration": "npm run typeorm -- -d ./typeOrm.config.ts migration:revert",
         "typeorm:revert-migration:prod": "node ./node_modules/typeorm/cli.js migration:revert -d ./dist/typeOrm.config.js",
-        "admin:grant": "ts-node -r tsconfig-paths/register scripts/grant-admin.ts"
+        "admin:grant": "ts-node -r tsconfig-paths/register scripts/grant-admin.ts",
+        "admin:grant:prod": "node ./dist/scripts/grant-admin.js",
+        "admin:create": "ts-node -r tsconfig-paths/register scripts/create-admin.ts",
+        "admin:create:prod": "node ./dist/scripts/create-admin.js"
     },
     "dependencies": {
         "@nestjs/common": "11.2.7",
@@ -44,7 +47,7 @@
         "class-transformer": "0.5.1",
         "class-validator": "0.14.2",
         "express": "5.2.1",
-        "nodemailer": "10.0.15",
+        "nodemailer": "10.2.1",
         "pg": "^8.11.3",
         "reflect-metadata": "^0.2.0",
         "rxjs": "^7.8.1",
@@ -94,6 +97,7 @@
         "@typescript-eslint/typescript-estree": {
             "minimatch": "9.0.9"
         },
-        "brace-expansion": "2.1.7"
+        "brace-expansion": "2.1.7",
+        "multer": "2.5.0"
     }
 }

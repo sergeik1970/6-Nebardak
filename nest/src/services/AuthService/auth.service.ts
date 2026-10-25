@@ -12,6 +12,9 @@ import { LoginDto } from "../../dto/auth/login.dto";
 import { assertBcryptPasswordLength } from "../../security/bcrypt-password.policy";
 import { UserRole } from "../../entities/User/user.entity";
 
+/** bcrypt cost for every stored password; lower-cost hashes are never compared. */
+export const PASSWORD_HASH_COST = 12;
+
 export interface PublicUser {
     id: number;
     name: string;
@@ -32,7 +35,7 @@ export function toPublicUser(user: User): PublicUser {
 
 @Injectable()
 export class AuthService {
-    private readonly passwordHashCost = 12;
+    private readonly passwordHashCost = PASSWORD_HASH_COST;
     private readonly dummyPasswordHash =
         "$2b$12$YrfZoa2evRXChcix.a9odus2MkdPhEopc5Ycq6Q0A6G7nURa9VGde";
 
