@@ -2117,7 +2117,10 @@ test("openings are cut from wall material and expose an accessible inspector", a
     await expect(doorPreview).toBeVisible();
     await expect(doorPreview.locator("circle")).toHaveCount(1);
     await expect(doorPreview.locator("path")).toHaveCount(1);
-    await expect(doorPreview).toContainText("900 мм");
+    // The door being placed already splits the wall's chain at the cursor.
+    await expect(
+        page.locator("[data-draw-room-dimension-id$='-cut-1'] [data-draw-room-wall-dimension]"),
+    ).toContainText(["90", "90"]);
     await pointOnBoard(page, 0.5, 0.69);
     const door = page.locator("[data-draw-room-opening='door']");
     await expect(door).toHaveCount(1);
@@ -2129,10 +2132,11 @@ test("openings are cut from wall material and expose an accessible inspector", a
     await expect(width).toHaveValue("1000");
     await expect(door).toHaveAttribute("data-door-width-mm", "1000");
     await expect(door).toHaveAttribute("data-door-sweep-mm", "1000");
+    // The wall chains carry the opening: wall | door | wall, in centimetres.
     await expect(page.locator("[data-draw-room-door-width-label]")).toHaveCount(0);
-    await expect(page.locator("[data-draw-room-opening-dimension='width']")).toContainText(
-        "1000 мм",
-    );
+    await expect(
+        page.locator("[data-draw-room-dimension-id$='-cut-1'] [data-draw-room-wall-dimension]"),
+    ).toContainText(["100", "100"]);
     await expect
         .poll(async () =>
             page.evaluate(() => {
@@ -2167,7 +2171,9 @@ test("openings are cut from wall material and expose an accessible inspector", a
     await expect(page.locator("[data-draw-room-notice='true']")).toContainText("Проём перемещён");
 
     await inspector.getByRole("button", { name: "Закрыть параметры проёма" }).click();
-    await expect(page.locator("[data-draw-room-door-width-label]")).toContainText("1000 мм");
+    await expect(
+        page.locator("[data-draw-room-dimension-id$='-cut-1'] [data-draw-room-wall-dimension]"),
+    ).toContainText(["100", "100"]);
 
     await page.locator("[data-draw-room-tool='window']").click();
     await pointOnBoard(page, 0.5, 0.23);
@@ -4643,4 +4649,33 @@ test("a phone frames a freshly closed room and the tool dock reaches past an ope
     await openingGroup.click();
     await expect(page.locator("[data-draw-room-tool='window']")).toBeVisible();
     await expect(openingGroup).toHaveAttribute("aria-expanded", "true");
+});
+
+test("the wall tool resting on a wall measures from the cursor to each corner", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Desktop hover is covered once");
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await drawSimpleRect(page);
+    const chainPieces = page.locator(
+        "[data-draw-room-dimension-id*='-cut-'] [data-draw-room-wall-dimension]",
+    );
+    await expect(chainPieces).toHaveCount(0);
+    await openToolGroup(page, "walls");
+    await page.locator("[data-draw-room-tool='wall']").click();
+
+    // The top wall runs from x = 3200 to 12800 on its centre line, 100 mm thick.
+    const onTopWall = await getBoardScreenPoint(page, 5600, BOARD_HEIGHT_MM * 0.23);
+    await page.mouse.move(onTopWall.x, onTopWall.y);
+    await expect(
+        page.locator("[data-draw-room-dimension-id$='-cut-0'] [data-draw-room-wall-dimension]"),
+    ).toContainText(["245", "235"]);
+    await expect(
+        page.locator("[data-draw-room-dimension-id$='-cut-1'] [data-draw-room-wall-dimension]"),
+    ).toContainText(["725", "715"]);
+
+    // Inside the room, away from every wall, the chains are whole again.
+    const inside = await getBoardScreenPoint(page, 8000, 4600);
+    await page.mouse.move(inside.x, inside.y);
+    await expect(chainPieces).toHaveCount(0);
 });
