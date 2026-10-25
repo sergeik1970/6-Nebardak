@@ -23,6 +23,7 @@ import {
     SessionService,
 } from "../../services/SessionService/session.service";
 import { AdminLoginCodeService } from "../../services/AdminLoginCodeService/admin-login-code.service";
+import { TrustedDeviceService } from "../../services/TrustedDeviceService/trusted-device.service";
 import { AccountRecoveryService } from "../../services/AccountRecoveryService/account-recovery.service";
 import {
     EmailTokenDto,
@@ -37,8 +38,11 @@ import { RegistrationEnabledGuard } from "../../guards/registration-enabled.guar
 import { AuthEnabledGuard } from "../../guards/auth-enabled.guard";
 import {
     clearSessionCookie,
+    clearTrustedDeviceCookie,
     readSessionToken,
+    readTrustedDeviceToken,
     setSessionCookie,
+    setTrustedDeviceCookie,
 } from "../../security/session-cookie";
 
 /** Password accepted, emailed code still due; no session exists yet. */
@@ -55,6 +59,7 @@ export class AuthController {
         private readonly sessionService: SessionService,
         private readonly recovery: AccountRecoveryService,
         private readonly loginCodes: AdminLoginCodeService,
+        private readonly trustedDevices: TrustedDeviceService,
     ) {}
 
     @Throttle({
@@ -93,12 +98,21 @@ export class AuthController {
         @Res({ passthrough: true }) response: Response,
     ): Promise<{ user: PublicUser } | SecondFactorRequired> {
         const user = await this.authService.login(loginDto);
-        // An administrator gets no session from the password alone.
-        if (user.role === "admin") return this.requireLoginCode(user);
+        // An administrator gets no session from the password alone, unless
+        // this browser already passed the emailed code recently.
+        const secondFactor =
+            user.role === "admin" &&
+            (await this.trustedDevices.isTrusted(
+                user.id,
+                readTrustedDeviceToken(request),
+            ));
+        if (user.role === "admin" && !secondFactor) {
+            return this.requireLoginCode(user);
+        }
 
         // A sign-in always replaces whatever session this browser had.
         await this.sessionService.revoke(readSessionToken(request));
-        return this.startSession(user, request, response);
+        return this.startSession(user, request, response, { secondFactor });
     }
 
     /**
@@ -133,6 +147,8 @@ export class AuthController {
         }
 
         await this.sessionService.revoke(readSessionToken(request));
+        const device = await this.trustedDevices.issue(user.id);
+        setTrustedDeviceCookie(response, device.token, device.expiresAt);
         return this.startSession(user, request, response, {
             secondFactor: true,
         });
@@ -157,7 +173,9 @@ export class AuthController {
         @Res({ passthrough: true }) response: Response,
     ): Promise<void> {
         await this.sessionService.revokeAll(request.user.id);
+        await this.trustedDevices.revokeAll(request.user.id);
         clearSessionCookie(response);
+        clearTrustedDeviceCookie(response);
     }
 
     /** Opened from the letter; works on any device, signed in or not. */

@@ -4,6 +4,7 @@ import { EmailTokenService } from "../EmailTokenService/email-token.service";
 import { MailService } from "../MailService/mail.service";
 import { OperationalLogger } from "../OperationalLogger/operational-logger.service";
 import { SessionService } from "../SessionService/session.service";
+import { TrustedDeviceService } from "../TrustedDeviceService/trusted-device.service";
 import { AccountRecoveryService } from "./account-recovery.service";
 
 const user = {
@@ -26,12 +27,14 @@ function makeService() {
     };
     const mailService = { send: jest.fn().mockResolvedValue(undefined) };
     const sessionService = { revokeAll: jest.fn() };
+    const trustedDevices = { revokeAll: jest.fn() };
     const logger = { event: jest.fn() };
     const service = new AccountRecoveryService(
         authService as unknown as AuthService,
         emailTokens as unknown as EmailTokenService,
         mailService as unknown as MailService,
         sessionService as unknown as SessionService,
+        trustedDevices as unknown as TrustedDeviceService,
         logger as unknown as OperationalLogger,
     );
     return {
@@ -40,6 +43,7 @@ function makeService() {
         emailTokens,
         mailService,
         sessionService,
+        trustedDevices,
         logger,
     };
 }
@@ -115,7 +119,8 @@ describe("AccountRecoveryService", () => {
     });
 
     it("resets the password, confirms the mailbox and signs out everywhere", async () => {
-        const { service, authService, sessionService } = makeService();
+        const { service, authService, sessionService, trustedDevices } =
+            makeService();
 
         await expect(
             service.resetPassword("t".repeat(43), "new-password-1"),
@@ -127,6 +132,7 @@ describe("AccountRecoveryService", () => {
         );
         expect(authService.markEmailVerified).toHaveBeenCalledWith(3);
         expect(sessionService.revokeAll).toHaveBeenCalledWith(3);
+        expect(trustedDevices.revokeAll).toHaveBeenCalledWith(3);
     });
 
     it("changes nothing for an invalid or used reset link", async () => {

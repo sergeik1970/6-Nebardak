@@ -90,8 +90,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 14 THEN
-        RAISE EXCEPTION 'expected 14 applied migrations, got %', applied_migrations;
+    IF applied_migrations <> 15 THEN
+        RAISE EXCEPTION 'expected 15 applied migrations, got %', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table still exists';
@@ -178,6 +178,11 @@ BEGIN
        NOT has_table_privilege(current_user, 'public.login_challenge', 'DELETE') THEN
         RAISE EXCEPTION 'runtime role lacks required sign-in code rights';
     END IF;
+    IF NOT has_table_privilege(current_user, 'public.trusted_device', 'SELECT') OR
+       NOT has_table_privilege(current_user, 'public.trusted_device', 'INSERT') OR
+       NOT has_table_privilege(current_user, 'public.trusted_device', 'DELETE') THEN
+        RAISE EXCEPTION 'runtime role lacks required trusted-device rights';
+    END IF;
     IF NOT has_table_privilege(current_user, 'public.project', 'SELECT') OR
        NOT has_table_privilege(current_user, 'public.project', 'INSERT') OR
        NOT has_table_privilege(current_user, 'public.project', 'UPDATE') OR
@@ -252,6 +257,11 @@ FROM "user" WHERE "email" = 'runtime-ci@example.test';
 UPDATE "login_challenge" SET "attempts" = "attempts" + 1 WHERE "token_hash" = repeat('c', 64);
 UPDATE "user_session" SET "second_factor_at" = now() WHERE "token_hash" = repeat('a', 64);
 DELETE FROM "login_challenge" WHERE "token_hash" = repeat('c', 64);
+INSERT INTO "trusted_device" ("user_id", "token_hash", "expires_at")
+SELECT "id", repeat('e', 64), now() + interval '30 days'
+FROM "user" WHERE "email" = 'runtime-ci@example.test';
+SELECT "id" FROM "trusted_device" WHERE "token_hash" = repeat('e', 64) AND "expires_at" > now();
+DELETE FROM "trusted_device" WHERE "expires_at" <= now();
 SELECT "id" FROM "user" WHERE "email" = 'runtime-ci@example.test' FOR UPDATE;
 INSERT INTO "project" ("owner_user_id", "name", "document", "document_version")
 SELECT "id", 'Runtime CI', '{"version": 4}', 4
@@ -279,8 +289,8 @@ DECLARE
     applied_migrations integer;
 BEGIN
     SELECT COUNT(*) INTO applied_migrations FROM migrations;
-    IF applied_migrations <> 14 THEN
-        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 14', applied_migrations;
+    IF applied_migrations <> 15 THEN
+        RAISE EXCEPTION 'rollback/reapply left % migrations instead of 15', applied_migrations;
     END IF;
     IF to_regclass('public.deals') IS NOT NULL THEN
         RAISE EXCEPTION 'legacy deals table returned after rollback/reapply';

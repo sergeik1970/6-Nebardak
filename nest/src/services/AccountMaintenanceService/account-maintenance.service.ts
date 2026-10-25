@@ -15,9 +15,10 @@ const RUN_INTERVAL_MS = 6 * 60 * 60_000;
 const FIRST_RUN_DELAY_MS = 60_000;
 
 /**
- * Housekeeping for the single API instance: expired sessions, spent email
- * links and sign-in codes, and unverified accounts nobody has used for 30 days (their data
- * cascades away with them, as promised in the verification letter).
+ * Housekeeping for the single API instance: expired sessions and trusted
+ * devices, spent email links and sign-in codes, and unverified accounts
+ * nobody has used for 30 days (their data cascades away with them, as
+ * promised in the verification letter).
  * Only accounts that signed up under that promise qualify: older accounts
  * predate both the letter and server sessions, so for them "unverified and
  * no recent session" would mean everyone.
@@ -56,6 +57,10 @@ export class AccountMaintenanceService
         try {
             const sessions = await this.dataSource.query(
                 `DELETE FROM "user_session" WHERE "expires_at" <= $1`,
+                [now],
+            );
+            await this.dataSource.query(
+                `DELETE FROM "trusted_device" WHERE "expires_at" <= $1`,
                 [now],
             );
             await this.emailTokens.purge(now);

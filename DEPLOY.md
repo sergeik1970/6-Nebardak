@@ -125,7 +125,7 @@ docker compose --env-file .env.server -f docker-compose.yml --profile tools run 
 PostgreSQL получает только admin-переменные. One-off сервис
 `db-roles` создаёт отдельного владельца миграций и runtime-роль без права менять
 схему. Сервис `nest` получает только runtime-реквизиты, `migrate` — только
-миграционные. Runtime-роль получает DML для таблиц `user`, `user_session`, `email_token`, `login_challenge` и `project`, `SELECT`, `INSERT`
+миграционные. Runtime-роль получает DML для таблиц `user`, `user_session`, `email_token`, `login_challenge`, `trusted_device` и `project`, `SELECT`, `INSERT`
 и `UPDATE` для `planner_observations` и `USAGE` только для `user_id_seq` и
 `planner_observations_id_seq`; доступ к migration history, созданию временных объектов
 и остальным sequence отсутствует. Все роли должны иметь разные имена и пароли.

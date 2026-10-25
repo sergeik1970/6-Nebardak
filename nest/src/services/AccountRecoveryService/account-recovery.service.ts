@@ -10,6 +10,7 @@ import {
 } from "../MailService/mail-templates";
 import { OperationalLogger } from "../OperationalLogger/operational-logger.service";
 import { SessionService } from "../SessionService/session.service";
+import { TrustedDeviceService } from "../TrustedDeviceService/trusted-device.service";
 
 @Injectable()
 export class AccountRecoveryService {
@@ -18,6 +19,7 @@ export class AccountRecoveryService {
         private readonly emailTokens: EmailTokenService,
         private readonly mailService: MailService,
         private readonly sessionService: SessionService,
+        private readonly trustedDevices: TrustedDeviceService,
         private readonly logger: OperationalLogger,
     ) {}
 
@@ -78,7 +80,8 @@ export class AccountRecoveryService {
 
     /**
      * Sets the new password, proves mailbox ownership and ends every other
-     * sign-in: whoever knew the old password is locked out.
+     * sign-in and remembered device: whoever knew the old password is locked
+     * out.
      */
     async resetPassword(
         token: unknown,
@@ -90,6 +93,7 @@ export class AccountRecoveryService {
         await this.authService.setPassword(userId, password);
         await this.authService.markEmailVerified(userId);
         await this.sessionService.revokeAll(userId);
+        await this.trustedDevices.revokeAll(userId);
         this.logger.event("account.password_reset", { userId });
         return this.authService.getUserById(userId);
     }
