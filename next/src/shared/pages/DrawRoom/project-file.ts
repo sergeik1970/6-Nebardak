@@ -21,6 +21,7 @@ const record = (v: unknown): v is Record<string, unknown> =>
     Boolean(v && typeof v === "object" && !Array.isArray(v));
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const point = (v: unknown) => record(v) && finite(v.x) && finite(v.y);
+const optionalLength = (v: unknown) => v === undefined || (finite(v) && v > 0);
 const optionalEnum = (v: unknown, values: string[]) =>
     v === undefined || (typeof v === "string" && values.includes(v));
 const unique = (items: unknown[]) => {
@@ -85,13 +86,18 @@ export function parseDrawingProject(text: string): DrawingProjectScene {
                 optionalEnum(v.hinge, ["start", "end"]) &&
                 optionalEnum(v.swingDirection, ["inward", "outward"]) &&
                 optionalEnum(v.slidingMount, ["inward", "outward", "pocket"]) &&
-                optionalEnum(v.slidingDirection, ["start", "end"]),
+                optionalEnum(v.slidingDirection, ["start", "end"]) &&
+                optionalLength(v.height),
         )
     )
         return fail();
     if (
         !s.windows.every(
-            (v) => opening(v) && optionalEnum(v.windowKind, ["standard", "floor-to-ceiling"]),
+            (v) =>
+                opening(v) &&
+                optionalEnum(v.windowKind, ["standard", "floor-to-ceiling"]) &&
+                optionalLength(v.height) &&
+                (v.sillHeight === undefined || (finite(v.sillHeight) && v.sillHeight >= 0)),
         )
     )
         return fail();

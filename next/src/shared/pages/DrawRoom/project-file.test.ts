@@ -14,9 +14,12 @@ const scene: DrawingProjectScene = {
             width: 900,
             clearanceDepth: 900,
             drawingHostId: "wall",
+            height: 2000,
         },
     ],
-    windows: [{ id: "window", wall: "top", offset: 2500, width: 1000 }],
+    windows: [
+        { id: "window", wall: "top", offset: 2500, width: 1000, height: 1400, sillHeight: 900 },
+    ],
     radiators: [
         {
             id: "radiator-1",
@@ -57,6 +60,7 @@ describe("drawing project files", () => {
     it.each([
         { doors: [null] },
         { windows: [{ id: "bad", wall: "top", offset: 0, width: -1 }] },
+        { windows: [{ id: "bad", wall: "top", offset: 0, width: 900, sillHeight: -1 }] },
         { segments: [{ id: "bad", start: { x: "0", y: 0 }, end: { x: 100, y: 0 } }] },
         { furniture: [{ id: "unknown", definitionId: "no-such-item" }] },
         { regions: { version: 1, items: [null] } },
