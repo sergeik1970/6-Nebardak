@@ -92,3 +92,30 @@ describe("room template", () => {
         );
     });
 });
+
+describe("an older project's room on the drawing", () => {
+    it("carries the saved layout's pieces and the radiators onto the walls", () => {
+        const room: Room = {
+            ...createRectTemplateRoom(4000, 3600, undefined),
+            radiators: [
+                {
+                    id: "radiator-1",
+                    wall: "top",
+                    offset: 1000,
+                    width: 800,
+                    depth: 100,
+                    clearanceDepth: 300,
+                },
+            ],
+        };
+        const scene = roomToDrawingScene(room, [
+            { instanceId: "bed-1", definitionId: "double-bed", x: 200, y: 300, rotation: 0 },
+        ]);
+        expect(scene?.radiators).toHaveLength(1);
+        expect(scene?.furniture).toHaveLength(1);
+        const derived = deriveDrawWallGraphRoom(scene!.segments, scene!.wallThickness ?? 50);
+        // The piece keeps its place inside the room's clear corner.
+        expect(scene!.furniture![0].x - derived!.origin.x).toBe(200);
+        expect(scene!.furniture![0].y - derived!.origin.y).toBe(300);
+    });
+});

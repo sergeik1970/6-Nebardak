@@ -106,7 +106,31 @@ describe("project document v5", () => {
         });
         if (result.status === "success") {
             expect(isEmptyProjectDocument(result.value)).toBe(false);
-            expect(summarizeProjectDocument(result.value)).toEqual({ stage: "room" });
+            // The card reports the drawn room's own area.
+            expect(summarizeProjectDocument(result.value)).toEqual({
+                stage: "room",
+                areaM2: 11.31,
+            });
+            // Furniture on the drawing is the project's layout.
+            expect(
+                summarizeProjectDocument({
+                    ...result.value,
+                    drawing: {
+                        ...result.value.drawing!,
+                        furniture: [
+                            {
+                                id: "bed",
+                                definitionId: "single-bed",
+                                x: 0,
+                                y: 0,
+                                width: 900,
+                                depth: 2000,
+                                rotation: 0,
+                            },
+                        ],
+                    },
+                }).stage,
+            ).toBe("layout");
         }
     });
 

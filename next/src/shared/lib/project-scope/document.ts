@@ -6,12 +6,14 @@ import {
     type StyleFinderProjectDraft,
 } from "@/shared/lib/furniture-planner/project-draft";
 import { getRoomArea } from "@/shared/lib/furniture-planner/room-geometry";
+import { deriveDrawWallGraphRoom } from "@/shared/lib/furniture-planner/draw-room-wall-graph";
 import {
     parseDrawingProject,
     serializeDrawingProject,
     type DrawingProjectScene,
 } from "@/shared/pages/DrawRoom/project-file";
 import { DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY, type KeyValueStorage } from "./storage";
+import { STYLE_PROFILES } from "@/shared/lib/visual-preference";
 
 /**
  * The whole project as one JSON document — what the account stores.
@@ -185,21 +187,35 @@ export const isEmptyProjectDocument = (document: ProjectDocument): boolean =>
 
 export const summarizeProjectDocument = (document: ProjectDocument): ProjectSummary => {
     const furnitureCount = document.questionnaire.items.reduce((sum, item) => sum + item.count, 0);
-    const room = document.planner?.room;
-    const stage: ProjectStage = document.planner?.layout?.placements.length
-        ? "layout"
-        : room || hasDrawingContent(document.drawing)
-          ? "room"
-          : furnitureCount > 0
-            ? "questionnaire"
-            : "style";
+    // The apartment planner keeps walls and furniture in the drawing; an
+    // older project kept them in the layout step's room and saved layout.
+    const drawing = document.drawing;
+    const drawnRoom =
+        drawing && drawing.segments.length >= 4
+            ? deriveDrawWallGraphRoom(drawing.segments, drawing.wallThickness)?.room
+            : undefined;
+    const room = drawnRoom ?? document.planner?.room;
+    const stage: ProjectStage =
+        document.planner?.layout?.placements.length || drawing?.furniture?.length
+            ? "layout"
+            : room || hasDrawingContent(drawing)
+              ? "room"
+              : furnitureCount > 0
+                ? "questionnaire"
+                : "style";
 
     let areaM2: number | undefined;
     if (room) {
         const area = Math.round(getRoomArea(room) / 10_000) / 100;
         if (Number.isFinite(area) && area > 0) areaM2 = area;
     }
-    const styleLabel = document.questionnaire.meta?.styleLabel?.slice(0, 60);
+    // A questionnaire names the style; since the test leads straight to the
+    // planner, its result names it otherwise.
+    const testStyle = document.visualTest?.result?.primaryKey;
+    const styleLabel = (
+        document.questionnaire.meta?.styleLabel ??
+        (testStyle ? STYLE_PROFILES[testStyle]?.label : undefined)
+    )?.slice(0, 60);
 
     return {
         stage,

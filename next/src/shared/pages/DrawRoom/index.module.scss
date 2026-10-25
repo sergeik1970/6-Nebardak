@@ -5,6 +5,8 @@
     --draw-grid: #d8e0e3;
     --draw-grid-major: #b4c0c5;
     --draw-orange: #e97800;
+    /* The brand orange behind text: white on it reaches 5.3:1. */
+    --draw-orange-strong: #ad5000;
     --draw-blue: #3e89ad;
     --draw-brown: #9a603c;
     --draw-green: #22856b;
@@ -97,7 +99,7 @@
 
 .crumb {
     gap: 7px;
-    color: #718087;
+    color: #5c6b71;
     font-size: 12px;
     white-space: nowrap;
 }
@@ -210,7 +212,7 @@
 .primary {
     padding: 0 16px;
     color: #fff !important;
-    background: var(--draw-orange) !important;
+    background: var(--draw-orange-strong) !important;
     box-shadow: 0 2px 0 #b45a00;
     font-size: 13px;
     font-weight: 800;
@@ -329,6 +331,66 @@
     background: #fbfcfa;
 }
 
+.stepTabs {
+    min-width: 0;
+    display: flex;
+    flex: 0 1 auto;
+    gap: 4px;
+    overflow-x: auto;
+    margin-left: 12px;
+    scrollbar-width: none;
+}
+.stepTab {
+    min-height: 30px;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 0 12px;
+    color: #40545b;
+    background: transparent;
+    font: 760 12px/1 var(--font-primary);
+    white-space: nowrap;
+    cursor: pointer;
+}
+.stepTab span {
+    width: 18px;
+    height: 18px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 10px;
+}
+.stepTab:hover:not(:disabled),
+.stepTab:focus-visible {
+    border-color: var(--draw-orange);
+    color: #8a4900;
+    background: #fff0da;
+}
+.stepTab[aria-current="step"],
+.stepTab[aria-current="step"]:hover:not(:disabled),
+.stepTab[aria-current="step"]:focus-visible {
+    border-color: var(--draw-orange-strong);
+    color: #fff;
+    background: var(--draw-orange-strong);
+}
+.stepTab:disabled {
+    color: #a3afb3;
+    cursor: not-allowed;
+}
+@media (max-width: 700px) {
+    .stepTabs {
+        margin-left: 0;
+    }
+    .stepTab {
+        padding: 0 8px;
+        font-size: 11px;
+    }
+}
+
 .canvasMeta {
     min-height: 36px;
     display: flex;
@@ -361,7 +423,7 @@
 }
 .keyboardEntryTrigger kbd {
     margin-left: 3px;
-    color: #697a7f;
+    color: #56666d;
     font: 800 10px/1 var(--font-primary);
 }
 .roomInspectorToggle,
@@ -427,7 +489,7 @@
 .rulerSide {
     position: absolute;
     z-index: 2;
-    color: #7e9097;
+    color: #5c6d73;
     font: 700 10px/1 var(--font-primary);
     pointer-events: none;
 }
@@ -1236,7 +1298,7 @@
     margin-top: 10px;
     border: 0;
     color: #fffdfa;
-    background: var(--draw-orange);
+    background: var(--draw-orange-strong);
     box-shadow: 0 2px 0 #b45a00;
     font: 800 12px/1 var(--font-primary);
     cursor: pointer;
@@ -1298,9 +1360,26 @@
     background: #fff;
     font: 750 13px/1 var(--font-primary);
 }
-.roomInspectorItem input:focus-visible {
+.roomInspectorItem select {
+    grid-column: 2;
+    min-width: 0;
+    min-height: 32px;
+    border: 1px solid #bfcccf;
+    padding: 0 6px;
+    color: var(--draw-graphite);
+    background: #fff;
+    font: 650 12px/1 var(--font-primary);
+}
+.roomInspectorItem input:focus-visible,
+.roomInspectorItem select:focus-visible {
     outline: 2px solid var(--draw-orange);
     outline-offset: 1px;
+}
+.roomInspectorItem[data-selected="true"] {
+    margin: 0 -10px;
+    padding: 8px 10px;
+    box-shadow: inset 3px 0 0 var(--draw-orange);
+    background: #fff4e5;
 }
 .roomRegionLabel {
     pointer-events: none;
@@ -1312,6 +1391,7 @@
     vector-effect: non-scaling-stroke;
     filter: drop-shadow(0 2px 4px rgba(35, 49, 54, 0.14));
 }
+.roomRegionTitle,
 .roomRegionHeight,
 .roomRegionArea {
     font-family: var(--font-primary);
@@ -1329,6 +1409,9 @@
 }
 .roomRegionArea {
     fill: #b84432;
+}
+.roomRegionTitle {
+    fill: var(--draw-graphite);
 }
 .rightAngleFeedback path {
     fill: none;
@@ -1500,7 +1583,7 @@
 }
 .toolButton[aria-pressed="true"] {
     color: #fffdf8;
-    background: var(--draw-orange);
+    background: var(--draw-orange-strong);
     box-shadow: inset 3px 0 0 #ffc36e;
 }
 
@@ -2211,5 +2294,135 @@
             outline: 3px solid var(--sf-color-focus);
             outline-offset: 2px;
         }
+    }
+}
+
+.radiator {
+    cursor: pointer;
+    line {
+        stroke: #b5503c;
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+    }
+}
+.radiatorBody {
+    fill: #f6d6cb;
+    stroke: #b5503c;
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+}
+.radiatorClearance {
+    fill: rgba(214, 96, 70, 0.07);
+    stroke: #d38a77;
+    stroke-width: 1;
+    stroke-dasharray: 5 4;
+    vector-effect: non-scaling-stroke;
+}
+.radiator[data-selected="true"] .radiatorBody {
+    stroke: var(--draw-orange);
+    stroke-width: 2.5;
+}
+
+.resultWarning {
+    margin: 10px 0 0;
+    border-left: 3px solid #bf3e34;
+    padding: 6px 8px;
+    color: #8f271c;
+    background: #fbe5e0;
+    font-size: 12px;
+    line-height: 1.35;
+}
+.resultRoom {
+    border-top: 1px solid #e0e7e7;
+    padding: 10px 0 4px;
+    h3 {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin: 0 0 6px;
+        font-size: 13px;
+    }
+    h3 small {
+        color: #6a7b80;
+        font-size: 11px;
+        font-weight: 760;
+    }
+}
+.resultItems {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+    li {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    li small {
+        flex: 0 0 auto;
+        color: #6a7b80;
+    }
+    li[data-conflict="true"] {
+        color: #a63024;
+    }
+}
+.resultEmpty {
+    margin: 0;
+    color: #6a7b80;
+    font-size: 12px;
+}
+.resultActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+    button {
+        min-height: 36px;
+        border: 1px solid var(--draw-orange-strong);
+        color: #fff;
+        background: var(--draw-orange-strong);
+        font: 760 13px/1 var(--font-primary);
+        cursor: pointer;
+    }
+    button + button {
+        color: #8a4900;
+        background: #fff;
+    }
+    button:disabled {
+        opacity: 0.6;
+        cursor: progress;
+    }
+}
+.resultStatus {
+    min-height: 16px;
+    margin: 8px 0 0;
+    color: #42735c;
+    font-size: 12px;
+}
+.printSheet {
+    display: none;
+}
+@media print {
+    /* While a plan sheet is mounted, only it reaches the paper. */
+    :global(body):has(.printSheet) * {
+        visibility: hidden;
+    }
+    :global(body):has(.printSheet) .printSheet,
+    :global(body):has(.printSheet) .printSheet * {
+        visibility: visible;
+    }
+    .printSheet {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        display: block;
+        background: #fff;
+    }
+    .printSheet img {
+        width: 100%;
+        height: auto;
     }
 }

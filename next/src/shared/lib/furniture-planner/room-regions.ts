@@ -1,5 +1,5 @@
 import { getRoomPartitionSegments, getRoomVertices, pointInsideRoom } from "./room-geometry";
-import type { Room, RoomRegionMetadata, RoomRegionsState } from "./types";
+import type { Room, RoomKind, RoomRegionMetadata, RoomRegionsState } from "./types";
 
 type Point = { x: number; y: number };
 
@@ -13,9 +13,31 @@ interface RegionCell {
 }
 
 /** A computed usable region, suitable for a canvas label but never persisted directly. */
+export const ROOM_KINDS: readonly { kind: RoomKind; label: string }[] = [
+    { kind: "bedroom", label: "Спальня" },
+    { kind: "living", label: "Гостиная" },
+    { kind: "kitchen", label: "Кухня" },
+    { kind: "children", label: "Детская" },
+    { kind: "office", label: "Кабинет" },
+    { kind: "hallway", label: "Прихожая" },
+    { kind: "bathroom", label: "Санузел" },
+    { kind: "other", label: "Другое" },
+];
+
+const isRoomKind = (value: unknown): value is RoomKind =>
+    ROOM_KINDS.some((item) => item.kind === value);
+
+export const roomKindLabel = (kind: RoomKind) =>
+    ROOM_KINDS.find((item) => item.kind === kind)?.label ?? "";
+
+/** A name nobody typed: the numbered default or the label of a room kind. */
+export const isGeneratedRoomName = (name: string) =>
+    /^Помещение \d+$/.test(name) || ROOM_KINDS.some((item) => item.label === name);
+
 export interface DrawRoomRegion {
     signature: string;
     name: string;
+    kind?: RoomKind;
     areaSquareMillimeters: number;
     center: Point;
     bounds: { left: number; top: number; right: number; bottom: number };
@@ -27,6 +49,8 @@ export interface DrawRoomRegion {
      * dimensions can be taken from it instead of from the whole contour.
      */
     clearEdges: RegionClearEdge[];
+    /** Clear rectangles that make up the region, for hit-testing and highlight. */
+    clearRects: { left: number; top: number; right: number; bottom: number }[];
 }
 
 export interface RegionClearEdge {
@@ -76,7 +100,11 @@ export const normalizeRoomRegionsState = (input: unknown): RoomRegionsState | un
             return [];
         }
         seen.add(signature);
-        return [{ signature, name }];
+        return [
+            isRoomKind(candidate.kind)
+                ? { signature, name, kind: candidate.kind }
+                : { signature, name },
+        ];
     });
 
     return { version: 1, items };
@@ -215,7 +243,7 @@ export const getDrawRoomRegions = (room: Room): DrawRoomRegion[] => {
     }
 
     const metadataBySignature = new Map(
-        normalizeRoomRegionsState(room.regions)?.items.map((item) => [item.signature, item.name]),
+        normalizeRoomRegionsState(room.regions)?.items.map((item) => [item.signature, item]),
     );
     const visited = new Set<string>();
     const components: RegionCell[][] = [];
@@ -288,6 +316,12 @@ export const getDrawRoomRegions = (room: Room): DrawRoomRegion[] => {
                 bottom: labelCell.bottom,
             },
             clearEdges: getRegionClearEdges(cellsInRegion),
+            clearRects: cellsInRegion.map(({ left, top, right, bottom }) => ({
+                left,
+                top,
+                right,
+                bottom,
+            })),
         };
     });
 
@@ -298,14 +332,26 @@ export const getDrawRoomRegions = (room: Room): DrawRoomRegion[] => {
                 first.center.x - second.center.x ||
                 first.signature.localeCompare(second.signature),
         )
-        .map((region, index) => ({
-            ...region,
-            name: metadataBySignature.get(region.signature) ?? `Помещение ${index + 1}`,
-        }));
+        .map((region, index) => {
+            const metadata = metadataBySignature.get(region.signature);
+            return {
+                ...region,
+                name: metadata?.name ?? `Помещение ${index + 1}`,
+                ...(metadata?.kind ? { kind: metadata.kind } : {}),
+            };
+        });
 };
+
+/** The persisted part of a region: its identity, name and, once chosen, its kind. */
+export const toRoomRegionMetadata = ({
+    signature,
+    name,
+    kind,
+}: Pick<DrawRoomRegion, "signature" | "name" | "kind">): RoomRegionMetadata =>
+    kind ? { signature, name, kind } : { signature, name };
 
 /** Materializes exactly the derived, current signatures for safe persistence/export. */
 export const materializeRoomRegionsState = (room: Room): RoomRegionsState => ({
     version: 1,
-    items: getDrawRoomRegions(room).map(({ signature, name }) => ({ signature, name })),
+    items: getDrawRoomRegions(room).map(toRoomRegionMetadata),
 });

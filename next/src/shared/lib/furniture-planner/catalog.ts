@@ -710,6 +710,180 @@ export const ADDITIONAL_FURNITURE_CATALOG: FurnitureDefinition[] = [
 
 FURNITURE_CATALOG.push(...ADDITIONAL_FURNITURE_CATALOG);
 
+/**
+ * Kitchen units in common Russian module sizes: 60 cm deep worktop run,
+ * 35 cm deep upper units. Placed by hand on the drawing; the automatic
+ * layout does not offer them yet (see CATEGORY_ORDER).
+ */
+export const KITCHEN_FURNITURE_CATALOG: FurnitureDefinition[] = [
+    {
+        id: "kitchen-base-600",
+        label: "Напольный шкаф 60 см",
+        short: "Шкаф 60",
+        width: 600,
+        depth: 600,
+        max: 12,
+    },
+    {
+        id: "kitchen-base-400",
+        label: "Напольный шкаф 40 см",
+        short: "Шкаф 40",
+        width: 400,
+        depth: 600,
+        max: 8,
+    },
+    {
+        id: "kitchen-sink",
+        label: "Мойка с тумбой 80 см",
+        short: "Мойка",
+        width: 800,
+        depth: 600,
+        max: 2,
+        window: "allowed" as const,
+    },
+    {
+        id: "kitchen-cooker",
+        label: "Плита с духовкой 60 см",
+        short: "Плита",
+        width: 600,
+        depth: 600,
+        max: 2,
+    },
+    {
+        id: "kitchen-dishwasher",
+        label: "Посудомоечная машина 60 см",
+        short: "ПММ",
+        width: 600,
+        depth: 600,
+        max: 1,
+    },
+    {
+        id: "kitchen-washer",
+        label: "Стиральная машина",
+        short: "Стир. маш.",
+        width: 600,
+        depth: 600,
+        max: 1,
+    },
+    {
+        id: "kitchen-fridge",
+        label: "Холодильник",
+        short: "Холодильник",
+        width: 600,
+        depth: 650,
+        max: 2,
+        tall: true,
+    },
+    {
+        id: "kitchen-fridge-wide",
+        label: "Холодильник двухдверный",
+        short: "Холодильник",
+        width: 900,
+        depth: 700,
+        max: 1,
+        tall: true,
+    },
+    {
+        id: "kitchen-tall",
+        label: "Шкаф-пенал 60 см",
+        short: "Пенал",
+        width: 600,
+        depth: 600,
+        max: 4,
+        tall: true,
+    },
+    {
+        id: "kitchen-island",
+        label: "Кухонный остров",
+        short: "Остров",
+        width: 1200,
+        depth: 900,
+        max: 1,
+        island: true,
+    },
+    {
+        id: "kitchen-upper-600",
+        label: "Навесной шкаф 60 см",
+        short: "Навесной 60",
+        width: 600,
+        depth: 350,
+        max: 12,
+        upper: true,
+    },
+    {
+        id: "kitchen-upper-400",
+        label: "Навесной шкаф 40 см",
+        short: "Навесной 40",
+        width: 400,
+        depth: 350,
+        max: 8,
+        upper: true,
+    },
+    {
+        id: "kitchen-hood",
+        label: "Вытяжка 60 см",
+        short: "Вытяжка",
+        width: 600,
+        depth: 500,
+        max: 1,
+        upper: true,
+    },
+].map(
+    ({
+        id,
+        label,
+        short,
+        width,
+        depth,
+        max,
+        window,
+        tall,
+        island,
+        upper,
+    }: {
+        id: string;
+        label: string;
+        short: string;
+        width: number;
+        depth: number;
+        max: number;
+        window?: "allowed";
+        tall?: boolean;
+        island?: boolean;
+        upper?: boolean;
+    }): FurnitureDefinition => ({
+        id,
+        label,
+        shortLabel: short,
+        category: "kitchen",
+        body: rectShape(width, depth),
+        // A cook needs room to open doors and stand at the worktop.
+        clearanceZones: upper
+            ? []
+            : island
+              ? allSidesAccessZones(width, depth, 900)
+              : [frontZone(width, depth, 900)],
+        rotations: [0, 90, 180, 270],
+        equivalentRotationGroups: [],
+        placement: island
+            ? wallPlacement(true, false, [], "allowed")
+            : wallPlacement(
+                  false,
+                  true,
+                  ["back"],
+                  window ?? (tall || upper ? "forbidden" : "allowed"),
+              ),
+        relations: [],
+        maxCount: max,
+        removalPriority: 30,
+        visualKind: upper || tall ? "wood" : "surface",
+        source: schematicSource(),
+        ...(upper ? { mounting: "upper" as const } : {}),
+    }),
+);
+
+FURNITURE_CATALOG.push(...KITCHEN_FURNITURE_CATALOG);
+
 export const FURNITURE_BY_ID = new Map(
     FURNITURE_CATALOG.map((definition) => [definition.id, definition]),
 );
@@ -721,8 +895,10 @@ export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
     living: "Гостиная",
     media: "Медиа",
     children: "Детская",
+    kitchen: "Кухня",
 };
 
+/** Categories the automatic layout offers; kitchen units are placed by hand for now. */
 export const CATEGORY_ORDER: FurnitureCategory[] = [
     "sleep",
     "storage",

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { continueThroughRoomStep } from "./project-flow";
+import { buildRectRoom } from "./project-flow";
 
 test("preference first screen keeps its image preload budget", async ({ page }) => {
     await page.goto("/test", { waitUntil: "networkidle" });
@@ -64,81 +64,47 @@ test("desktop golden path reaches an editable and exportable plan", async ({ pag
     await page.keyboard.press("ArrowRight");
     await expect(resultGallery.locator("figcaption strong")).toHaveText("Детская");
 
-    await page.getByRole("link", { name: "Перейти к мебели" }).click();
-
-    await expect(page).toHaveURL(/\/questionnaire\?/);
-    await page.getByLabel("Односпальная").check();
-    await page.getByRole("checkbox", { name: /Книжный шкаф/ }).check();
-    await continueThroughRoomStep(page);
-    await expect(page.getByText(/Набор получен из анкеты/)).toBeVisible();
+    // Straight from the style to the apartment planner: no questionnaire on the way.
+    await page.getByRole("link", { name: "Перейти к планировке" }).click();
+    await expect(page).toHaveURL(/\/planner(\?|$)/);
     const steps = page.getByRole("navigation", { name: "Шаги проекта" });
-    await expect(steps.locator('[data-step="questionnaire"]')).toHaveAttribute(
-        "data-status",
-        "done",
-    );
-    await expect(steps.locator('[data-step="room"]')).toHaveAttribute("data-status", "done");
-    await expect(steps.locator('[data-step="layout"]')).toHaveAttribute("data-status", "current");
+    await expect(steps.locator('[data-step="style"]')).toHaveAttribute("data-status", "done");
+    await expect(steps.locator('[data-step="plan"]')).toHaveAttribute("data-status", "current");
     await expect(steps.locator('[data-step="result"]')).toHaveAttribute("data-status", "locked");
-    await page.getByRole("button", { name: "Уместить всё" }).click();
 
-    await expect(page.getByRole("heading", { name: "Итоговая спецификация" })).toBeVisible({
-        timeout: 60_000,
-    });
+    await buildRectRoom(page);
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
+
+    // The bedroom is furnished by the room's own set, then stays editable by hand.
+    await page.locator("[data-draw-room-step='furniture']").click();
+    const auto = page.locator("[data-draw-room-auto-layout='true']");
+    await auto.getByRole("button", { name: "Подобрать расстановку" }).click();
+    await auto.getByRole("button", { name: "Подобрать", exact: true }).click();
+    await auto.locator("[data-auto-layout-variant='0']").click({ timeout: 60_000 });
+    const pieces = page.locator("[data-draw-furniture^='furniture-']");
+    await expect(pieces).not.toHaveCount(0);
     await expect(steps.locator('[data-step="result"]')).toHaveAttribute("data-status", "done");
 
-    const furniture = page
-        .getByRole("button", { name: /^Односпальная кровать(?: · \d+)?,/ })
-        .first();
-    await furniture.click();
-    await page.getByRole("button", { name: "Повернуть на 90°" }).click();
-    const undo = page.getByRole("button", { name: /Отменить/ });
-    await expect(undo).toBeEnabled();
-    await undo.click();
-
-    const bookcase = page.getByRole("button", { name: /^Книжный шкаф(?: · \d+)?,/ }).first();
-    await bookcase.click();
-    await page.getByRole("button", { name: "Убрать предмет", exact: true }).click();
-    const removalDialog = page.getByRole("dialog", { name: "Убрать предмет из планировки?" });
-    await removalDialog.getByRole("button", { name: "Убрать предмет", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Удалено из проекта" })).toBeVisible();
-
+    await page.locator("[data-draw-room-step='result']").click();
+    const result = page.locator("[data-draw-room-result='true']");
+    await expect(result).toContainText("Двуспальная кровать");
     const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Скачать PNG" }).click();
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/\.png$/i);
+    await result.getByRole("button", { name: "Скачать PNG" }).click();
+    expect((await downloadPromise).suggestedFilename()).toMatch(/\.png$/i);
 
     await page.evaluate(() => {
         window.print = () => {
             document.body.dataset.printCalled = "true";
         };
     });
-    await page.getByRole("button", { name: "Печать / сохранить PDF" }).click();
-    await expect(page.locator("body")).toHaveAttribute("data-print-called", "true");
-
-    await page.emulateMedia({ media: "print" });
-    await expect(page.getByRole("group", { name: /План комнаты \d+/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Итоговая спецификация" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Удалено из проекта" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Проверено алгоритмом" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Ограничения и допущения" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Печать / сохранить PDF" })).toBeHidden();
-    const pdf = await page.pdf({
-        format: "A4",
-        landscape: true,
-        printBackground: true,
-        preferCSSPageSize: true,
+    await result.getByRole("button", { name: "Печать" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-print-called", "true", {
+        timeout: 20_000,
     });
-    expect(pdf.byteLength).toBeGreaterThan(10_000);
-    await testInfo.attach("stylefinder-golden-plan.pdf", {
-        body: pdf,
-        contentType: "application/pdf",
-    });
-    await page.emulateMedia({ media: "screen" });
 
-    await page.reload();
-    await expect(
-        page.getByRole("button", { name: /^Односпальная кровать(?: · \d+)?,/ }).first(),
-    ).toBeVisible();
-    await expect(page.getByRole("button", { name: /Отменить/ })).toBeEnabled();
-    await expect(page.getByRole("button", { name: /Вернуть/ })).toBeDisabled();
+    // The plan, with its furniture, is still there after a reload.
+    const placed = await pieces.count();
+    await page.reload({ waitUntil: "networkidle" });
+    await expect(pieces).toHaveCount(placed);
 });

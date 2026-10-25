@@ -95,3 +95,23 @@ describe("draw furniture handoff", () => {
         expect(geometry.clearanceRects[0]).toMatchObject({ x: 0, y: 800, width: 1200, depth: 600 });
     });
 });
+
+describe("kitchen units in the handoff", () => {
+    it("carries the base run and leaves the upper units on the drawing", () => {
+        const base = {
+            id: "base",
+            definitionId: "kitchen-base-600",
+            x: 1050,
+            y: 1050,
+            width: 600,
+            depth: 600,
+            rotation: 0 as const,
+        };
+        const upper = { ...base, id: "upper", definitionId: "kitchen-upper-600", depth: 350 };
+        const result = prepareDrawFurnitureHandoff(room, { x: 1050, y: 1050 }, [base, upper]);
+        expect(result.error).toBeNull();
+        expect(result.placements.map((placement) => placement.definitionId)).toEqual([
+            "kitchen-base-600",
+        ]);
+    });
+});

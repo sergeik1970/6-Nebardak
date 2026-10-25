@@ -54,12 +54,11 @@ export const useProjectProgress = (): ProjectProgress | null => {
 
 const CURRENT_STEP_BY_PATH: Record<string, ProjectStepId> = {
     "/test": "style",
-    "/questionnaire": "questionnaire",
-    "/planner/draw": "room",
-    "/planner": "layout",
+    "/planner": "plan",
+    "/planner/draw": "plan",
 };
 
-/** «Стиль → Анкета → Комната → Расстановка → Итог» above every step of a project. */
+/** «Стиль → Планировка → Итог» above every step of a project. */
 const ProjectStepper: React.FC<{ projectId: string | null }> = ({ projectId }) => {
     const router = useRouter();
     const progress = useProjectProgress();

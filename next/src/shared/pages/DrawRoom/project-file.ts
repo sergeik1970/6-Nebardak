@@ -1,8 +1,10 @@
-import type {
-    DrawWallSegment,
-    DoorOpening,
-    WindowOpening,
-    Room,
+import {
+    ROOM_KINDS,
+    type DrawWallSegment,
+    type DoorOpening,
+    type WindowOpening,
+    type RadiatorObstacle,
+    type Room,
 } from "@/shared/lib/furniture-planner";
 import { readFurniture, type DrawFurniture } from "./furniture";
 
@@ -10,6 +12,7 @@ export interface DrawingProjectScene {
     segments: DrawWallSegment[];
     doors: DoorOpening[];
     windows: WindowOpening[];
+    radiators?: RadiatorObstacle[];
     furniture?: DrawFurniture[];
     wallThickness?: Room["wallThickness"];
     regions?: Room["regions"];
@@ -92,6 +95,20 @@ export function parseDrawingProject(text: string): DrawingProjectScene {
         )
     )
         return fail();
+    if (
+        s.radiators !== undefined &&
+        (!Array.isArray(s.radiators) ||
+            !unique(s.radiators) ||
+            !s.radiators.every(
+                (v) =>
+                    opening(v) &&
+                    finite(v.depth) &&
+                    v.depth > 0 &&
+                    finite(v.clearanceDepth) &&
+                    v.clearanceDepth >= 0,
+            ))
+    )
+        return fail();
     if (s.wallThickness !== undefined && s.wallThickness !== 50 && s.wallThickness !== 100)
         return fail();
     if (
@@ -100,7 +117,11 @@ export function parseDrawingProject(text: string): DrawingProjectScene {
             s.regions.version !== 1 ||
             !Array.isArray(s.regions.items) ||
             !s.regions.items.every(
-                (v) => record(v) && typeof v.signature === "string" && typeof v.name === "string",
+                (v) =>
+                    record(v) &&
+                    typeof v.signature === "string" &&
+                    typeof v.name === "string" &&
+                    (v.kind === undefined || ROOM_KINDS.some((item) => item.kind === v.kind)),
             ))
     )
         return fail();

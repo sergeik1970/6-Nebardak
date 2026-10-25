@@ -49,7 +49,14 @@ export interface CurtainBufferPolicy {
     note: string;
 }
 
-export type FurnitureCategory = "sleep" | "storage" | "work" | "living" | "media" | "children";
+export type FurnitureCategory =
+    | "sleep"
+    | "storage"
+    | "work"
+    | "living"
+    | "media"
+    | "children"
+    | "kitchen";
 
 export type FurnitureAssetKey =
     | "single-bed"
@@ -177,6 +184,11 @@ export interface FurnitureDefinition {
     assetKey?: FurnitureAssetKey;
     visualKind: "wood" | "fabric" | "screen" | "surface" | "nursery";
     source: FurnitureDefinitionSource;
+    /**
+     * Upper wall units hang above the floor pieces: on the plan they share
+     * the footprint of base units and only meet walls and each other.
+     */
+    mounting?: "upper";
 }
 
 export interface FurnitureInstance {
@@ -268,6 +280,8 @@ export interface WindowOpening {
 
 export interface RadiatorObstacle {
     id: string;
+    /** DrawRoom ownership anchor: a stable wall ID in the connected building. */
+    drawingHostId?: string;
     wall: Wall;
     /** Required for orthogonal rooms; optional for legacy rectangular drafts. */
     segmentId?: string;
@@ -277,10 +291,22 @@ export interface RadiatorObstacle {
     clearanceDepth: number;
 }
 
+/** What a room is used for; it decides which furniture is offered first. */
+export type RoomKind =
+    | "bedroom"
+    | "living"
+    | "kitchen"
+    | "children"
+    | "office"
+    | "hallway"
+    | "bathroom"
+    | "other";
+
 /** A user name attached to a stable, derived region geometry signature. */
 export interface RoomRegionMetadata {
     signature: string;
     name: string;
+    kind?: RoomKind;
 }
 
 /**

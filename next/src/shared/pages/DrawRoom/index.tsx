@@ -1,11 +1,10 @@
-import { prepareDrawFurnitureHandoff } from "@/shared/lib/furniture-planner/draw-furniture-handoff";
 import {
     DRAW_ROOM_EDITOR_SESSION_STORAGE_KEY,
     getProjectStorage,
     withProjectParam,
 } from "@/shared/lib/project-scope/storage";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -19,8 +18,11 @@ import {
     getRoomSegment,
     isHingedDoor,
     materializeRoomRegionsState,
+    isGeneratedRoomName,
+    roomKindLabel,
+    toRoomRegionMetadata,
+    ROOM_KINDS,
     pointInsideRoom,
-    saveDrawRoomDraft,
     DRAW_ROOM_GRID_ORIGIN_MM,
     DRAW_ROOM_GRID_SNAP_MM,
     DRAW_ROOM_CONSTRUCTION_WALL_THICKNESS_MM,
@@ -28,12 +30,17 @@ import {
     DRAW_ROOM_WALL_LANE_MM,
     getDoorMaterialCollisionError,
     getDoorFurnitureObstacles,
+    getRadiatorBody,
+    getRadiatorServiceObstacle,
+    buildDrawingPlanSpecification,
+    getPlanExportFilename,
+    renderPlanSpecificationPng,
     getDrawRoomGridPresentation,
     getDrawRoomWallFaceContours,
     ensureUniqueDrawWallSegmentIds,
     snapDrawRoomCoordinate,
     snapDrawRoomWallLaneCentre,
-    snapRoomToPlannerGrid,
+    validateLayout,
     validateRoomGeometry,
     resolveDrawWallAnchor,
     moveDrawWallContourSegment,
@@ -42,7 +49,6 @@ import {
     resizeDrawWallRun,
     findMovedDrawWallContourEdge,
     getRoomVertices,
-    isQuestionnairePlannerHandoffId,
     readDrawRoomDraft,
     readProjectDraft,
     type DrawWallSegment,
@@ -50,24 +56,67 @@ import {
     type DoorOpening,
     type DrawRoomGridPresentationLevel,
     type DrawRoomRegion,
+    type Placement,
+    type RadiatorObstacle,
     type Room,
     type RoomBoundarySegment,
+    type RoomKind,
     type WindowOpening,
 } from "@/shared/lib/furniture-planner";
 import styles from "./index.module.scss";
 import FurnitureEditor from "./FurnitureEditor";
 import MeasureTool from "./MeasureTool";
-import { readFurniture, type DrawFurniture } from "./furniture";
+import {
+    furnitureBelongsToRoom,
+    furnitureDefinition,
+    furnitureError,
+    furnitureGeometry,
+    readFurniture,
+    type DrawFurniture,
+    type FurnitureRoom,
+} from "./furniture";
+import ResultPanel, { type ResultItem, type ResultRoom } from "./ResultPanel";
+import AutoLayoutPanel, { type AutoLayoutVariantSummary } from "./AutoLayoutPanel";
+import {
+    WORKING_CORE_OBSERVATION_ID,
+    createPlannerObservationRequests,
+    type PlannerObservationTarget,
+} from "./planner-observation";
+import {
+    plannerObservationService,
+    type PlannerObservationCreateInput,
+    type PlannerObservationVerdict,
+} from "@/services/plannerObservationService";
+import { useAuth } from "@/contexts/AuthContext";
+import { isAuthEnabled } from "@/shared/config/runtime";
+import {
+    ROOM_KIND_FURNITURE,
+    buildRegionSolverRoom,
+    buildRoomInstances,
+    solvedToDrawFurniture,
+} from "./auto-layout";
+import type {
+    SolverWorkerRequest,
+    SolverWorkerResponse,
+} from "@/shared/lib/furniture-planner/solver.worker";
 import Dialog from "@/shared/components/Dialog";
 import { RECT_TEMPLATE_LIMITS, createRectTemplateRoom, roomToDrawingScene } from "./room-template";
 
 import ProjectTools, { DEFAULT_DRAWING_LAYERS } from "./ProjectTools";
-import { useProjectHref } from "@/shared/lib/project-scope/ProjectScope";
 import { trackGoal } from "@/shared/lib/analytics";
 
-type Tool = "select" | "wall" | "door" | "window";
-type ToolGroup = "walls" | "openings" | "furniture";
-type KeyboardTool = Exclude<Tool, "select">;
+type Tool = "select" | "wall" | "door" | "window" | "radiator";
+type ToolGroup = "walls" | "openings" | "rooms" | "furniture" | "result";
+
+/** The drawing is worked through in these steps, each its own layer of the plan. */
+const DRAW_STEPS: { group: ToolGroup; label: string; controls?: string }[] = [
+    { group: "walls", label: "Стены", controls: "draw-room-walls-tools" },
+    { group: "openings", label: "Двери и окна", controls: "draw-room-opening-tools" },
+    { group: "rooms", label: "Помещения" },
+    { group: "furniture", label: "Мебель" },
+    { group: "result", label: "Итог" },
+];
+type KeyboardTool = Exclude<Tool, "select" | "radiator">;
 type Point = { x: number; y: number };
 
 interface Scene {
@@ -75,6 +124,8 @@ interface Scene {
     segments: DrawWallSegment[];
     doors: DoorOpening[];
     windows: WindowOpening[];
+    /** Heating under a window or along a wall; missing in older drafts. */
+    radiators?: RadiatorObstacle[];
     /** Missing scenes are pre-constructive 50 mm drafts. */
     wallThickness?: Room["wallThickness"];
     regions?: Room["regions"];
@@ -233,6 +284,18 @@ const MIN_ZOOM = 0.25;
 const WHEEL_ZOOM_SENSITIVITY = 0.0022;
 const BOARD_ASPECT = BOARD_WIDTH_MM / BOARD_HEIGHT_MM;
 
+/** A solver request without the id the worker channel adds. */
+type SolverPayload = SolverWorkerRequest extends infer Request
+    ? Request extends SolverWorkerRequest
+        ? Omit<Request, "requestId">
+        : never
+    : never;
+
+const RADIATOR_DEFAULT_WIDTH_MM = 800;
+const RADIATOR_DEPTH_MM = 100;
+/** Free air in front of a radiator; furniture must not stand in it. */
+const RADIATOR_CLEARANCE_MM = 300;
+
 const EMPTY_SCENE: Scene = {
     segments: [],
     doors: [],
@@ -331,6 +394,9 @@ const cloneScene = (scene: Scene): Scene => ({
     })),
     doors: scene.doors.map((door) => ({ ...door })),
     windows: scene.windows.map((window) => ({ ...window })),
+    ...(scene.radiators?.length
+        ? { radiators: scene.radiators.map((radiator) => ({ ...radiator })) }
+        : {}),
     ...(scene.wallThickness ? { wallThickness: scene.wallThickness } : {}),
     ...(scene.regions
         ? {
@@ -349,6 +415,16 @@ const isDraftPoint = (value: unknown): value is Point =>
             Number.isFinite((value as Point).x) &&
             Number.isFinite((value as Point).y),
     );
+
+const isDraftRadiator = (value: unknown): value is RadiatorObstacle => {
+    const item = value as RadiatorObstacle | null;
+    return Boolean(
+        item &&
+            typeof item.id === "string" &&
+            typeof item.wall === "string" &&
+            [item.offset, item.width, item.depth, item.clearanceDepth].every(Number.isFinite),
+    );
+};
 
 /** The editor cache is deliberately separate from the Planner handoff draft. */
 const readEditorSession = (): Scene | null => {
@@ -377,6 +453,9 @@ const readEditorSession = (): Scene | null => {
                 segments: ensureUniqueDrawWallSegmentIds(parsed.segments as DrawWallSegment[]),
                 doors: parsed.doors as DoorOpening[],
                 windows: parsed.windows as WindowOpening[],
+                ...(Array.isArray(parsed.radiators)
+                    ? { radiators: parsed.radiators.filter(isDraftRadiator) }
+                    : {}),
                 furniture: readFurniture(parsed.furniture),
                 ...(parsed.wallThickness === 50 || parsed.wallThickness === 100
                     ? { wallThickness: parsed.wallThickness }
@@ -580,6 +659,14 @@ const drawIcon = (name: Tool | "clear" | "reset" | "undo" | "redo" | "fit" | "ba
             <>
                 <rect {...common} x="4" y="5" width="16" height="14" rx="1" />
                 <path {...common} d="M12 5v14M4 12h16" />
+            </>
+        );
+    }
+    if (name === "radiator") {
+        return (
+            <>
+                <rect {...common} x="3" y="7" width="18" height="11" rx="1.5" />
+                <path {...common} d="M7.5 7v11M12 7v11M16.5 7v11M5 18v2M19 18v2" />
             </>
         );
     }
@@ -846,7 +933,13 @@ const regionPrefix = (preview: RoomPreview) => `building:${preview.wallIds?.[0]}
 const getRoomPreviews = (scene: Scene): RoomPreview[] => {
     const previews = getDrawWallComponents(scene.segments)
         .flatMap((segments) => {
-            const preview = getSingleRoomPreview({ ...scene, segments, doors: [], windows: [] });
+            const preview = getSingleRoomPreview({
+                ...scene,
+                segments,
+                doors: [],
+                windows: [],
+                radiators: [],
+            });
             return preview ? [{ ...preview, wallIds: segments.map((segment) => segment.id) }] : [];
         })
         .sort((a, b) => {
@@ -859,38 +952,53 @@ const getRoomPreviews = (scene: Scene): RoomPreview[] => {
                 );
             return area(b) - area(a);
         });
-    return previews.map((preview, index) => {
-        const owns = (item: DoorOpening | WindowOpening) =>
-            item.drawingHostId ? preview.wallIds.includes(item.drawingHostId) : index === 0;
-        return {
-            ...preview,
-            room: {
-                ...preview.room,
-                regions: materializeRoomRegionsState({
+    return previews
+        .map((preview, index) => {
+            const owns = (item: DoorOpening | WindowOpening) =>
+                item.drawingHostId ? preview.wallIds.includes(item.drawingHostId) : index === 0;
+            return {
+                ...preview,
+                room: {
                     ...preview.room,
-                    regions: {
-                        version: 1,
-                        items: (scene.regions?.items ?? []).flatMap((item) =>
-                            item.signature.startsWith(regionPrefix(preview))
-                                ? [
-                                      {
-                                          ...item,
-                                          signature: item.signature.slice(
-                                              regionPrefix(preview).length,
-                                          ),
-                                      },
-                                  ]
-                                : index === 0 && !item.signature.startsWith("building:")
-                                  ? [item]
-                                  : [],
-                        ),
-                    },
-                }),
-                doors: scene.doors.filter(owns),
-                windows: scene.windows.filter(owns),
-            },
-        };
-    });
+                    regions: materializeRoomRegionsState({
+                        ...preview.room,
+                        regions: {
+                            version: 1,
+                            items: (scene.regions?.items ?? []).flatMap((item) =>
+                                item.signature.startsWith(regionPrefix(preview))
+                                    ? [
+                                          {
+                                              ...item,
+                                              signature: item.signature.slice(
+                                                  regionPrefix(preview).length,
+                                              ),
+                                          },
+                                      ]
+                                    : index === 0 && !item.signature.startsWith("building:")
+                                      ? [item]
+                                      : [],
+                            ),
+                        },
+                    }),
+                    doors: scene.doors.filter(owns),
+                    windows: scene.windows.filter(owns),
+                },
+            };
+        })
+        .map((preview, index) => {
+            const owns = (item: RadiatorObstacle) =>
+                item.drawingHostId ? preview.wallIds.includes(item.drawingHostId) : index === 0;
+            // A radiator whose wall was redrawn away waits in the scene, off the
+            // room, until a wall can carry it again.
+            const radiators = (scene.radiators ?? [])
+                .filter(owns)
+                .reduce<
+                    RadiatorObstacle[]
+                >((kept, radiator) => (validateRoomGeometry({ ...preview.room, radiators: [...kept, radiator] }) ? kept : [...kept, radiator]), []);
+            return radiators.length
+                ? { ...preview, room: { ...preview.room, radiators } }
+                : preview;
+        });
 };
 const getRoomPreview = (scene: Scene) => getRoomPreviews(scene)[0] ?? null;
 const openingOwner = (previews: RoomPreview[], item: DoorOpening | WindowOpening) =>
@@ -901,10 +1009,11 @@ const scopedOpeningScene = (scene: Scene, preview: RoomPreview): Scene => ({
     ...scene,
     doors: preview.room.doors,
     windows: preview.room.windows,
+    radiators: preview.room.radiators ?? [],
 });
 const bindLegacyOpenings = (scene: Scene): Scene => {
     const primary = getRoomPreview(scene);
-    const bind = <T extends DoorOpening | WindowOpening>(item: T): T =>
+    const bind = <T extends DoorOpening | WindowOpening | RadiatorObstacle>(item: T): T =>
         item.drawingHostId || !primary ? item : { ...item, drawingHostId: primary.wallIds?.[0] };
     return {
         ...scene,
@@ -919,6 +1028,7 @@ const bindLegacyOpenings = (scene: Scene): Scene => {
         },
         doors: scene.doors.map(bind),
         windows: scene.windows.map(bind),
+        ...(scene.radiators ? { radiators: scene.radiators.map(bind) } : {}),
     };
 };
 const roomShapeKey = (room: Room) =>
@@ -985,6 +1095,19 @@ const getNewerPlannerRoom = (scene: Scene, plannerRoom: Room): Room | null => {
 const readPlannerRoom = (): Room | null => {
     const draft = readProjectDraft();
     return draft.status === "success" ? draft.value.planner?.room ?? null : null;
+};
+
+/**
+ * The pieces of that project's saved layout, to carry onto the drawing. A
+ * layout that no longer passes the room's checks (a stale or damaged save)
+ * stays behind rather than putting pieces into walls.
+ */
+const readPlannerLayout = (): Placement[] => {
+    const draft = readProjectDraft();
+    if (draft.status !== "success") return [];
+    const room = draft.value.planner?.room;
+    const placements = draft.value.planner?.layout?.placements ?? [];
+    return room && placements.length && validateLayout(room, placements).valid ? placements : [];
 };
 
 const parseMeters = (value: string): number | null => {
@@ -1311,6 +1434,7 @@ const reanchorOpeningsForRoom = (
         segments: nextSegments,
         doors: [],
         windows: [],
+        radiators: [],
     };
 
     const targetFor = (
@@ -1414,6 +1538,24 @@ const reanchorOpeningsForRoom = (
         });
     }
 
+    for (const radiator of source.radiators ?? []) {
+        // A radiator follows its wall like a window; it may sit under one.
+        const target = targetFor(radiator, "window");
+        if (!target) return { error: "Радиатор потерял бы стену-основание. Перемещение отменено." };
+        const { segmentId: _segmentId, ...radiatorFields } = radiator;
+        reanchored.radiators!.push({
+            ...radiatorFields,
+            wall: target.segment.wall,
+            segmentId: target.segment.id,
+            // The target is the radiator's centre along the moved wall.
+            offset: clamp(
+                target.offset - radiator.width / 2,
+                0,
+                Math.max(0, target.segment.length - radiator.width),
+            ),
+        });
+    }
+
     return { scene: reanchored };
 };
 
@@ -1425,12 +1567,17 @@ const reanchorOpeningsAfterWallMove = (
     const afterRooms = getRoomPreviews({ ...source, segments: nextSegments });
     const doors: DoorOpening[] = [];
     const windows: WindowOpening[] = [];
+    const radiators: RadiatorObstacle[] = [];
     for (const before of beforeRooms) {
         const after = afterRooms.find((candidate) =>
             candidate.wallIds?.some((id) => before.wallIds?.includes(id)),
         );
         if (!after) {
-            if (before.room.doors.length || before.room.windows.length)
+            if (
+                before.room.doors.length ||
+                before.room.windows.length ||
+                before.room.radiators?.length
+            )
                 return {
                     error: "Перемещение лишило бы проём его постройки. Перемещение отменено.",
                 };
@@ -1455,10 +1602,29 @@ const reanchorOpeningsAfterWallMove = (
                 drawingHostId: window.drawingHostId ?? before.wallIds?.[0],
             })),
         );
+        radiators.push(
+            ...(result.scene.radiators ?? []).map((radiator) => ({
+                ...radiator,
+                drawingHostId: radiator.drawingHostId ?? before.wallIds?.[0],
+            })),
+        );
     }
     if (doors.length !== source.doors.length || windows.length !== source.windows.length)
         return { error: "Не удалось найти постройку одного из проёмов. Перемещение отменено." };
-    return { scene: { ...source, segments: nextSegments, doors, windows } };
+    // Radiators off every room (their wall redrawn away) keep waiting unchanged.
+    const placedRadiatorIds = new Set(radiators.map((radiator) => radiator.id));
+    const waitingRadiators = (source.radiators ?? []).filter(
+        (radiator) => !placedRadiatorIds.has(radiator.id),
+    );
+    return {
+        scene: {
+            ...source,
+            segments: nextSegments,
+            doors,
+            windows,
+            ...(source.radiators ? { radiators: [...radiators, ...waitingRadiators] } : {}),
+        },
+    };
 };
 
 const getOpeningCutPolygon = (
@@ -2608,6 +2774,8 @@ interface RoomRegionLabelPlacement {
     width: number;
     height: number;
     fontSize: number;
+    /** A room's own name heads the label; numbered defaults stay off the plan. */
+    title: string | null;
     heightValue: string;
     areaValue: string;
     clearBounds: ScreenRect;
@@ -3487,6 +3655,7 @@ const getRoomRegionLabelPlacement = (
     region: {
         x: number;
         y: number;
+        name?: string;
         areaSquareMillimeters: number;
         labelBounds: ScreenRect;
     },
@@ -3501,6 +3670,8 @@ const getRoomRegionLabelPlacement = (
 
     const heightValue = `H=${Math.round(ROOM_CEILING_HEIGHT_MM / 10)}`;
     const areaValue = formatRoomArea(region.areaSquareMillimeters / 1_000_000);
+    const title = region.name && !/^Помещение \d+$/.test(region.name) ? region.name : null;
+    const lineCount = title ? 3 : 2;
     const clearShortestSide = Math.min(clearWidth, clearHeight);
     const horizontalPadding = clamp(clearShortestSide * 0.04, 24, 48);
     const verticalPadding = clamp(clearShortestSide * 0.03, 18, 40);
@@ -3513,9 +3684,10 @@ const getRoomRegionLabelPlacement = (
     );
     // Compact CAD labels deliberately use metric-only text and a tight
     // letter-spacing, so a 14 px S=… value can still fit a narrow 85 cm bay.
-    const areaCharacterWidth = areaValue.length * 0.52;
+    const areaCharacterWidth = Math.max(areaValue.length * 0.52, (title?.length ?? 0) * 0.56);
     const maximumByWidth = (clearWidth - horizontalPadding * 2) / areaCharacterWidth;
-    const maximumByHeight = (clearHeight - verticalPadding * 2) / 2.55;
+    const linesHeight = lineCount === 3 ? 3.8 : 2.55;
+    const maximumByHeight = (clearHeight - verticalPadding * 2) / linesHeight;
     const fontSize = Math.min(desiredFont, maximumByWidth, maximumByHeight);
     if (!Number.isFinite(fontSize) || fontSize < Math.min(ROOM_LABEL_MIN_FONT_MM, screenFontCap))
         return null;
@@ -3526,7 +3698,7 @@ const getRoomRegionLabelPlacement = (
     // Chromium's SVG text box includes the painted glyph ascenders/descenders
     // beyond its nominal line height. Reserve that real visual height so the
     // white backing remains a full container at every zoom level.
-    const height = fontSize * 2.55 + verticalPadding * 2;
+    const height = fontSize * linesHeight + verticalPadding * 2;
     if (width > clearWidth || height > clearHeight) return null;
 
     // Clear-face bounds already exclude material. Do not spend the few
@@ -3590,6 +3762,7 @@ const getRoomRegionLabelPlacement = (
         width,
         height,
         fontSize,
+        title,
         heightValue,
         areaValue,
         clearBounds,
@@ -3768,11 +3941,11 @@ const getRoomSummaryPlacement = (
 };
 
 const DrawRoom: React.FC = () => {
-    const projectHref = useProjectHref();
     const router = useRouter();
     const boardRef = useRef<SVGSVGElement>(null);
     const [tool, setTool] = useState<Tool>("wall");
     const [activeToolGroup, setActiveToolGroup] = useState<ToolGroup>("walls");
+    const [selectedRegionSignature, setSelectedRegionSignature] = useState<string | null>(null);
     // On narrow screens a group sheet covers much of the canvas, so it folds
     // away once a tool is picked and its group button toggles it back.
     const [toolSheetCollapsed, setToolSheetCollapsed] = useState(false);
@@ -3826,13 +3999,13 @@ const DrawRoom: React.FC = () => {
     const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
     const [cursorPoint, setCursorPoint] = useState<Point | null>(null);
     const [selectedOpening, setSelectedOpening] = useState<SelectedOpening | null>(null);
+    const [selectedRadiatorId, setSelectedRadiatorId] = useState<string | null>(null);
     const [selectedContourWallEdge, setSelectedContourWallEdge] = useState<number | null>(null);
     const [selectedSegmentWallId, setSelectedSegmentWallId] = useState<string | null>(null);
     const [activeContourWallGrab, setActiveContourWallGrab] = useState<{
         edgeIndex: number;
         grab: ContourWallGrab;
     } | null>(null);
-    const [roomInspectorDismissed, setRoomInspectorDismissed] = useState(false);
     const openingDragRef = useRef<
         | (SelectedOpening & { startPoint: Point; startOffset: number; allowedOffsets?: number[] })
         | null
@@ -3842,14 +4015,12 @@ const DrawRoom: React.FC = () => {
     const [notice, setNotice] = useState(
         "Зажмите левую кнопку и ведите по сетке — стена рисуется сразу под курсором.",
     );
-    const [saving, setSaving] = useState(false);
     const [autosaveStatus, setAutosaveStatus] = useState<"loading" | "saved" | "error">("loading");
     const [layers, setLayers] = useState(DEFAULT_DRAWING_LAYERS);
     const [measuring, setMeasuring] = useState(false);
     useEffect(() => {
         if (tool !== "select" || activeToolGroup !== "walls") setMeasuring(false);
     }, [tool, activeToolGroup]);
-    const [plannerBuildingHostId, setPlannerBuildingHostId] = useState<string | null>(null);
     const [spacePan, setSpacePan] = useState(false);
     const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false);
     const viewBoxRef = useRef(DEFAULT_VIEW_BOX);
@@ -3874,6 +4045,22 @@ const DrawRoom: React.FC = () => {
             ),
         [previews],
     );
+    const furnitureRadiatorObstacles = useMemo(
+        () =>
+            previews.flatMap((owner) =>
+                (owner.room.radiators ?? []).flatMap((radiator) =>
+                    [
+                        getRadiatorBody(radiator, owner.room),
+                        getRadiatorServiceObstacle(radiator, owner.room),
+                    ].map((rect) => ({
+                        ...rect,
+                        x: rect.x + owner.origin.x,
+                        y: rect.y + owner.origin.y,
+                    })),
+                ),
+            ),
+        [previews],
+    );
     const preview = previews[0] ?? null;
     const roomRegions = useMemo(() => (preview ? getDrawRoomRegions(preview.room) : []), [preview]);
     const renderedRoomRegions = useMemo(
@@ -3883,6 +4070,7 @@ const DrawRoom: React.FC = () => {
                     ...region,
                     signature: regionPrefix(owner) + region.signature,
                     buildingId: regionPrefix(owner),
+                    origin: owner.origin,
                     x: owner.origin.x + region.center.x,
                     y: owner.origin.y + region.center.y,
                     bounds: {
@@ -3914,23 +4102,6 @@ const DrawRoom: React.FC = () => {
                 .filter((group) => group.regions.length > 0),
         [previews, renderedRoomRegions],
     );
-    // The graph may have a valid closed room while the furniture planner must
-    // still reject it (for example the screenshot's 2.2 × 1.2 m outline).
-    // Never hide the closed geometry for that reason; use this only to guard
-    // the irreversible handoff into the planner.
-    const plannerPreview =
-        previews.find((room) => room.wallIds?.includes(plannerBuildingHostId ?? "")) ?? preview;
-    // The planner works on a 50 mm lattice; a 10 mm drawing is rounded on
-    // handoff instead of blocking it (at most 25 mm per coordinate).
-    const plannerGridSnap = useMemo(
-        () => (plannerPreview ? snapRoomToPlannerGrid(plannerPreview.room) : null),
-        [plannerPreview],
-    );
-    const plannerEligibilityError = useMemo(
-        () => (plannerGridSnap ? validateRoomGeometry(plannerGridSnap.room) : null),
-        [plannerGridSnap],
-    );
-    const plannerEligible = Boolean(preview && !plannerEligibilityError);
     const boundarySegments = useMemo(
         () => (preview ? getRoomBoundarySegments(preview.room) : []),
         [preview],
@@ -4559,7 +4730,23 @@ const DrawRoom: React.FC = () => {
         const saved = readEditorSession();
         const plannerRoom = readPlannerRoom();
         if (saved) {
-            const restored = plannerRoom ? takePlannerOpenings(saved, plannerRoom) : saved;
+            const withOpenings = plannerRoom ? takePlannerOpenings(saved, plannerRoom) : saved;
+            // A layout made on the former layout step lives beside the drawing;
+            // when the drawing has no furniture yet and shows that very room,
+            // its pieces join the drawing where they stood.
+            const layout = readPlannerLayout();
+            const host =
+                plannerRoom && layout.length && !(withOpenings.furniture ?? []).length
+                    ? getRoomPreviews(withOpenings).find(
+                          (preview) => roomShapeKey(preview.room) === roomShapeKey(plannerRoom),
+                      )
+                    : undefined;
+            const restored = host
+                ? {
+                      ...withOpenings,
+                      furniture: solvedToDrawFurniture(layout, host.origin, "furniture-layout"),
+                  }
+                : withOpenings;
             if (plannerRoom) setNewerPlannerRoom(getNewerPlannerRoom(restored, plannerRoom));
             sceneForInteractionRef.current = restored;
             setHistory({ past: [], present: restored, future: [] });
@@ -4568,14 +4755,18 @@ const DrawRoom: React.FC = () => {
                 "Восстановлен сохранённый чертёж. Имена помещений и проёмы можно продолжать редактировать.",
             );
         } else if (plannerRoom) {
-            const converted = roomToDrawingScene(plannerRoom);
+            const converted = roomToDrawingScene(plannerRoom, readPlannerLayout());
             if (converted) {
                 const scene = bindLegacyOpenings(cloneScene(converted));
                 sceneForInteractionRef.current = scene;
                 setHistory({ past: [], present: scene, future: [] });
                 setTool("select");
                 fitAfterSceneChangeRef.current = true;
-                setNotice("Комната перенесена с шага расстановки. Её стены и проёмы можно менять.");
+                setNotice(
+                    converted.furniture?.length
+                        ? "Комната и расстановка перенесены в планировщик. Стены, проёмы и мебель можно менять."
+                        : "Комната перенесена с шага расстановки. Её стены и проёмы можно менять.",
+                );
             }
         }
         setEditorSessionReady(true);
@@ -4590,7 +4781,7 @@ const DrawRoom: React.FC = () => {
                 // graph, so a browser refresh never renames a stable region.
                 regions: {
                     version: 1,
-                    items: renderedRoomRegions.map(({ signature, name }) => ({ signature, name })),
+                    items: renderedRoomRegions.map(toRoomRegionMetadata),
                 },
             };
             const storage = getProjectStorage();
@@ -5349,9 +5540,119 @@ const DrawRoom: React.FC = () => {
         ],
     );
 
+    const addRadiator = useCallback(
+        (point: Point) => {
+            if (!preview) {
+                setNotice("Сначала замкните контур комнаты — радиатор ставится к стене.");
+                return;
+            }
+            const target = openingTarget(previews, point);
+            if (!target) {
+                setNotice("Наведите курсор ближе к стене и нажмите ещё раз.");
+                return;
+            }
+            const owner = target.owner;
+            if (owner.room.partitions?.some((partition) => partition.id === target.segment.id)) {
+                setNotice("Радиатор ставится у внешней стены.");
+                return;
+            }
+            const width = Math.min(RADIATOR_DEFAULT_WIDTH_MM, target.segment.length);
+            const offset = clamp(
+                snapDrawRoomCoordinate(target.offset - width / 2, sceneSnapMm),
+                0,
+                target.segment.length - width,
+            );
+            const id = `radiator-${
+                Math.max(
+                    0,
+                    ...(scene.radiators ?? []).map(
+                        (radiator) => Number(radiator.id.split("-")[1]) || 0,
+                    ),
+                ) + 1
+            }`;
+            const radiator: RadiatorObstacle = {
+                id,
+                drawingHostId: owner.wallIds?.[0],
+                wall: target.segment.wall,
+                segmentId: target.segment.id,
+                offset,
+                width,
+                depth: RADIATOR_DEPTH_MM,
+                clearanceDepth: RADIATOR_CLEARANCE_MM,
+            };
+            const problem = validateRoomGeometry({
+                ...owner.room,
+                radiators: [...(owner.room.radiators ?? []), radiator],
+            });
+            if (problem) {
+                setNotice(`Радиатор не помещается здесь: ${problem}`);
+                return;
+            }
+            commitScene({ ...scene, radiators: [...(scene.radiators ?? []), radiator] });
+            setSelectedOpening(null);
+            setSelectedRadiatorId(id);
+            setTool("select");
+            setNotice("Радиатор добавлен. Ширину и отступ можно уточнить в карточке.");
+        },
+        [commitScene, preview, previews, scene, sceneSnapMm],
+    );
+
+    const selectedRadiatorData = useMemo(() => {
+        if (!selectedRadiatorId) return null;
+        for (const owner of previews) {
+            const radiator = owner.room.radiators?.find((item) => item.id === selectedRadiatorId);
+            const segment = radiator && getRoomSegment(owner.room, radiator);
+            if (radiator && segment) return { owner, radiator, segment };
+        }
+        return null;
+    }, [previews, selectedRadiatorId]);
+
+    const updateSelectedRadiator = useCallback(
+        (patch: Partial<Pick<RadiatorObstacle, "width" | "offset">>) => {
+            if (!selectedRadiatorData) return;
+            const { owner, radiator } = selectedRadiatorData;
+            if (
+                ![patch.width, patch.offset].every(
+                    (value) => value === undefined || Number.isFinite(value),
+                )
+            )
+                return;
+            const next = { ...radiator, ...patch };
+            const problem = validateRoomGeometry({
+                ...owner.room,
+                radiators: (owner.room.radiators ?? []).map((item) =>
+                    item.id === radiator.id ? next : item,
+                ),
+            });
+            if (problem) {
+                setNotice(`Радиатор так не помещается: ${problem}`);
+                return;
+            }
+            commitScene({
+                ...scene,
+                radiators: (scene.radiators ?? []).map((item) =>
+                    item.id === radiator.id ? next : item,
+                ),
+            });
+        },
+        [commitScene, scene, selectedRadiatorData],
+    );
+
+    const deleteSelectedRadiator = useCallback(() => {
+        if (!selectedRadiatorId) return;
+        commitScene({
+            ...scene,
+            radiators: (scene.radiators ?? []).filter((item) => item.id !== selectedRadiatorId),
+        });
+        setSelectedRadiatorId(null);
+        setNotice("Радиатор удалён.");
+    }, [commitScene, scene, selectedRadiatorId]);
+
     const openKeyboardEntry = useCallback(
         (requestedTool?: KeyboardTool) => {
-            const nextTool = requestedTool ?? (tool === "select" ? "wall" : tool);
+            // Radiators are placed on the plan only; typed entry starts a wall.
+            const nextTool =
+                requestedTool ?? (tool === "select" || tool === "radiator" ? "wall" : tool);
             const seed = cursorPoint ?? { x: 1000, y: 1000 };
             setKeyboardTool(nextTool);
             setKeyboardEntry((current) => ({
@@ -5497,27 +5798,35 @@ const DrawRoom: React.FC = () => {
         [commitScene, preview, scene, sceneSnapMm, selectedOpeningData],
     );
 
-    const updateRegionName = useCallback(
-        (signature: string, value: string) => {
+    const updateRegion = useCallback(
+        (signature: string, patch: { name?: string; kind?: RoomKind }) => {
             if (!preview) return;
-            const name = value.trim().replace(/\s+/g, " ");
-            if (!name) {
+            const name = patch.name?.trim().replace(/\s+/g, " ");
+            if (patch.name !== undefined && !name) {
                 setNotice("Название помещения не может быть пустым.");
                 return;
             }
-            const regions = {
-                version: 1 as const,
-                items:
-                    renderedRoomRegions
-                        .map(({ signature, name }) => ({ signature, name }))
-                        .map((item) =>
-                            item.signature === signature
-                                ? { ...item, name: name.slice(0, 80) }
-                                : item,
-                        ) ?? [],
-            };
-            commitScene({ ...scene, regions });
-            setNotice(`Название помещения сохранено: «${name.slice(0, 80)}».`);
+            const items = renderedRoomRegions.map((region) => {
+                if (region.signature !== signature) return toRoomRegionMetadata(region);
+                const kind = patch.kind ?? region.kind;
+                // A chosen kind names the room until the person types a name.
+                const nextName =
+                    name?.slice(0, 80) ??
+                    (patch.kind && isGeneratedRoomName(region.name)
+                        ? roomKindLabel(patch.kind)
+                        : region.name);
+                return toRoomRegionMetadata({ signature, name: nextName, kind });
+            });
+            commitScene({ ...scene, regions: { version: 1, items } });
+            const updated = items.find((item) => item.signature === signature);
+            if (updated)
+                setNotice(
+                    patch.kind
+                        ? updated.name === roomKindLabel(patch.kind)
+                            ? `Помещение отмечено: ${updated.name.toLowerCase()}.`
+                            : `«${updated.name}» — ${roomKindLabel(patch.kind).toLowerCase()}.`
+                        : `Название помещения сохранено: «${updated.name}».`,
+                );
         },
         [commitScene, preview, renderedRoomRegions, scene],
     );
@@ -5802,6 +6111,24 @@ const DrawRoom: React.FC = () => {
                     setSelectedContourWallEdge(null);
                     setSelectedSegmentWallId(null);
                     setSelectedOpening(null);
+                    setSelectedRadiatorId(null);
+                    if (activeToolGroup === "rooms" || activeToolGroup === "furniture") {
+                        const point = pointFromEvent(event, false);
+                        const hit =
+                            point &&
+                            renderedRoomRegions.find((region) =>
+                                region.clearRects.some(
+                                    (rect) =>
+                                        point.x >= region.origin.x + rect.left &&
+                                        point.x <= region.origin.x + rect.right &&
+                                        point.y >= region.origin.y + rect.top &&
+                                        point.y <= region.origin.y + rect.bottom,
+                                ),
+                            );
+                        // While furnishing, a click beside the plan keeps the room in hand.
+                        if (hit || activeToolGroup === "rooms")
+                            setSelectedRegionSignature(hit ? hit.signature : null);
+                    }
                 }
                 startPan(event);
                 return;
@@ -5816,8 +6143,20 @@ const DrawRoom: React.FC = () => {
                 return;
             }
             if (tool === "door" || tool === "window") addOpening(tool, point);
+            if (tool === "radiator") addRadiator(point);
         },
-        [addOpening, beginWallDrawing, pointFromEvent, spacePan, startOpeningDrag, startPan, tool],
+        [
+            activeToolGroup,
+            addOpening,
+            addRadiator,
+            beginWallDrawing,
+            pointFromEvent,
+            renderedRoomRegions,
+            spacePan,
+            startOpeningDrag,
+            startPan,
+            tool,
+        ],
     );
 
     const flushPendingWheelZoom = useCallback(() => {
@@ -6327,50 +6666,6 @@ const DrawRoom: React.FC = () => {
         scene.furniture?.length,
     ]);
 
-    const continueToPlanner = useCallback(() => {
-        if (!plannerPreview) {
-            setNotice(
-                "Замкните корректный контур: прямоугольник — четырьмя углами, сложную комнату — минимум пятью.",
-            );
-            return;
-        }
-        const plannerRoom = plannerGridSnap?.room ?? plannerPreview.room;
-        const validation = plannerEligibilityError ?? validateRoomGeometry(plannerRoom);
-        if (validation) {
-            setNotice(`Контур замкнут, но ещё не подходит для планировщика: ${validation}`);
-            return;
-        }
-        const furnitureHandoff = prepareDrawFurnitureHandoff(
-            plannerRoom,
-            plannerPreview.origin,
-            scene.furniture ?? [],
-        );
-        if (furnitureHandoff.error) {
-            setNotice(`Мебель не перенесена: ${furnitureHandoff.error}`);
-            return;
-        }
-        setSaving(true);
-        const handoff = saveDrawRoomDraft(plannerRoom, furnitureHandoff.placements);
-        if (handoff.status !== "success") {
-            setSaving(false);
-            setNotice(
-                "Не удалось сохранить контур в этом браузере. Проверьте настройки локального хранения.",
-            );
-            return;
-        }
-        trackGoal("room_drawn", {
-            shape: plannerRoom.geometry?.kind ?? "rect",
-            doors: plannerRoom.doors.length,
-            windows: plannerRoom.windows.length,
-            furniture: furnitureHandoff.placements.length,
-        });
-        // A questionnaire hand-off passes through this step to the layout.
-        const questionnaireHandoff = isQuestionnairePlannerHandoffId(router.query.handoff)
-            ? `&handoff=${router.query.handoff}`
-            : "";
-        void router.push(withProjectParam(`/planner?drawRoom=1${questionnaireHandoff}`));
-    }, [plannerEligibilityError, plannerGridSnap, plannerPreview, router, scene.furniture]);
-
     useEffect(() => {
         const handleKey = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null;
@@ -6385,6 +6680,19 @@ const DrawRoom: React.FC = () => {
                 return;
             }
             if (isTyping) return;
+            if (
+                (event.key === "Delete" || event.key === "Backspace") &&
+                selectedRadiatorData &&
+                !selectedOpening &&
+                !event.ctrlKey &&
+                !event.metaKey &&
+                !event.altKey &&
+                !keyboardEntryOpen
+            ) {
+                event.preventDefault();
+                deleteSelectedRadiator();
+                return;
+            }
             if (
                 (event.key === "Delete" || event.key === "Backspace") &&
                 selectedOpening &&
@@ -6459,8 +6767,10 @@ const DrawRoom: React.FC = () => {
     }, [
         cancelContourWallDrag,
         deleteSelectedOpening,
+        deleteSelectedRadiator,
         deleteSelectedWall,
         selectedOpening,
+        selectedRadiatorData,
         hoverPoint,
         keyboardEntryOpen,
         openKeyboardEntry,
@@ -6565,6 +6875,473 @@ const DrawRoom: React.FC = () => {
             : 0;
     const liveDimensionLayout =
         ghost && liveWallLength > 0 && liveWallDimensions.length < 4 ? "compact" : "full";
+    const roomInspectorOpen = activeToolGroup === "rooms" && renderedRoomRegions.length > 0;
+    // Room H/S labels would sit on top of the pieces being placed.
+    const furnitureStep = activeToolGroup === "furniture";
+    const selectedRegion =
+        renderedRoomRegions.find((region) => region.signature === selectedRegionSignature) ?? null;
+    // Furniture goes into one room; without a choice yet, the first room is it.
+    const furnitureRegion = selectedRegion ?? renderedRoomRegions[0] ?? null;
+    const regionRooms = useMemo(
+        () =>
+            renderedRoomRegions.map((region) => ({
+                region,
+                room: {
+                    name: region.name,
+                    kind: region.kind,
+                    rects: region.clearRects.map((rect) => ({
+                        left: region.origin.x + rect.left,
+                        right: region.origin.x + rect.right,
+                        top: region.origin.y + rect.top,
+                        bottom: region.origin.y + rect.bottom,
+                    })),
+                } satisfies FurnitureRoom,
+            })),
+        [renderedRoomRegions],
+    );
+    const resultStep = activeToolGroup === "result";
+    const resultSummary = useMemo(() => {
+        if (!resultStep) return null;
+        const items = scene.furniture ?? [];
+        const rooms: ResultRoom[] = regionRooms.map(({ region }) => ({
+            signature: region.signature,
+            name: region.name,
+            areaSquareMillimeters: region.areaSquareMillimeters,
+            items: [],
+        }));
+        const unassigned: ResultItem[] = [];
+        const placements: { item: DrawFurniture; roomName?: string }[] = [];
+        let conflictCount = 0;
+        items.forEach((item) => {
+            const index = regionRooms.findIndex(({ room }) => furnitureBelongsToRoom(item, room));
+            const owner = index >= 0 ? regionRooms[index] : null;
+            const conflict = Boolean(
+                furnitureError(
+                    item,
+                    items,
+                    scene.segments,
+                    renderedWallThickness,
+                    furnitureDoorObstacles,
+                    owner?.room ?? null,
+                    furnitureRadiatorObstacles,
+                ),
+            );
+            if (conflict) conflictCount += 1;
+            const { width, depth } = furnitureGeometry(item);
+            const entry: ResultItem = {
+                id: item.id,
+                label: furnitureDefinition(item.definitionId)?.label ?? item.definitionId,
+                width,
+                depth,
+                conflict,
+            };
+            if (index >= 0) rooms[index].items.push(entry);
+            else unassigned.push(entry);
+            // The file holds the main building; its rooms carry the prefix.
+            if (!preview || (owner && owner.region.buildingId === regionPrefix(preview)))
+                placements.push({ item, roomName: owner?.region.name });
+        });
+        return { rooms, unassigned, conflictCount, placements };
+    }, [
+        furnitureDoorObstacles,
+        furnitureRadiatorObstacles,
+        preview,
+        regionRooms,
+        renderedWallThickness,
+        resultStep,
+        scene.furniture,
+        scene.segments,
+    ]);
+    const [resultStatus, setResultStatus] = useState("");
+    const [resultBusy, setResultBusy] = useState(false);
+    const [printImageUrl, setPrintImageUrl] = useState<string | null>(null);
+    const renderResultPng = useCallback(async () => {
+        if (!preview || !resultSummary) throw new Error("Сначала замкните контур квартиры.");
+        const specification = buildDrawingPlanSpecification({
+            room: preview.room,
+            placements: resultSummary.placements.map(({ item, roomName }) => ({
+                instanceId: item.id,
+                definitionId: item.definitionId,
+                x: item.x - preview.origin.x,
+                y: item.y - preview.origin.y,
+                rotation: item.rotation,
+                width: item.width,
+                depth: item.depth,
+                ...(roomName ? { roomName } : {}),
+            })),
+            conflictCount: resultSummary.conflictCount,
+            caveats:
+                previews.length > 1
+                    ? ["В файл вошла основная постройка; отдельно стоящие контуры не показаны."]
+                    : [],
+            generatedAt: new Date().toISOString(),
+        });
+        return {
+            blob: await renderPlanSpecificationPng(specification),
+            filename: getPlanExportFilename(specification.generatedAt),
+            items: specification.items.length,
+        };
+    }, [preview, previews.length, resultSummary]);
+    const downloadResult = useCallback(async () => {
+        setResultBusy(true);
+        setResultStatus("Готовим PNG…");
+        try {
+            const { blob, filename, items } = await renderResultPng();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.setTimeout(() => URL.revokeObjectURL(url), 0);
+            setResultStatus("PNG сохранён.");
+            trackGoal("plan_png_export", { items, source: "drawing" });
+        } catch (error) {
+            setResultStatus(error instanceof Error ? error.message : "Не удалось сохранить PNG.");
+        } finally {
+            setResultBusy(false);
+        }
+    }, [renderResultPng]);
+    const printResult = useCallback(async () => {
+        setResultBusy(true);
+        setResultStatus("Готовим лист для печати…");
+        try {
+            const { blob } = await renderResultPng();
+            // The print sheet shows this image only; the dialog opens once it loads.
+            setPrintImageUrl(URL.createObjectURL(blob));
+            trackGoal("plan_print", { source: "drawing" });
+        } catch (error) {
+            setResultBusy(false);
+            setResultStatus(
+                error instanceof Error ? error.message : "Не удалось подготовить печать.",
+            );
+        }
+    }, [renderResultPng]);
+    useEffect(() => {
+        if (!printImageUrl) return;
+        const done = () => {
+            URL.revokeObjectURL(printImageUrl);
+            setPrintImageUrl(null);
+            setResultBusy(false);
+            setResultStatus("Лист отправлен в системный диалог печати.");
+        };
+        window.addEventListener("afterprint", done, { once: true });
+        return () => window.removeEventListener("afterprint", done);
+    }, [printImageUrl]);
+    const furnitureRoom = useMemo<FurnitureRoom | null>(
+        () =>
+            furnitureRegion
+                ? {
+                      name: furnitureRegion.name,
+                      kind: furnitureRegion.kind,
+                      rects: furnitureRegion.clearRects.map((rect) => ({
+                          left: furnitureRegion.origin.x + rect.left,
+                          right: furnitureRegion.origin.x + rect.right,
+                          top: furnitureRegion.origin.y + rect.top,
+                          bottom: furnitureRegion.origin.y + rect.bottom,
+                      })),
+                  }
+                : null,
+        [furnitureRegion],
+    );
+
+    // «Подобрать расстановку»: a set per room, solved in a worker for that room alone.
+    const [autoLayoutSets, setAutoLayoutSets] = useState<Record<string, Record<string, number>>>(
+        {},
+    );
+    const [autoLayoutSolving, setAutoLayoutSolving] = useState(false);
+    const [autoLayoutStatus, setAutoLayoutStatus] = useState("");
+    const [autoLayoutApplied, setAutoLayoutApplied] = useState<number | null>(null);
+    const [autoLayoutVariants, setAutoLayoutVariants] = useState<{
+        signature: string;
+        variants: {
+            summary: AutoLayoutVariantSummary;
+            pieces: DrawFurniture[];
+            observation?: PlannerObservationCreateInput;
+        }[];
+    } | null>(null);
+    const { isAuthenticated } = useAuth();
+    // Saved review-queue records of the offered variants, by variant index.
+    const [autoLayoutObservationIds, setAutoLayoutObservationIds] = useState<
+        Record<number, number>
+    >({});
+    const [autoLayoutReviewStatus, setAutoLayoutReviewStatus] = useState("");
+    const submitAutoLayoutReview = useCallback(
+        async (review: { verdict: PlannerObservationVerdict; comment: string }) => {
+            const index = autoLayoutApplied;
+            const variant = index === null ? null : autoLayoutVariants?.variants[index];
+            if (index === null || !variant?.observation) return;
+            if (!isAuthEnabled || !isAuthenticated) {
+                setAutoLayoutReviewStatus("Войдите, чтобы отправить вариант на разбор.");
+                return;
+            }
+            setAutoLayoutReviewStatus("Отправляем…");
+            try {
+                const id =
+                    autoLayoutObservationIds[index] ??
+                    (await plannerObservationService.create(variant.observation)).id;
+                setAutoLayoutObservationIds((current) => ({ ...current, [index]: id }));
+                await plannerObservationService.saveReview(id, review);
+                setAutoLayoutReviewStatus("Отзыв отправлен на разбор. Спасибо!");
+            } catch (error) {
+                setAutoLayoutReviewStatus(
+                    error instanceof Error ? error.message : "Не удалось отправить отзыв.",
+                );
+            }
+        },
+        [autoLayoutApplied, autoLayoutObservationIds, autoLayoutVariants, isAuthenticated],
+    );
+    const autoLayoutWorker = useRef<Worker | null>(null);
+    useEffect(() => () => autoLayoutWorker.current?.terminate(), []);
+    const autoLayoutSet =
+        (furnitureRegion && autoLayoutSets[furnitureRegion.signature]) ??
+        ROOM_KIND_FURNITURE[furnitureRegion?.kind ?? "other"];
+    const autoLayoutTarget = useMemo(() => {
+        if (!furnitureRegion || !furnitureRoom) return null;
+        const owner = previews.find((item) => regionPrefix(item) === furnitureRegion.buildingId);
+        if (!owner) return null;
+        const items = scene.furniture ?? [];
+        const own = items.filter((item) => furnitureBelongsToRoom(item, furnitureRoom));
+        if (own.some((item) => item.locked))
+            return {
+                status: "unsupported" as const,
+                message:
+                    "В комнате есть закреплённые предметы. Снимите закрепление, чтобы подобрать расстановку.",
+            };
+        const cut = buildRegionSolverRoom(owner.room, furnitureRegion);
+        if (cut.status !== "ready") return cut;
+        return {
+            ...cut,
+            offset: { x: owner.origin.x + cut.origin.x, y: owner.origin.y + cut.origin.y },
+            kept: items.filter((item) => !own.includes(item)),
+        };
+    }, [furnitureRegion, furnitureRoom, previews, scene.furniture]);
+    const requestSolver = useCallback(
+        (request: SolverPayload) =>
+            new Promise<SolverWorkerResponse>((resolve, reject) => {
+                autoLayoutWorker.current?.terminate();
+                const worker = new Worker(
+                    new URL("../../lib/furniture-planner/solver.worker.ts", import.meta.url),
+                );
+                autoLayoutWorker.current = worker;
+                worker.onmessage = (event: MessageEvent<SolverWorkerResponse>) => {
+                    worker.terminate();
+                    resolve(event.data);
+                };
+                worker.onerror = (event) => {
+                    worker.terminate();
+                    reject(new Error(event.message || "Не удалось выполнить расчёт."));
+                };
+                worker.postMessage({ ...request, requestId: 1 } as SolverWorkerRequest);
+            }),
+        [],
+    );
+    const solveAutoLayout = useCallback(async () => {
+        if (!furnitureRegion || !furnitureRoom || autoLayoutTarget?.status !== "ready") return;
+        const target = autoLayoutTarget;
+        const instances = buildRoomInstances(autoLayoutSet);
+        setAutoLayoutSolving(true);
+        setAutoLayoutStatus("Подбираем варианты…");
+        setAutoLayoutApplied(null);
+        try {
+            let solved: (PlannerObservationTarget & { label: string })[] = [];
+            const response = await requestSolver({
+                action: "solve-variants",
+                room: target.room,
+                instances,
+                preferences: {},
+                limit: 3,
+            });
+            if (response.ok && response.action === "solve-variants") {
+                if (response.result.status === "success") {
+                    solved = response.result.variants.map((variant) => ({
+                        id: variant.variantId,
+                        label: variant.profile.label,
+                        profile: variant.profile,
+                        placements: variant.placements,
+                        exploredNodes: variant.exploredNodes,
+                        score: variant.score,
+                        notes: variant.notes,
+                        solverStatus: "success" as const,
+                    }));
+                } else {
+                    // As on the layout step: fall back to what fits, dropping optional pieces.
+                    const fallback = await requestSolver({
+                        action: "solve-preferred-fallback",
+                        room: target.room,
+                        instances,
+                        preferences: {},
+                    });
+                    if (
+                        fallback.ok &&
+                        fallback.action === "solve-preferred-fallback" &&
+                        fallback.result.result.status === "success"
+                    )
+                        solved = [
+                            {
+                                id: WORKING_CORE_OBSERVATION_ID,
+                                label: fallback.result.unplacedInstances.length
+                                    ? "Без части желательной мебели"
+                                    : "Всё поместилось",
+                                placements: fallback.result.result.placements,
+                                exploredNodes: fallback.result.result.exploredNodes,
+                                score: fallback.result.result.score,
+                                notes: fallback.result.result.notes,
+                                solverStatus: "partial" as const,
+                                workingCore: {
+                                    requestedItemCount: instances.length,
+                                    unplacedInstanceIds: fallback.result.unplacedInstances.map(
+                                        (instance) => instance.instanceId,
+                                    ),
+                                },
+                            },
+                        ];
+                }
+            }
+            // A variant must also hold in the whole apartment, as hand-placed pieces do.
+            const variants = solved.flatMap((variant, index) => {
+                const pieces = solvedToDrawFurniture(
+                    variant.placements,
+                    target.offset,
+                    `furniture-auto-${Date.now()}-${index + 1}`,
+                );
+                const all = [...target.kept, ...pieces];
+                const fits = pieces.every(
+                    (piece) =>
+                        !furnitureError(
+                            piece,
+                            all,
+                            scene.segments,
+                            renderedWallThickness,
+                            furnitureDoorObstacles,
+                            furnitureRoom,
+                            furnitureRadiatorObstacles,
+                        ),
+                );
+                return fits && pieces.length
+                    ? [
+                          {
+                              summary: { label: variant.label, count: pieces.length },
+                              pieces,
+                              target: variant,
+                          },
+                      ]
+                    : [];
+            });
+            // Each offered variant goes to the designer review queue, as on the layout step.
+            const observationRequests = createPlannerObservationRequests({
+                room: target.room,
+                selection: autoLayoutSet,
+                priorities: Object.fromEntries(
+                    instances.map((instance) => [instance.definitionId, instance.priority]),
+                ),
+                preferences: {},
+                instances,
+                targets: variants.map((variant) => variant.target),
+                generatedAt: new Date().toISOString(),
+                inputSignature: JSON.stringify({ room: target.room, set: autoLayoutSet }),
+            });
+            setAutoLayoutVariants({
+                signature: furnitureRegion.signature,
+                variants: variants.map((variant) => ({
+                    ...variant,
+                    observation: observationRequests[variant.target.id],
+                })),
+            });
+            setAutoLayoutObservationIds({});
+            if (isAuthEnabled && isAuthenticated) {
+                void Promise.allSettled(
+                    variants.map(async (variant, index) => {
+                        const request = observationRequests[variant.target.id];
+                        if (!request) return;
+                        const saved = await plannerObservationService.create(request);
+                        setAutoLayoutObservationIds((current) => ({
+                            ...current,
+                            [index]: saved.id,
+                        }));
+                    }),
+                );
+            }
+            setAutoLayoutStatus(
+                variants.length
+                    ? "Выберите вариант — он заменит мебель этой комнаты. Отменить можно кнопкой «Отменить»."
+                    : "Не получилось расставить этот набор. Уберите часть мебели и попробуйте ещё раз.",
+            );
+            trackGoal(variants.length ? "layout_generated" : "layout_failed", {
+                source: "drawing",
+                variants: variants.length,
+            });
+        } catch (error) {
+            setAutoLayoutStatus(
+                error instanceof Error ? error.message : "Не удалось выполнить расчёт.",
+            );
+        } finally {
+            setAutoLayoutSolving(false);
+        }
+    }, [
+        autoLayoutSet,
+        autoLayoutTarget,
+        isAuthenticated,
+        furnitureDoorObstacles,
+        furnitureRadiatorObstacles,
+        furnitureRegion,
+        furnitureRoom,
+        renderedWallThickness,
+        requestSolver,
+        scene.segments,
+    ]);
+    const currentAutoLayoutVariants = useMemo(
+        () =>
+            autoLayoutVariants && autoLayoutVariants.signature === furnitureRegion?.signature
+                ? autoLayoutVariants.variants
+                : [],
+        [autoLayoutVariants, furnitureRegion?.signature],
+    );
+    const applyAutoLayout = useCallback(
+        (index: number) => {
+            const variant = currentAutoLayoutVariants[index];
+            if (!variant || autoLayoutTarget?.status !== "ready") return;
+            commitScene({ ...scene, furniture: [...autoLayoutTarget.kept, ...variant.pieces] });
+            setAutoLayoutApplied(index);
+            setNotice(`Вариант ${index + 1} расставлен. Предметы можно двигать вручную.`);
+        },
+        [autoLayoutTarget, commitScene, currentAutoLayoutVariants, scene],
+    );
+    // Opening the contour again takes away the rooms and the furniture step.
+    const activeStepLost =
+        (activeToolGroup === "rooms" && renderedRoomRegions.length === 0) ||
+        ((activeToolGroup === "furniture" || activeToolGroup === "result") && !preview);
+    useEffect(() => {
+        if (activeStepLost) setActiveToolGroup("walls");
+    }, [activeStepLost]);
+    // «Итог» in the project steps opens the planner on its result step, also
+    // when the planner is already open and only the address changes.
+    const handledStepLink = useRef<string | null>(null);
+    useEffect(() => {
+        if (!router.isReady || !preview || handledStepLink.current === router.asPath) return;
+        handledStepLink.current = router.asPath;
+        if (router.query.step === "result") setActiveToolGroup("result");
+    }, [preview, router.asPath, router.isReady, router.query.step]);
+    const stepAvailable = (group: ToolGroup) =>
+        group === "rooms"
+            ? renderedRoomRegions.length > 0
+            : group === "furniture" || group === "result"
+              ? Boolean(preview)
+              : true;
+    const selectStep = (group: ToolGroup) => {
+        if (group === "walls" || group === "openings") {
+            toggleToolGroup(group);
+            return;
+        }
+        setTool("select");
+        setMeasuring(false);
+        setSelectedOpening(null);
+        setSelectedContourWallEdge(null);
+        setSelectedSegmentWallId(null);
+        setActiveToolGroup(group);
+        setToolSheetCollapsed(false);
+    };
     const isToolSheetOpen = (group: ToolGroup) =>
         activeToolGroup === group && !(toolSheetOverlaysCanvas && toolSheetCollapsed);
     const toggleToolGroup = (group: ToolGroup) => {
@@ -6606,10 +7383,10 @@ const DrawRoom: React.FC = () => {
     return (
         <>
             <Head>
-                <title>Чертёж комнаты · StyleFinder</title>
+                <title>Планировщик квартиры · StyleFinder</title>
                 <meta
                     name="description"
-                    content="Нарисуйте точный контур комнаты для планировщика StyleFinder."
+                    content="Нарисуйте квартиру, расставьте мебель по комнатам и получите план с проверкой проходов."
                 />
                 <meta name="robots" content="noindex,follow" />
             </Head>
@@ -6624,12 +7401,12 @@ const DrawRoom: React.FC = () => {
                 <header className={styles.appBar}>
                     <div className={styles.identity}>
                         <Link
-                            href={projectHref("/planner")}
+                            href="/projects"
                             className={styles.backButton}
-                            aria-label="Назад к планировщику"
+                            aria-label="Назад к проектам"
                         >
                             <ToolIcon name="back" />
-                            <span>К планировщику</span>
+                            <span>К проектам</span>
                         </Link>
                         <Link
                             href="/"
@@ -6642,9 +7419,9 @@ const DrawRoom: React.FC = () => {
                             <span>StyleFinder</span>
                         </Link>
                         <span className={styles.crumb}>
-                            Планировщик <b>/</b> Новый контур
+                            Планировщик <b>/</b> Квартира
                         </span>
-                        <h1>Чертёж комнаты</h1>
+                        <h1>Планировщик квартиры</h1>
                     </div>
                     <div className={styles.topTools} aria-label="Действия чертежа">
                         <button
@@ -6717,41 +7494,18 @@ const DrawRoom: React.FC = () => {
                             <ToolIcon name="fit" />
                             <span>Вместить</span>
                         </button>
-                        {previews.length > 1 && (
-                            <select
-                                className={styles.buildingPicker}
-                                aria-label="Постройка для планировщика"
-                                value={plannerPreview?.wallIds?.[0] ?? ""}
-                                onChange={(event) => setPlannerBuildingHostId(event.target.value)}
-                            >
-                                {previews.map((room, index) => (
-                                    <option key={room.wallIds?.[0]} value={room.wallIds?.[0]}>
-                                        Постройка {index + 1} · {formatMeters(room.room.width)} ×{" "}
-                                        {formatMeters(room.room.depth)}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
                         <button
                             type="button"
                             className={styles.primary}
-                            onClick={continueToPlanner}
-                            disabled={!plannerEligible || saving}
-                            aria-label={saving ? "Сохраняем комнату" : "Продолжить с комнатой"}
-                            aria-describedby={
-                                plannerEligibilityError
-                                    ? "draw-room-planner-eligibility-warning"
-                                    : undefined
-                            }
+                            onClick={() => selectStep("result")}
+                            disabled={!preview}
                             title={
-                                saving
-                                    ? "Сохраняем комнату"
-                                    : plannerEligibilityError
-                                      ? `Контур замкнут, но пока не подходит для планировщика: ${plannerEligibilityError}`
-                                      : "Продолжить с комнатой"
+                                preview
+                                    ? "Список мебели по комнатам, PNG и печать"
+                                    : "Сначала замкните стены квартиры"
                             }
                         >
-                            {saving ? "Сохраняем…" : "Продолжить с комнатой"}
+                            К итогу
                         </button>
                     </div>
                 </header>
@@ -6760,10 +7514,7 @@ const DrawRoom: React.FC = () => {
                         ...scene,
                         regions: {
                             version: 1,
-                            items: renderedRoomRegions.map(({ signature, name }) => ({
-                                signature,
-                                name,
-                            })),
+                            items: renderedRoomRegions.map(toRoomRegionMetadata),
                         },
                     }}
                     measuring={measuring}
@@ -6774,8 +7525,38 @@ const DrawRoom: React.FC = () => {
                         setSelectedOpening(null);
                         setSelectedContourWallEdge(null);
                         setSelectedSegmentWallId(null);
-                        setRoomInspectorDismissed(true);
                     }}
+                    steps={
+                        <nav className={styles.stepTabs} aria-label="Шаги чертежа">
+                            {DRAW_STEPS.map((step, index) => (
+                                <button
+                                    key={step.group}
+                                    type="button"
+                                    className={styles.stepTab}
+                                    data-draw-room-step={step.group}
+                                    aria-current={
+                                        activeToolGroup === step.group ? "step" : undefined
+                                    }
+                                    aria-controls={step.controls}
+                                    aria-expanded={
+                                        step.controls ? isToolSheetOpen(step.group) : undefined
+                                    }
+                                    disabled={!stepAvailable(step.group)}
+                                    title={
+                                        stepAvailable(step.group)
+                                            ? undefined
+                                            : step.group === "rooms"
+                                              ? "Помещения появятся, когда стены замкнут контур"
+                                              : "Сначала замкните стены"
+                                    }
+                                    onClick={() => selectStep(step.group)}
+                                >
+                                    <span aria-hidden="true">{index + 1}</span>
+                                    {step.label}
+                                </button>
+                            ))}
+                        </nav>
+                    }
                     status={autosaveStatus}
                     layers={layers}
                     onLayers={setLayers}
@@ -6929,7 +7710,9 @@ const DrawRoom: React.FC = () => {
                                   ? "Дверь"
                                   : tool === "window"
                                     ? "Окно"
-                                    : "Выбор"}
+                                    : tool === "radiator"
+                                      ? "Радиатор"
+                                      : "Выбор"}
                         </b>
                     </span>
                     <span className={styles.canvasNotice} data-draw-room-notice="true">
@@ -6955,15 +7738,6 @@ const DrawRoom: React.FC = () => {
                     >
                         Координаты <kbd>⌥K</kbd>
                     </button>
-                    {preview && renderedRoomRegions.length > 0 && (
-                        <button
-                            type="button"
-                            className={styles.roomInspectorToggle}
-                            onClick={() => setRoomInspectorDismissed((current) => !current)}
-                        >
-                            {roomInspectorDismissed ? "Помещения" : "Инструменты"}
-                        </button>
-                    )}
                     {!hasBoundary && (tool === "door" || tool === "window") && (
                         <span id="draw-room-openings-hint" className={styles.openingHint}>
                             Инструмент уже выбран. Завершите внешний контур и нажмите на стену.
@@ -6972,27 +7746,6 @@ const DrawRoom: React.FC = () => {
                     <span id="draw-room-keyboard-hint" className={styles.openingHint}>
                         Для точного ввода без мыши нажмите Alt+K или кнопку «Координаты».
                     </span>
-                    {preview && plannerEligibilityError && activeToolGroup !== "furniture" && (
-                        <span
-                            id="draw-room-planner-eligibility-warning"
-                            className={styles.plannerEligibilityWarning}
-                            data-draw-room-planner-eligibility="blocked"
-                        >
-                            Контур замкнут. Для перехода в планировщик: {plannerEligibilityError}
-                        </span>
-                    )}
-                    {preview &&
-                        !plannerEligibilityError &&
-                        (plannerGridSnap?.maxShift ?? 0) > 0 &&
-                        activeToolGroup !== "furniture" && (
-                            <span
-                                className={styles.plannerEligibilityWarning}
-                                data-draw-room-planner-eligibility="rounded"
-                            >
-                                В планировщике размеры округлятся до 5 см (сдвиг до{" "}
-                                {plannerGridSnap?.maxShift} мм).
-                            </span>
-                        )}
                 </div>
 
                 <section
@@ -7005,171 +7758,128 @@ const DrawRoom: React.FC = () => {
                               ? "opening"
                               : selectedWallInspector
                                 ? "wall"
-                                : renderedRoomRegions.length > 0 && !roomInspectorDismissed
+                                : roomInspectorOpen || activeToolGroup === "result"
                                   ? "regions"
                                   : "tools"
                     }
                 >
-                    <aside className={styles.toolRail} aria-label="Инструменты чертежа">
-                        {/* Furniture is placed on the layout step; older drawings keep theirs editable. */}
-                        {(scene.furniture?.length ?? 0) > 0 && (
-                            <button
-                                type="button"
-                                className={styles.toolGroupButton}
-                                aria-label="Мебель"
-                                aria-expanded={activeToolGroup === "furniture"}
-                                onClick={() => {
-                                    setActiveToolGroup(
-                                        activeToolGroup === "furniture" ? "walls" : "furniture",
-                                    );
-                                    setTool("select");
-                                    setSelectedOpening(null);
-                                    setRoomInspectorDismissed(true);
-                                }}
-                            >
-                                <svg
-                                    viewBox="0 0 24 24"
-                                    aria-hidden="true"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.7"
-                                >
-                                    <path d="M5 11V5h14v6M3 11h18v8H3zM6 19v3m12-3v3M3 15h18" />
-                                </svg>
-                                <span>
-                                    <b>Мебель</b>
-                                    <small>Добавить и переместить</small>
-                                </span>
-                            </button>
-                        )}
-                        <div className={styles.toolRailIntro}>
-                            <span>КОНСТРУКЦИЯ</span>
-                        </div>
-                        <button
-                            type="button"
-                            className={styles.toolGroupButton}
-                            aria-expanded={isToolSheetOpen("walls")}
-                            aria-controls="draw-room-walls-tools"
-                            onClick={() => toggleToolGroup("walls")}
-                        >
-                            <ToolIcon name="wall" />
-                            <span>
-                                <b>Стены</b>
-                                <small>Контур и продолжение</small>
-                            </span>
-                        </button>
-                        {isToolSheetOpen("walls") && (
-                            <div id="draw-room-walls-tools" className={styles.toolGroupPanel}>
-                                <button
-                                    type="button"
-                                    className={styles.toolButton}
-                                    data-draw-room-tool="select"
-                                    aria-pressed={tool === "select"}
-                                    onClick={() => selectTool("select")}
-                                >
-                                    <ToolIcon name="select" />
-                                    <span className={styles.toolCopy}>
-                                        <b>Выбрать</b>
-                                        <small>Панорамирование и объект</small>
-                                    </span>
-                                </button>
-                                <button
-                                    type="button"
-                                    className={styles.toolButton}
-                                    data-draw-room-tool="wall"
-                                    aria-pressed={tool === "wall"}
-                                    onClick={() => selectTool("wall")}
-                                >
-                                    <ToolIcon name="wall" />
-                                    <span className={styles.toolCopy}>
-                                        <b>Стена</b>
-                                        <small>
-                                            {preview
-                                                ? "Внутренняя стена создаст перегородку"
-                                                : "Стройте внешний контур по сетке"}
-                                        </small>
-                                    </span>
-                                </button>
-                            </div>
-                        )}
-                        <button
-                            type="button"
-                            className={styles.toolGroupButton}
-                            aria-expanded={isToolSheetOpen("openings")}
-                            aria-controls="draw-room-opening-tools"
-                            onClick={() => toggleToolGroup("openings")}
-                        >
-                            <ToolIcon name="door" />
-                            <span>
-                                <b>Проёмы</b>
-                                <small>Двери и окна</small>
-                            </span>
-                        </button>
-                        {isToolSheetOpen("openings") && (
-                            <div id="draw-room-opening-tools" className={styles.toolGroupPanel}>
-                                <span className={styles.toolGroupCaption}>Двери</span>
-                                {DOOR_CATALOG.map((item) => (
+                    {/* Rooms and furniture bring their own panels; drawing tools belong to the wall steps. */}
+                    {(activeToolGroup === "walls" || activeToolGroup === "openings") && (
+                        <aside className={styles.toolRail} aria-label="Инструменты чертежа">
+                            {isToolSheetOpen("walls") && (
+                                <div id="draw-room-walls-tools" className={styles.toolGroupPanel}>
                                     <button
                                         type="button"
-                                        key={item.kind}
                                         className={styles.toolButton}
-                                        data-draw-room-door-kind={item.kind}
-                                        aria-pressed={
-                                            tool === "door" && selectedDoorKind === item.kind
-                                        }
-                                        onClick={() => selectTool("door", item.kind)}
+                                        data-draw-room-tool="select"
+                                        aria-pressed={tool === "select"}
+                                        onClick={() => selectTool("select")}
                                     >
-                                        <ToolIcon name="door" />
+                                        <ToolIcon name="select" />
                                         <span className={styles.toolCopy}>
-                                            <b>{item.label}</b>
-                                            <small>{item.description}</small>
+                                            <b>Выбрать</b>
+                                            <small>Панорамирование и объект</small>
                                         </span>
                                     </button>
-                                ))}
-                                {tool === "door" &&
-                                    !isHingedDoor({ doorKind: selectedDoorKind }) && (
-                                        <SlidingDoorSettings
-                                            mount={slidingMount}
-                                            direction={slidingDirection}
-                                            double={selectedDoorKind === "sliding-double"}
-                                            onChange={(patch) => {
-                                                if (patch.slidingMount)
-                                                    setSlidingMount(patch.slidingMount);
-                                                if (patch.slidingDirection)
-                                                    setSlidingDirection(patch.slidingDirection);
-                                            }}
-                                        />
-                                    )}
-                                <span className={styles.toolGroupCaption}>Окна</span>
-                                <button
-                                    type="button"
-                                    className={styles.toolButton}
-                                    data-draw-room-tool="window"
-                                    aria-pressed={tool === "window"}
-                                    onClick={() => selectTool("window")}
-                                >
-                                    <ToolIcon name="window" />
-                                    <span className={styles.toolCopy}>
-                                        <b>Окно</b>
-                                        <small>Только во внешней стене</small>
-                                    </span>
-                                </button>
-                            </div>
-                        )}
-                        <button
-                            type="button"
-                            className={`${styles.toolButton} ${styles.clearButton}`}
-                            onClick={clearScene}
-                            title="Очистить контур"
-                            aria-label="Очистить контур"
-                        >
-                            <ToolIcon name="clear" />
-                            <span className={styles.toolCopy}>
-                                <b>Очистить</b>
-                                <small>Удалить контур, проёмы и мебель</small>
-                            </span>
-                        </button>
-                    </aside>
+                                    <button
+                                        type="button"
+                                        className={styles.toolButton}
+                                        data-draw-room-tool="wall"
+                                        aria-pressed={tool === "wall"}
+                                        onClick={() => selectTool("wall")}
+                                    >
+                                        <ToolIcon name="wall" />
+                                        <span className={styles.toolCopy}>
+                                            <b>Стена</b>
+                                            <small>
+                                                {preview
+                                                    ? "Внутренняя стена создаст перегородку"
+                                                    : "Стройте внешний контур по сетке"}
+                                            </small>
+                                        </span>
+                                    </button>
+                                </div>
+                            )}
+                            {isToolSheetOpen("openings") && (
+                                <div id="draw-room-opening-tools" className={styles.toolGroupPanel}>
+                                    <span className={styles.toolGroupCaption}>Двери</span>
+                                    {DOOR_CATALOG.map((item) => (
+                                        <button
+                                            type="button"
+                                            key={item.kind}
+                                            className={styles.toolButton}
+                                            data-draw-room-door-kind={item.kind}
+                                            aria-pressed={
+                                                tool === "door" && selectedDoorKind === item.kind
+                                            }
+                                            onClick={() => selectTool("door", item.kind)}
+                                        >
+                                            <ToolIcon name="door" />
+                                            <span className={styles.toolCopy}>
+                                                <b>{item.label}</b>
+                                                <small>{item.description}</small>
+                                            </span>
+                                        </button>
+                                    ))}
+                                    {tool === "door" &&
+                                        !isHingedDoor({ doorKind: selectedDoorKind }) && (
+                                            <SlidingDoorSettings
+                                                mount={slidingMount}
+                                                direction={slidingDirection}
+                                                double={selectedDoorKind === "sliding-double"}
+                                                onChange={(patch) => {
+                                                    if (patch.slidingMount)
+                                                        setSlidingMount(patch.slidingMount);
+                                                    if (patch.slidingDirection)
+                                                        setSlidingDirection(patch.slidingDirection);
+                                                }}
+                                            />
+                                        )}
+                                    <span className={styles.toolGroupCaption}>Окна</span>
+                                    <button
+                                        type="button"
+                                        className={styles.toolButton}
+                                        data-draw-room-tool="window"
+                                        aria-pressed={tool === "window"}
+                                        onClick={() => selectTool("window")}
+                                    >
+                                        <ToolIcon name="window" />
+                                        <span className={styles.toolCopy}>
+                                            <b>Окно</b>
+                                            <small>Только во внешней стене</small>
+                                        </span>
+                                    </button>
+                                    <span className={styles.toolGroupCaption}>Отопление</span>
+                                    <button
+                                        type="button"
+                                        className={styles.toolButton}
+                                        data-draw-room-tool="radiator"
+                                        aria-pressed={tool === "radiator"}
+                                        onClick={() => selectTool("radiator")}
+                                    >
+                                        <ToolIcon name="radiator" />
+                                        <span className={styles.toolCopy}>
+                                            <b>Радиатор</b>
+                                            <small>У внешней стены, можно под окном</small>
+                                        </span>
+                                    </button>
+                                </div>
+                            )}
+                            <button
+                                type="button"
+                                className={`${styles.toolButton} ${styles.clearButton}`}
+                                onClick={clearScene}
+                                title="Очистить контур"
+                                aria-label="Очистить контур"
+                            >
+                                <ToolIcon name="clear" />
+                                <span className={styles.toolCopy}>
+                                    <b>Очистить</b>
+                                    <small>Удалить контур, проёмы и мебель</small>
+                                </span>
+                            </button>
+                        </aside>
+                    )}
 
                     {keyboardEntryOpen && (
                         <aside
@@ -7498,6 +8208,50 @@ const DrawRoom: React.FC = () => {
                                                 .join(" ")}
                                         />
                                     ))}
+                                    {(activeToolGroup === "rooms" ||
+                                        (furnitureStep && renderedRoomRegions.length > 1)) && (
+                                        <g
+                                            pointerEvents="none"
+                                            shapeRendering="crispEdges"
+                                            data-draw-room-region-fills="true"
+                                        >
+                                            {renderedRoomRegions.map((region) => {
+                                                const selected = furnitureStep
+                                                    ? region.signature ===
+                                                      furnitureRegion?.signature
+                                                    : region.signature === selectedRegionSignature;
+                                                // Furnishing greys out the other rooms; the
+                                                // rooms step tints all and marks the choice.
+                                                if (furnitureStep && selected) return null;
+                                                return (
+                                                    <g
+                                                        key={region.signature}
+                                                        fill={furnitureStep ? "#26313a" : "#e97800"}
+                                                        fillOpacity={
+                                                            furnitureStep
+                                                                ? 0.1
+                                                                : selected
+                                                                  ? 0.16
+                                                                  : 0.04
+                                                        }
+                                                        data-draw-room-region-fill={
+                                                            selected ? "selected" : "idle"
+                                                        }
+                                                    >
+                                                        {region.clearRects.map((rect) => (
+                                                            <rect
+                                                                key={`${rect.left},${rect.top}`}
+                                                                x={region.origin.x + rect.left}
+                                                                y={region.origin.y + rect.top}
+                                                                width={rect.right - rect.left}
+                                                                height={rect.bottom - rect.top}
+                                                            />
+                                                        ))}
+                                                    </g>
+                                                );
+                                            })}
+                                        </g>
+                                    )}
                                     <g className={styles.wallLayers}>
                                         <path
                                             data-draw-room-wall-strip="true"
@@ -7537,6 +8291,78 @@ const DrawRoom: React.FC = () => {
                                     </g>
                                 </g>
                             )}
+                            {previews.map((owner) =>
+                                (owner.room.radiators ?? []).map((radiator) => {
+                                    const body = getRadiatorBody(radiator, owner.room);
+                                    const service = getRadiatorServiceObstacle(
+                                        radiator,
+                                        owner.room,
+                                    );
+                                    const at = (rect: typeof body) => ({
+                                        x: rect.x + owner.origin.x,
+                                        y: rect.y + owner.origin.y,
+                                        width: rect.width,
+                                        height: rect.depth,
+                                    });
+                                    const selected = radiator.id === selectedRadiatorId;
+                                    const ribs = Math.max(
+                                        2,
+                                        Math.round(Math.max(body.width, body.depth) / 120),
+                                    );
+                                    const alongX = body.width >= body.depth;
+                                    return (
+                                        <g
+                                            key={radiator.id}
+                                            className={styles.radiator}
+                                            data-draw-room-radiator={radiator.id}
+                                            data-selected={selected}
+                                            style={{
+                                                pointerEvents:
+                                                    tool === "select" && !furnitureStep
+                                                        ? "auto"
+                                                        : "none",
+                                            }}
+                                            onPointerDown={(event) => {
+                                                if (tool !== "select" || event.button !== 0) return;
+                                                event.stopPropagation();
+                                                setSelectedOpening(null);
+                                                setSelectedContourWallEdge(null);
+                                                setSelectedSegmentWallId(null);
+                                                setSelectedRadiatorId(radiator.id);
+                                            }}
+                                        >
+                                            <rect
+                                                className={styles.radiatorClearance}
+                                                {...at(service)}
+                                            />
+                                            <rect className={styles.radiatorBody} {...at(body)} />
+                                            {Array.from({ length: ribs - 1 }, (_, index) => {
+                                                const rect = at(body);
+                                                const t = (index + 1) / ribs;
+                                                return alongX ? (
+                                                    <line
+                                                        key={index}
+                                                        x1={rect.x + rect.width * t}
+                                                        x2={rect.x + rect.width * t}
+                                                        y1={rect.y}
+                                                        y2={rect.y + rect.height}
+                                                    />
+                                                ) : (
+                                                    <line
+                                                        key={index}
+                                                        x1={rect.x}
+                                                        x2={rect.x + rect.width}
+                                                        y1={rect.y + rect.height * t}
+                                                        y2={rect.y + rect.height * t}
+                                                    />
+                                                );
+                                            })}
+                                        </g>
+                                    );
+                                }),
+                            )}
+                            {/* Furniture stands over the room fill and walls, under the dimensions. */}
+                            <g data-draw-furniture-host="true" />
                             {tool === "select" && (preview || scene.segments.length > 0) && (
                                 <g
                                     className={styles.contourWallEditor}
@@ -8049,7 +8875,7 @@ const DrawRoom: React.FC = () => {
                                         ))}
                                     </g>
                                 )}
-                            {roomSummary && !ghost && showCommittedDimensions && (
+                            {roomSummary && !ghost && showCommittedDimensions && !furnitureStep && (
                                 <g
                                     className={styles.roomSummary}
                                     data-draw-room-summary="true"
@@ -8867,6 +9693,7 @@ const DrawRoom: React.FC = () => {
                             {renderedRoomRegions.length > 1 &&
                                 !ghost &&
                                 showCommittedDimensions &&
+                                !furnitureStep &&
                                 roomRegionLabelPlacements.map(({ region, label }) => {
                                     return (
                                         <g
@@ -8896,11 +9723,28 @@ const DrawRoom: React.FC = () => {
                                                     label.height * 0.15,
                                                 )}
                                             />
+                                            {label.title && (
+                                                <text
+                                                    className={styles.roomRegionTitle}
+                                                    data-draw-room-region-title="true"
+                                                    x={label.x}
+                                                    y={label.y - label.fontSize * 1.18}
+                                                    style={{ fontSize: label.fontSize }}
+                                                    textAnchor="middle"
+                                                    dominantBaseline="middle"
+                                                >
+                                                    {label.title}
+                                                </text>
+                                            )}
                                             <text
                                                 className={styles.roomRegionHeight}
                                                 data-draw-room-region-height="true"
                                                 x={label.x}
-                                                y={label.y - label.fontSize * 0.59}
+                                                y={
+                                                    label.title
+                                                        ? label.y
+                                                        : label.y - label.fontSize * 0.59
+                                                }
                                                 style={{ fontSize: label.fontSize }}
                                                 textAnchor="middle"
                                                 dominantBaseline="middle"
@@ -8911,7 +9755,10 @@ const DrawRoom: React.FC = () => {
                                                 className={styles.roomRegionArea}
                                                 data-draw-room-region-area="true"
                                                 x={label.x}
-                                                y={label.y + label.fontSize * 0.59}
+                                                y={
+                                                    label.y +
+                                                    label.fontSize * (label.title ? 1.18 : 0.59)
+                                                }
                                                 style={{ fontSize: label.fontSize }}
                                                 textAnchor="middle"
                                                 dominantBaseline="middle"
@@ -9209,19 +10056,66 @@ const DrawRoom: React.FC = () => {
                         <FurnitureEditor
                             boardRef={boardRef}
                             active={activeToolGroup === "furniture"}
-                            selectable={tool === "select"}
                             onActivate={() => {
                                 setTool("select");
                                 setActiveToolGroup("furniture");
                                 setSelectedOpening(null);
                                 setSelectedContourWallEdge(null);
                                 setSelectedSegmentWallId(null);
-                                setRoomInspectorDismissed(true);
                             }}
                             items={scene.furniture ?? []}
                             walls={scene.segments}
                             thickness={renderedWallThickness}
                             doorObstacles={furnitureDoorObstacles}
+                            radiatorObstacles={furnitureRadiatorObstacles}
+                            presented={activeToolGroup === "result"}
+                            autoLayout={
+                                furnitureRegion ? (
+                                    <AutoLayoutPanel
+                                        key={furnitureRegion.signature}
+                                        set={autoLayoutSet}
+                                        onSetChange={(set) =>
+                                            setAutoLayoutSets((current) => ({
+                                                ...current,
+                                                [furnitureRegion.signature]: set,
+                                            }))
+                                        }
+                                        onSolve={() => void solveAutoLayout()}
+                                        solving={autoLayoutSolving}
+                                        status={autoLayoutStatus}
+                                        variants={currentAutoLayoutVariants.map(
+                                            (variant) => variant.summary,
+                                        )}
+                                        appliedIndex={autoLayoutApplied}
+                                        onApply={(index) => {
+                                            setAutoLayoutReviewStatus("");
+                                            applyAutoLayout(index);
+                                        }}
+                                        reviewable={
+                                            // Without accounts there is no review queue.
+                                            isAuthEnabled &&
+                                            autoLayoutApplied !== null &&
+                                            Boolean(
+                                                currentAutoLayoutVariants[autoLayoutApplied]
+                                                    ?.observation,
+                                            )
+                                        }
+                                        reviewHint={
+                                            isAuthEnabled && !isAuthenticated
+                                                ? "Войдите, чтобы отправить вариант на разбор."
+                                                : null
+                                        }
+                                        reviewStatus={autoLayoutReviewStatus}
+                                        onReview={(review) => void submitAutoLayoutReview(review)}
+                                        blockedReason={
+                                            autoLayoutTarget && autoLayoutTarget.status !== "ready"
+                                                ? autoLayoutTarget.message
+                                                : null
+                                        }
+                                    />
+                                ) : null
+                            }
+                            room={furnitureRoom}
                             onChange={(furniture) =>
                                 commitScene({ ...sceneForInteractionRef.current, furniture })
                             }
@@ -9230,8 +10124,7 @@ const DrawRoom: React.FC = () => {
                             !selectedOpeningData &&
                             !selectedWallInspector &&
                             !keyboardEntryOpen &&
-                            renderedRoomRegions.length > 0 &&
-                            !roomInspectorDismissed && (
+                            roomInspectorOpen && (
                                 <aside
                                     className={styles.roomInspector}
                                     aria-label="Помещения на плане"
@@ -9245,7 +10138,7 @@ const DrawRoom: React.FC = () => {
                                         <button
                                             type="button"
                                             className={styles.roomInspectorReturnTools}
-                                            onClick={() => setRoomInspectorDismissed(true)}
+                                            onClick={() => toggleToolGroup("walls")}
                                         >
                                             К инструментам
                                         </button>
@@ -9262,6 +10155,10 @@ const DrawRoom: React.FC = () => {
                                                 <label
                                                     key={region.signature}
                                                     className={styles.roomInspectorItem}
+                                                    data-draw-room-region-item={region.signature}
+                                                    data-selected={
+                                                        region.signature === selectedRegionSignature
+                                                    }
                                                 >
                                                     <span>
                                                         {(
@@ -9275,17 +10172,152 @@ const DrawRoom: React.FC = () => {
                                                         aria-label={`Название помещения ${region.name} — ${group.name}`}
                                                         value={region.name}
                                                         maxLength={80}
-                                                        onChange={(event) =>
-                                                            updateRegionName(
+                                                        onFocus={() =>
+                                                            setSelectedRegionSignature(
                                                                 region.signature,
-                                                                event.target.value,
                                                             )
                                                         }
+                                                        onChange={(event) =>
+                                                            updateRegion(region.signature, {
+                                                                name: event.target.value,
+                                                            })
+                                                        }
                                                     />
+                                                    <select
+                                                        aria-label={`Тип помещения ${region.name}`}
+                                                        value={region.kind ?? ""}
+                                                        onFocus={() =>
+                                                            setSelectedRegionSignature(
+                                                                region.signature,
+                                                            )
+                                                        }
+                                                        onChange={(event) =>
+                                                            updateRegion(region.signature, {
+                                                                kind: event.target
+                                                                    .value as RoomKind,
+                                                            })
+                                                        }
+                                                    >
+                                                        <option value="" disabled>
+                                                            Тип комнаты
+                                                        </option>
+                                                        {ROOM_KINDS.map((item) => (
+                                                            <option
+                                                                key={item.kind}
+                                                                value={item.kind}
+                                                            >
+                                                                {item.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
                                                 </label>
                                             ))}
                                         </section>
                                     ))}
+                                </aside>
+                            )}
+                        {resultStep && resultSummary && (
+                            <ResultPanel
+                                rooms={resultSummary.rooms}
+                                unassigned={resultSummary.unassigned}
+                                conflictCount={resultSummary.conflictCount}
+                                status={resultStatus}
+                                busy={resultBusy}
+                                onDownload={() => void downloadResult()}
+                                onPrint={() => void printResult()}
+                            />
+                        )}
+                        {printImageUrl &&
+                            // On the body, so the editor's clipped panes never cut the sheet.
+                            createPortal(
+                                <div
+                                    className={styles.printSheet}
+                                    data-draw-room-print-sheet="true"
+                                >
+                                    {/* A generated object URL; next/image cannot optimise it. */}
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={printImageUrl}
+                                        alt="План квартиры для печати"
+                                        onLoad={() => window.print()}
+                                    />
+                                </div>,
+                                document.body,
+                            )}
+                        {selectedRadiatorData &&
+                            !selectedOpeningData &&
+                            !selectedWallInspector &&
+                            !keyboardEntryOpen && (
+                                <aside
+                                    className={styles.openingInspector}
+                                    aria-label="Параметры: радиатор"
+                                    data-draw-room-radiator-inspector="true"
+                                >
+                                    <div className={styles.openingInspectorHeading}>
+                                        <span
+                                            className={styles.openingInspectorMark}
+                                            aria-hidden="true"
+                                        >
+                                            <ToolIcon name="radiator" />
+                                        </span>
+                                        <div>
+                                            <b>Радиатор</b>
+                                            <small>Перед ним 30 см остаются свободными</small>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className={styles.openingInspectorClose}
+                                            aria-label="Снять выделение радиатора"
+                                            onClick={() => setSelectedRadiatorId(null)}
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                    <label className={styles.openingControl}>
+                                        <span>Ширина, мм</span>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            aria-label="Ширина радиатора, мм"
+                                            min={300}
+                                            max={selectedRadiatorData.segment.length}
+                                            step={sceneSnapMm}
+                                            value={selectedRadiatorData.radiator.width}
+                                            onChange={(event) =>
+                                                updateSelectedRadiator({
+                                                    width: Number(event.target.value),
+                                                })
+                                            }
+                                        />
+                                    </label>
+                                    <label className={styles.openingControl}>
+                                        <span>От начала стены, мм</span>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            aria-label="Отступ радиатора от начала стены, мм"
+                                            min={0}
+                                            max={Math.max(
+                                                0,
+                                                selectedRadiatorData.segment.length -
+                                                    selectedRadiatorData.radiator.width,
+                                            )}
+                                            step={sceneSnapMm}
+                                            value={selectedRadiatorData.radiator.offset}
+                                            onChange={(event) =>
+                                                updateSelectedRadiator({
+                                                    offset: Number(event.target.value),
+                                                })
+                                            }
+                                        />
+                                    </label>
+                                    <button
+                                        type="button"
+                                        className={styles.deleteOpeningButton}
+                                        onClick={deleteSelectedRadiator}
+                                    >
+                                        Удалить радиатор
+                                    </button>
                                 </aside>
                             )}
                         {selectedWallInspector && !keyboardEntryOpen && (
@@ -9707,9 +10739,7 @@ const DrawRoom: React.FC = () => {
                     >{`Масштаб: ${Math.max(zoomPercent, 1)}%`}</span>
                     <span data-draw-room-status="contour">
                         {preview
-                            ? plannerEligibilityError
-                                ? `Контур замкнут: ${formatMeters(preview.room.width)} × ${formatMeters(preview.room.depth)} · ${closedRoomArea} · для планировщика нужен размер от 2,4 м`
-                                : `Контур готов: ${formatMeters(preview.room.width)} × ${formatMeters(preview.room.depth)} · ${closedRoomArea}`
+                            ? `Контур готов: ${formatMeters(preview.room.width)} × ${formatMeters(preview.room.depth)} · ${closedRoomArea}`
                             : "Контур ещё не замкнут"}
                     </span>
                     <span data-draw-room-status="coordinates">
@@ -9717,9 +10747,6 @@ const DrawRoom: React.FC = () => {
                             ? `X ${cursorPoint.x} · Y ${cursorPoint.y} мм`
                             : "Наведите курсор на поле"}
                     </span>
-                    <Link href={projectHref("/planner")} data-draw-room-status="planner-link">
-                        Вернуться к планировщику
-                    </Link>
                 </footer>
             </main>
         </>

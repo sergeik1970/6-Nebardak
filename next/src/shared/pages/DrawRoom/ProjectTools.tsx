@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
     parseDrawingProject,
     serializeDrawingProject,
@@ -27,6 +27,7 @@ export default function ProjectTools({
     onLayers,
     measuring,
     onMeasure,
+    steps,
 }: {
     measuring: boolean;
     onMeasure: () => void;
@@ -35,6 +36,8 @@ export default function ProjectTools({
     status: "loading" | "saved" | "error";
     layers: DrawingLayers;
     onLayers: (layers: DrawingLayers) => void;
+    /** The drawing's step tabs share this row so the canvas keeps its height. */
+    steps?: React.ReactNode;
 }) {
     const fileInput = useRef<HTMLInputElement>(null);
     const toolbar = useRef<HTMLDivElement>(null);
@@ -164,6 +167,7 @@ export default function ProjectTools({
             >
                 Линейка
             </button>
+            {steps}
             <span role="status" className={styles.status} data-drawing-save-status={status}>
                 {status === "saved"
                     ? "Сохранено в этом браузере"

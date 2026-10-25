@@ -62,7 +62,7 @@ test("a project link never falls back to the guest draft or another store", asyn
         value: scene,
     });
 
-    for (const path of ["/planner", "/planner/draw", "/questionnaire", "/test"]) {
+    for (const path of ["/planner", "/planner/draw", "/test"]) {
         await page.goto(`${path}?project=${PROJECT_ID}`, { waitUntil: "networkidle" });
         // This build has accounts off; a saved project must not open from a local copy.
         await expect(
@@ -85,5 +85,6 @@ test("a malformed project id falls back to the guest draft", async ({ page }) =>
 
     await page.goto("/planner?project=..%2F..%2Fsecret", { waitUntil: "networkidle" });
 
-    await expect(page.getByRole("checkbox", { name: /Кровать 1-местная/ })).toBeChecked();
+    // The guest draft's room opens in the planner as a drawing.
+    await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
 });
