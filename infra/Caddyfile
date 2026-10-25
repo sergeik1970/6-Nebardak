@@ -5,6 +5,11 @@
 {$SITE_ADDRESS} {
 	encode zstd gzip
 
+	# Sessions and CSRF checks are bound to the apex origin (PUBLIC_ORIGIN), so
+	# a page served from www could not sign in. Send www to the apex instead.
+	@www header_regexp www Host ^www\.([^:]+)
+	redir @www https://{re.www.1}{uri} permanent
+
 	@api path /api/*
 	handle @api {
 		reverse_proxy nest:3001
