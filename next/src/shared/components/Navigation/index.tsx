@@ -172,8 +172,8 @@ const Navigation: React.FC = () => {
                                 className={styles["logo-image"]}
                                 height={50}
                                 priority
-                                quality={80}
-                                src="/images/Home/logo.79c74b88fecb.jpg"
+                                src="/images/Home/logo.c1fc117f017d.svg"
+                                unoptimized
                                 width={50}
                             />
                         </Link>

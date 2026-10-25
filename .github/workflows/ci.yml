@@ -218,7 +218,7 @@ jobs:
           grep -Eqi '^cache-control:.*max-age=31536000.*immutable' "$test_headers"
           test "$(grep -Eci '^cache-control:' "$test_headers")" = "1"
           home_headers="$(mktemp)"
-          curl --fail --silent --show-error --head http://127.0.0.1/images/Home/logo.79c74b88fecb.jpg >"$home_headers"
+          curl --fail --silent --show-error --head http://127.0.0.1/images/Home/logo.c1fc117f017d.svg >"$home_headers"
           grep -Eqi '^cache-control:.*max-age=31536000.*immutable' "$home_headers"
           test "$(grep -Eci '^cache-control:' "$home_headers")" = "1"
           # Accounts are off in this topology: a same-origin request gets 404;
