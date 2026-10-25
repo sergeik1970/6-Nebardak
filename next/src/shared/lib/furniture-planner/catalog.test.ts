@@ -480,7 +480,7 @@ const DEFINITION_METADATA_MANIFEST: Record<
     },
     "wardrobe-small": {
         label: "Шкаф для одежды, малый",
-        shortLabel: "Шкаф 700 мм",
+        shortLabel: "Шкаф малый",
         category: "storage",
         centerAllowed: false,
         requiredWallContact: true,
@@ -488,7 +488,7 @@ const DEFINITION_METADATA_MANIFEST: Record<
     },
     "wardrobe-medium": {
         label: "Шкаф для одежды, средний",
-        shortLabel: "Шкаф 1500 мм",
+        shortLabel: "Шкаф средний",
         category: "storage",
         centerAllowed: false,
         requiredWallContact: true,
@@ -496,7 +496,7 @@ const DEFINITION_METADATA_MANIFEST: Record<
     },
     "wardrobe-large": {
         label: "Шкаф для одежды, большой",
-        shortLabel: "Шкаф 2000 мм",
+        shortLabel: "Шкаф большой",
         category: "storage",
         centerAllowed: false,
         requiredWallContact: true,
@@ -607,17 +607,20 @@ const DEFINITION_METADATA_MANIFEST: Record<
         removalPriority: 10,
     },
 };
-// Planning defaults for the supplied September image set. Dimensions include chairs.
+// Planning defaults for the supplied September image set and the designer's
+// October sheets. Dining dimensions include chairs.
 const suppliedFurniture: [string, string, number, number, FurnitureCategory, string][] = [
-    ["dining-square-four", "Квадратный стол и 4 стула", 2000, 2000, "living", "wood"],
-    ["dining-round-four", "Круглый стол и 4 стула", 2100, 2100, "living", "wood"],
-    ["dining-oval-six", "Овальный стол и 6 стульев", 2800, 1900, "living", "wood"],
-    ["dining-rect-six", "Прямоугольный стол и 6 стульев", 2800, 1900, "living", "wood"],
+    ["dining-square-four", "Квадратный стол и 4 стула", 2340, 2340, "living", "wood"],
+    ["dining-round-four", "Круглый стол и 4 стула", 2260, 2260, "living", "wood"],
+    ["dining-oval-six", "Овальный стол и 6 стульев", 2960, 2090, "living", "wood"],
+    ["dining-rect-six", "Прямоугольный стол и 6 стульев", 3000, 2200, "living", "wood"],
     ["coffee-table-rect", "Журнальный столик", 1000, 550, "living", "wood"],
     ["aquarium", "Аквариум с тумбой", 1000, 600, "living", "wood"],
     ["pet-bed", "Лежанка для питомца", 800, 600, "living", "fabric"],
     ["litter-box", "Кошачий лоток", 550, 400, "living", "wood"],
     ["child-bed", "Детская кровать", 800, 1600, "children", "fabric"],
+    ["dressing-table", "Туалетный столик", 900, 400, "work", "wood"],
+    ["sofa-bed", "Диван-кровать", 2000, 1000, "living", "fabric"],
 ];
 for (const [id, label, width, depth, category, visualKind] of suppliedFurniture) {
     BODY_MANIFEST[id] = [{ x: 0, y: 0, width, depth }];
@@ -629,7 +632,9 @@ for (const [id, label, width, depth, category, visualKind] of suppliedFurniture)
               { x: -600, y: 0, width: 600, depth },
               { x: width, y: 0, width: 600, depth },
           ].map((rect) => ({ ...rect, label: "Проход у стола", requirement: "hard" }))
-        : [{ x: 0, y: depth, width, depth: 600, label: "Зона доступа", requirement: "hard" }];
+        : id === "sofa-bed"
+          ? [{ x: 0, y: depth, width, depth, label: "Зона раскладывания", requirement: "hard" }]
+          : [{ x: 0, y: depth, width, depth: 600, label: "Зона доступа", requirement: "hard" }];
     DEFINITION_METADATA_MANIFEST[id] = {
         label,
         shortLabel: label,
@@ -697,6 +702,57 @@ for (const [id, label, shortLabel, width, depth, count, kind] of kitchenFurnitur
     if (kind === "base" || kind === "island") WINDOW_ALLOWED.push(id);
 }
 
+// Standard sizes from the designer's sheets of 2026-10-25, offered as presets.
+const SIZE_MANIFEST: Record<string, [number, number][]> = {
+    "single-bed": [
+        [900, 2000],
+        [1000, 1800],
+    ],
+    "double-bed": [
+        [1400, 2000],
+        [1600, 2000],
+        [1800, 2000],
+    ],
+    "wardrobe-small": [
+        [600, 450],
+        [700, 500],
+    ],
+    "wardrobe-medium": [
+        [900, 600],
+        [1350, 600],
+        [1500, 600],
+    ],
+    dresser: [
+        [600, 400],
+        [900, 400],
+    ],
+    "sofa-two": [
+        [1600, 950],
+        [1800, 1000],
+        [2000, 1000],
+    ],
+    "sofa-three": [
+        [2200, 950],
+        [2500, 1200],
+        [2700, 1200],
+    ],
+    armchair: [
+        [800, 790],
+        [1000, 950],
+    ],
+    "tv-console": [925, 1165, 1325, 1435, 1655, 1875].map((width) => [width, 400]),
+    "dressing-table": [
+        [900, 350],
+        [900, 400],
+        [950, 450],
+        [1100, 450],
+    ],
+    "sofa-bed": [
+        [1400, 1000],
+        [2000, 1000],
+    ],
+};
+
 const area = (rects: Rect[]) => rects.reduce((total, rect) => total + rect.width * rect.depth, 0);
 
 describe("furniture catalog golden manifest", () => {
@@ -741,6 +797,15 @@ describe("furniture catalog golden manifest", () => {
             );
             expect(geometry.width, definition.id).toBe(expectedWidth);
             expect(geometry.depth, definition.id).toBe(expectedDepth);
+        }
+    });
+
+    it("offers the designer's standard sizes as presets", () => {
+        for (const definition of FURNITURE_CATALOG) {
+            expect(
+                definition.sizes?.map(({ width, depth }) => [width, depth]),
+                definition.id,
+            ).toEqual(SIZE_MANIFEST[definition.id]);
         }
     });
 

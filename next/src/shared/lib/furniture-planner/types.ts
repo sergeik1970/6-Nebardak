@@ -189,6 +189,17 @@ export interface FurnitureDefinition {
      * the footprint of base units and only meet walls and each other.
      */
     mounting?: "upper";
+    /**
+     * Standard sizes from the designer's drawings, offered as presets when the
+     * piece is edited by hand. The body stays the default size.
+     */
+    sizes?: FurnitureSize[];
+}
+
+/** Overall plan size in the unrotated furniture frame, in millimetres. */
+export interface FurnitureSize {
+    width: number;
+    depth: number;
 }
 
 export interface FurnitureInstance {
