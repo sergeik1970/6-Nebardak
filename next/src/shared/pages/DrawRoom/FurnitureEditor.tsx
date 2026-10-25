@@ -1,16 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-    FURNITURE_CATALOG,
     getRotatedGeometry,
     type DrawWallSegment,
-    type FurnitureCategory,
+    type FurnitureDefinition,
     type Rotation,
     type Rect,
 } from "@/shared/lib/furniture-planner";
 import {
     furnitureBelongsToRoom,
-    furnitureCategoryOrder,
     furnitureDefinition,
     furnitureError,
     furnitureConflicts,
@@ -21,6 +19,12 @@ import {
     type DrawFurniture,
     type FurnitureRoom,
 } from "./furniture";
+import {
+    FURNITURE_MENU,
+    furnitureMenuOrder,
+    menuGroupDefinitions,
+    searchFurnitureMenu,
+} from "./catalog-menu";
 import styles from "./furniture.module.scss";
 import FurniturePhoto from "@/shared/components/FurniturePhoto";
 import {
@@ -29,15 +33,6 @@ import {
 } from "@/shared/lib/furniture-planner/furniture-photos";
 import { isSchematicFurnitureSource } from "@/shared/lib/furniture-planner/catalog";
 
-const categories: Record<FurnitureCategory, string> = {
-    sleep: "Кровати",
-    living: "Гостиная",
-    storage: "Хранение",
-    work: "Рабочее место",
-    media: "ТВ",
-    children: "Детская",
-    kitchen: "Кухня",
-};
 const snap = (n: number) => Math.round(n / 10) * 10;
 export default function FurnitureEditor({
     boardRef,
@@ -76,6 +71,7 @@ export default function FurnitureEditor({
     const [reposition, setReposition] = useState<DrawFurniture | null>(null);
     const [preview, setPreview] = useState<DrawFurniture | null>(null);
     const [query, setQuery] = useState("");
+    const [section, setSection] = useState<string | null>(null);
     const [message, setMessage] = useState("");
     const drag = useRef<{ initial: DrawFurniture; start: DOMPoint; last: DrawFurniture } | null>(
         null,
@@ -96,6 +92,7 @@ export default function FurnitureEditor({
             setPending(null);
             setPreview(null);
             setMessage("");
+            setSection(null);
             drag.current = null;
         }
     }, [active]);
@@ -215,6 +212,7 @@ export default function FurnitureEditor({
             if (event.key === "Escape") {
                 event.stopImmediatePropagation();
                 drag.current = null;
+                setSection(null);
                 setPreview(null);
                 setPending(null);
                 setSelectedId(null);
@@ -514,6 +512,40 @@ export default function FurnitureEditor({
     const screenUnit = 1 / (board?.getScreenCTM()?.a || 0.1);
     const layerHost =
         board?.querySelector<SVGGElement>("[data-draw-furniture-host='true']") ?? board;
+    const openSection = FURNITURE_MENU.find((menuSection) => menuSection.id === section);
+    const furnitureButton = (definition: FurnitureDefinition) => {
+        const geometry = getRotatedGeometry(definition, 0);
+        return (
+            <button
+                key={definition.id}
+                type="button"
+                data-add-furniture={definition.id}
+                aria-pressed={pending?.definitionId === definition.id}
+                onClick={() => {
+                    setPending({
+                        id: "pending",
+                        definitionId: definition.id,
+                        x: 0,
+                        y: 0,
+                        width: geometry.width,
+                        depth: geometry.depth,
+                        rotation: 0,
+                    });
+                    setSelectedId(null);
+                    setReposition(null);
+                    setPreview(null);
+                    setMessage("");
+                    // The menu steps aside once a piece is chosen, as in Remplanner.
+                    setSection(null);
+                }}
+            >
+                <span>{definition.label}</span>
+                <small>
+                    {geometry.width} × {geometry.depth} мм
+                </small>
+            </button>
+        );
+    };
     return (
         <>
             {layerHost &&
@@ -596,6 +628,7 @@ export default function FurnitureEditor({
                     className={styles.panel}
                     aria-label="Мебель на чертеже"
                     data-editing={Boolean(editing)}
+                    data-section-open={Boolean(openSection && !query.trim())}
                     onPointerDown={(event) => event.stopPropagation()}
                 >
                     <header>
@@ -857,71 +890,61 @@ export default function FurnitureEditor({
                         aria-label="Поиск мебели"
                         placeholder="Найти мебель"
                         value={query}
-                        onChange={(event) => setQuery(event.target.value)}
+                        onChange={(event) => {
+                            setQuery(event.target.value);
+                            setSection(null);
+                        }}
                     />
-                    <div className={styles.catalog}>
-                        {furnitureCategoryOrder(
-                            Object.keys(categories) as FurnitureCategory[],
-                            room?.kind,
-                        ).map((category) => {
-                            const label = categories[category];
-                            const definitions = FURNITURE_CATALOG.filter(
-                                (item) =>
-                                    item.category === category &&
-                                    item.label.toLowerCase().includes(query.toLowerCase()),
-                            );
-                            return definitions.length ? (
-                                <section key={category}>
-                                    <h3>{label}</h3>
-                                    {definitions.map((definition) => {
-                                        const geometry = getRotatedGeometry(definition, 0);
-                                        return (
-                                            <button
-                                                key={definition.id}
-                                                data-add-furniture={definition.id}
-                                                aria-pressed={
-                                                    pending?.definitionId === definition.id
-                                                }
-                                                onClick={() => {
-                                                    setPending({
-                                                        id: "pending",
-                                                        definitionId: definition.id,
-                                                        x: 0,
-                                                        y: 0,
-                                                        width: geometry.width,
-                                                        depth: geometry.depth,
-                                                        rotation: 0,
-                                                    });
-                                                    setSelectedId(null);
-                                                    setReposition(null);
-                                                    setPreview(null);
-                                                    setMessage("");
-                                                }}
-                                            >
-                                                {getFurniturePhoto(definition.id) && (
-                                                    <span className={styles.thumbnail}>
-                                                        <FurniturePhoto
-                                                            photo={
-                                                                getFurniturePhoto(definition.id)!
-                                                            }
-                                                            fit
-                                                        />
-                                                    </span>
-                                                )}
-                                                <span>{definition.label}</span>
-                                                <small>
-                                                    {geometry.width} × {geometry.depth} мм
-                                                    {isSchematicFurnitureSource(definition.source)
-                                                        ? " · типовые"
-                                                        : ""}
-                                                </small>
-                                            </button>
-                                        );
-                                    })}
+                    {query.trim() ? (
+                        <div className={styles.catalog} data-furniture-search>
+                            {searchFurnitureMenu(query).map(furnitureButton)}
+                            {searchFurnitureMenu(query).length === 0 && <p>Ничего не найдено.</p>}
+                        </div>
+                    ) : (
+                        <nav
+                            className={styles.sections}
+                            aria-label="Разделы каталога"
+                            data-open={Boolean(openSection)}
+                        >
+                            {furnitureMenuOrder(room?.kind).map((menuSection) => (
+                                <button
+                                    key={menuSection.id}
+                                    type="button"
+                                    data-furniture-section={menuSection.id}
+                                    data-furniture-section-items={menuSection.groups
+                                        .flatMap((group) => group.ids)
+                                        .join(" ")}
+                                    aria-expanded={openSection?.id === menuSection.id}
+                                    onClick={() => setSection(menuSection.id)}
+                                >
+                                    <span>{menuSection.label}</span>
+                                    <span aria-hidden="true">›</span>
+                                </button>
+                            ))}
+                        </nav>
+                    )}
+                    {openSection && !query.trim() && (
+                        // Like Remplanner: the section's groups open beside the panel.
+                        <div
+                            className={styles.flyout}
+                            role="region"
+                            aria-label={openSection.label}
+                            data-furniture-flyout={openSection.id}
+                        >
+                            <header>
+                                <button type="button" onClick={() => setSection(null)}>
+                                    ‹ Разделы
+                                </button>
+                                <b>{openSection.label}</b>
+                            </header>
+                            {openSection.groups.map((group) => (
+                                <section key={group.label}>
+                                    <h3>{group.label}</h3>
+                                    {menuGroupDefinitions(group).map(furnitureButton)}
                                 </section>
-                            ) : null;
-                        })}
-                    </div>
+                            ))}
+                        </div>
+                    )}
                 </aside>
             )}
         </>
