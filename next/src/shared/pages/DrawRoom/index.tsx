@@ -104,6 +104,13 @@ import { RECT_TEMPLATE_LIMITS, createRectTemplateRoom, roomToDrawingScene } from
 
 import ProjectTools, { DEFAULT_DRAWING_LAYERS } from "./ProjectTools";
 import { trackGoal } from "@/shared/lib/analytics";
+import {
+    CEILING_HEIGHT_MM,
+    getDoorHeight,
+    getWindowHeight,
+    getWindowSillHeight,
+} from "@/shared/lib/furniture-planner/opening-heights";
+import { OpeningHeightFields } from "./OpeningHeightFields";
 
 type Tool = "select" | "wall" | "door" | "window" | "radiator";
 type ToolGroup = "walls" | "openings" | "rooms" | "furniture" | "result";
@@ -234,7 +241,7 @@ const WINDOW_WIDTH_MM = 1200;
 const WINDOW_MIN_WIDTH_MM = 400;
 const WINDOW_MAX_WIDTH_MM = 2400;
 const OPENING_END_CLEARANCE_MM = LEGACY_SNAP_MM;
-const ROOM_CEILING_HEIGHT_MM = 2700;
+const ROOM_CEILING_HEIGHT_MM = CEILING_HEIGHT_MM;
 // Room metadata is part of the drawing, so it uses fixed world-space metrics
 // and grows/shrinks together with the walls rather than remaining screen-size.
 const ROOM_LABEL_MIN_FONT_MM = 72;
@@ -1642,6 +1649,67 @@ const getOpeningCutPolygon = (
 };
 
 const formatMillimeters = (value: number) => String(Math.round(value)) + " мм";
+
+interface OpeningHeightTag {
+    id: string;
+    kind: OpeningKind;
+    point: Point;
+    vertical: boolean;
+    height: string;
+    sill: string | null;
+}
+
+/**
+ * The H=… mark of a measured plan. A door's sits in its room past the clear
+ * chain (a partition door's on the side it opens to); a window's sits
+ * outside past the outer chain, with its sill height beside it.
+ */
+const getOpeningHeightTag = (
+    opening: RenderedOpening,
+    thickness: number,
+    millimetersPerPixel: number,
+): OpeningHeightTag => {
+    const line = openingLine(
+        opening.segment,
+        opening.origin,
+        opening.item.offset,
+        opening.item.width,
+    );
+    const centre = { x: (line.start.x + line.end.x) / 2, y: (line.start.y + line.end.y) / 2 };
+    const labelHeight = Math.max(115, millimetersPerPixel * 18);
+    const inward = opening.segment.inwardNormal;
+    const vertical = opening.segment.orientation === "vertical";
+    const cm = (value: number) => String(Math.round(value / 10));
+    if (opening.kind === "window") {
+        const distance = thickness + Math.max(100, millimetersPerPixel * 15) + labelHeight * 1.8;
+        const sill = getWindowSillHeight(opening.item);
+        return {
+            id: opening.item.id,
+            kind: "window",
+            point: { x: centre.x - inward.x * distance, y: centre.y - inward.y * distance },
+            vertical,
+            height: `H=${cm(getWindowHeight(opening.item))}`,
+            sill: opening.item.windowKind === "floor-to-ceiling" ? null : `Н под.=${cm(sill)}`,
+        };
+    }
+    const partition = Boolean(opening.item.partitionId);
+    const normal =
+        partition && opening.item.swingDirection === "outward"
+            ? { x: -inward.x, y: -inward.y }
+            : inward;
+    const distance =
+        (partition ? thickness / 2 : 0) +
+        Math.max(80, millimetersPerPixel * 10) +
+        labelHeight * 1.9;
+    return {
+        id: opening.item.id,
+        kind: "door",
+        point: { x: centre.x + normal.x * distance, y: centre.y + normal.y * distance },
+        vertical,
+        height: `H=${cm(getDoorHeight(opening.item))}`,
+        sill: null,
+    };
+};
 
 type WallUnionRect = { left: number; top: number; right: number; bottom: number };
 
@@ -9336,6 +9404,63 @@ const DrawRoom: React.FC = () => {
                                         </g>
                                     );
                                 })}
+                            {preview && showCommittedDimensions && !ghost && (
+                                <g
+                                    className={styles.openingHeightTags}
+                                    data-draw-room-opening-heights="true"
+                                    aria-hidden="true"
+                                >
+                                    {renderedOpenings.map((opening) => {
+                                        const tag = getOpeningHeightTag(
+                                            opening,
+                                            renderedWallThickness,
+                                            annotationMillimetersPerPixel,
+                                        );
+                                        const fontSize = dimensionFontSize * 0.86;
+                                        const characters =
+                                            tag.height.length +
+                                            (tag.sill ? tag.sill.length + 2 : 0);
+                                        const width = fontSize * (characters * 0.6 + 1.3);
+                                        const height = fontSize * 1.7;
+                                        return (
+                                            <g
+                                                key={`${tag.kind}-${tag.id}`}
+                                                data-draw-room-opening-height={tag.id}
+                                                transform={
+                                                    tag.vertical
+                                                        ? `rotate(-90 ${tag.point.x} ${tag.point.y})`
+                                                        : undefined
+                                                }
+                                            >
+                                                <rect
+                                                    x={tag.point.x - width / 2}
+                                                    y={tag.point.y - height / 2}
+                                                    width={width}
+                                                    height={height}
+                                                    rx={height * 0.22}
+                                                />
+                                                <text
+                                                    x={tag.point.x}
+                                                    y={tag.point.y}
+                                                    textAnchor="middle"
+                                                    dominantBaseline="middle"
+                                                    style={{ fontSize }}
+                                                >
+                                                    <tspan>{tag.height}</tspan>
+                                                    {tag.sill && (
+                                                        <tspan
+                                                            className={styles.openingSillValue}
+                                                            dx={fontSize * 0.7}
+                                                        >
+                                                            {tag.sill}
+                                                        </tspan>
+                                                    )}
+                                                </text>
+                                            </g>
+                                        );
+                                    })}
+                                </g>
+                            )}
                             {preview && openingPreview && (
                                 <g
                                     className={`${styles.openingGhost} ${openingPreview.valid ? styles.openingValid : styles.openingInvalid}`}
@@ -10265,6 +10390,14 @@ const DrawRoom: React.FC = () => {
                                               : "снизу"}
                                     </small>
                                 </label>
+                                <OpeningHeightFields
+                                    key={`${selectedOpeningData.kind}-${selectedOpeningData.item.id}`}
+                                    kind={selectedOpeningData.kind}
+                                    item={selectedOpeningData.item}
+                                    step={sceneSnapMm}
+                                    onChange={updateSelectedOpening}
+                                    onReject={setNotice}
+                                />
                                 {selectedOpeningError && (
                                     <p role="alert" className={styles.openingInspectorNote}>
                                         {selectedOpeningError}
@@ -10426,7 +10559,13 @@ const DrawRoom: React.FC = () => {
                                                             windowKind
                                                         }
                                                         onClick={() =>
-                                                            updateSelectedOpening({ windowKind })
+                                                            // Heights fall back to the new
+                                                            // kind's own standard values.
+                                                            updateSelectedOpening({
+                                                                windowKind,
+                                                                height: undefined,
+                                                                sillHeight: undefined,
+                                                            })
                                                         }
                                                     >
                                                         {label}

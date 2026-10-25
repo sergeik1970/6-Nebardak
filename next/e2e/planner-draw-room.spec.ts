@@ -4679,3 +4679,62 @@ test("the wall tool resting on a wall measures from the cursor to each corner", 
     await page.mouse.move(inside.x, inside.y);
     await expect(chainPieces).toHaveCount(0);
 });
+
+test("doors and windows carry their heights on the drawing and in the card", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Desktop opening card is covered once");
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await drawSimpleRect(page);
+
+    await openToolGroup(page, "opening");
+    await page.locator("[data-draw-room-door-kind='room']").click();
+    await pointOnBoard(page, 0.5, 0.69);
+    const door = page.locator("[data-draw-room-opening='door']");
+    const doorId = await door.getAttribute("data-draw-room-opening-id");
+    const doorTag = page.locator(`[data-draw-room-opening-height='${doorId}']`);
+    await expect(doorTag).toHaveText("H=210");
+
+    const doorCard = page.getByLabel("Параметры: дверь");
+    const doorHeight = doorCard.getByLabel("Высота, мм");
+    await expect(doorHeight).toHaveValue("2100");
+    await doorHeight.fill("2000");
+    await doorHeight.press("Enter");
+    await expect(doorTag).toHaveText("H=200");
+    await doorHeight.fill("3000");
+    await doorHeight.press("Enter");
+    await expect(page.locator("[data-draw-room-notice='true']")).toContainText("Высота двери");
+    await expect(doorHeight).toHaveValue("2000");
+    await doorCard.getByRole("button", { name: "Закрыть параметры проёма" }).click();
+
+    await openToolGroup(page, "opening");
+    await page.locator("[data-draw-room-tool='window']").click();
+    await pointOnBoard(page, 0.5, 0.23);
+    const window = page.locator("[data-draw-room-opening='window']");
+    const windowId = await window.getAttribute("data-draw-room-opening-id");
+    const windowTag = page.locator(`[data-draw-room-opening-height='${windowId}']`);
+    await expect(windowTag).toHaveText(/H=150\s*Н под\.=85/);
+
+    const windowCard = page.getByLabel("Параметры: окно");
+    const sill = windowCard.getByLabel("Высота подоконника, мм");
+    await sill.fill("900");
+    await sill.blur();
+    await expect(windowTag).toHaveText(/H=150\s*Н под\.=90/);
+    await sill.fill("1300");
+    await sill.press("Enter");
+    await expect(page.locator("[data-draw-room-notice='true']")).toContainText("не выше потолка");
+    await expect(sill).toHaveValue("900");
+
+    await windowCard.getByRole("button", { name: "Панорамное" }).click();
+    await expect(windowTag).toHaveText("H=240");
+    await expect(windowCard.getByLabel("Высота подоконника, мм")).toHaveCount(0);
+
+    await expect
+        .poll(async () =>
+            page.evaluate(() => {
+                const saved = localStorage.getItem("stylefinder:draw-room-editor:v1");
+                return saved ? JSON.parse(saved).doors[0].height : null;
+            }),
+        )
+        .toBe(2000);
+});

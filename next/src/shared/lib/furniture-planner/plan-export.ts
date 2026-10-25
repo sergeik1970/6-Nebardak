@@ -1,5 +1,6 @@
 import { getFurniture, isSchematicFurnitureSource } from "./catalog";
 import { getPartitionObstacleRects, getRotatedGeometry, getWorldBodyRects } from "./geometry";
+import { getDoorHeight, getWindowHeight, getWindowSillHeight } from "./opening-heights";
 import { validateRemovalRecords } from "./removal";
 import { getRoomSegment, getRoomVertices } from "./room-geometry";
 import { getDrawRoomRegions } from "./room-regions";
@@ -547,7 +548,7 @@ export const renderPlanSpecificationPng = async (
         ),
         ...specification.room.doors.map(
             (door, index) =>
-                `${door.partitionId ? "Дверь в перегородке" : "Дверь"} ${index + 1}: ${door.partitionId ? "внутренний проём" : WALL_LABELS[door.wall]}, ширина ${door.width} мм, отступ ${door.offset} мм, ${
+                `${door.partitionId ? "Дверь в перегородке" : "Дверь"} ${index + 1}: ${door.partitionId ? "внутренний проём" : WALL_LABELS[door.wall]}, ширина ${door.width} мм, высота ${getDoorHeight(door)} мм, отступ ${door.offset} мм, ${
                     door.partitionId
                         ? `открывается по выбранной стороне на ${door.clearanceDepth} мм`
                         : (door.swingDirection ?? "inward") === "inward"
@@ -557,7 +558,7 @@ export const renderPlanSpecificationPng = async (
         ),
         ...specification.room.windows.map(
             (window, index) =>
-                `${window.windowKind === "floor-to-ceiling" ? "Панорамное окно" : "Окно"} ${index + 1}: ${WALL_LABELS[window.wall]}, ширина ${window.width} мм, отступ ${window.offset} мм`,
+                `${window.windowKind === "floor-to-ceiling" ? "Панорамное окно" : "Окно"} ${index + 1}: ${WALL_LABELS[window.wall]}, ширина ${window.width} мм, высота ${getWindowHeight(window)} мм${window.windowKind === "floor-to-ceiling" ? "" : `, подоконник ${getWindowSillHeight(window)} мм`}, отступ ${window.offset} мм`,
         ),
         ...(specification.room.radiators ?? []).map(
             (radiator, index) =>

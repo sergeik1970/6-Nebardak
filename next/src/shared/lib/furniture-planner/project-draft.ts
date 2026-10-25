@@ -432,7 +432,8 @@ const normalizeRoom = (input: unknown, allowDrawingWithoutDoor = false): Room | 
             (door.doorKind !== undefined &&
                 (typeof door.doorKind !== "string" || !VALID_DOOR_KINDS.has(door.doorKind))) ||
             ((door.doorKind === "sliding-single" || door.doorKind === "sliding-double") &&
-                (door.hinge !== undefined || door.swingDirection !== undefined))
+                (door.hinge !== undefined || door.swingDirection !== undefined)) ||
+            (door.height !== undefined && !isSafeNumber(door.height, 1, MAX_ROOM_MM))
         ) {
             return null;
         }
@@ -456,6 +457,7 @@ const normalizeRoom = (input: unknown, allowDrawingWithoutDoor = false): Room | 
             ...(door.doorKind ? { doorKind: door.doorKind as DoorKind } : {}),
             ...(door.slidingMount ? { slidingMount: door.slidingMount } : {}),
             ...(door.slidingDirection ? { slidingDirection: door.slidingDirection } : {}),
+            ...(door.height !== undefined ? { height: door.height as number } : {}),
         });
     }
     const exteriorDoorCount = doors.filter((door) => !door.partitionId).length;
@@ -473,7 +475,9 @@ const normalizeRoom = (input: unknown, allowDrawingWithoutDoor = false): Room | 
             !isSafeNumber(opening.width, 1, MAX_ROOM_MM) ||
             (opening.windowKind !== undefined &&
                 opening.windowKind !== "standard" &&
-                opening.windowKind !== "floor-to-ceiling")
+                opening.windowKind !== "floor-to-ceiling") ||
+            (opening.height !== undefined && !isSafeNumber(opening.height, 1, MAX_ROOM_MM)) ||
+            (opening.sillHeight !== undefined && !isSafeNumber(opening.sillHeight, 0, MAX_ROOM_MM))
         ) {
             return null;
         }
@@ -489,6 +493,10 @@ const normalizeRoom = (input: unknown, allowDrawingWithoutDoor = false): Room | 
             offset: opening.offset as number,
             width: opening.width as number,
             ...(opening.windowKind ? { windowKind: opening.windowKind } : {}),
+            ...(opening.height !== undefined ? { height: opening.height as number } : {}),
+            ...(opening.sillHeight !== undefined
+                ? { sillHeight: opening.sillHeight as number }
+                : {}),
         });
     }
 

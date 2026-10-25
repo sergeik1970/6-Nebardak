@@ -893,6 +893,24 @@
     vector-effect: non-scaling-stroke;
     stroke-dasharray: 7 5;
 }
+.openingHeightTags {
+    pointer-events: none;
+}
+.openingHeightTags rect {
+    fill: rgba(255, 253, 250, 0.95);
+    stroke: #87969a;
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+.openingHeightTags text {
+    fill: #26343a;
+    font-family: var(--font-primary);
+    font-weight: 800;
+    letter-spacing: -0.025em;
+}
+.openingHeightTags .openingSillValue {
+    fill: #236ca6;
+}
 .openingGhost {
     pointer-events: none;
 }
@@ -2119,7 +2137,8 @@
     .persistentWallDimensions,
     .architecturalDimensions,
     .closedBranchDimensions,
-    .liveWallDimensions {
+    .liveWallDimensions,
+    .openingHeightTags {
         display: none;
     }
 }
