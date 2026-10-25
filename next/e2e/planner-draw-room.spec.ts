@@ -3091,6 +3091,62 @@ test("furniture goes into the selected room, against its walls", async ({ page }
     await expect(pieces).toHaveCount(3);
 });
 
+test("a kitchen is fitted with base and upper units", async ({ page }, testInfo) => {
+    test.skip(
+        testInfo.project.name !== "desktop-chromium",
+        "Kitchen tiers are covered once with real pointer input",
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 3000, 2500);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("kitchen");
+    await page.locator("[data-draw-room-step='furniture']").click();
+
+    const panel = page.locator("[aria-label='Мебель на чертеже']");
+    await expect(panel.locator("h3").first()).toHaveText("Кухня");
+    const status = panel.getByRole("status");
+    const put = async (id: string, x: number, y: number) => {
+        const catalogue = panel.getByRole("button", { name: "Каталог" });
+        if (await catalogue.isVisible()) await catalogue.click();
+        await page.locator(`[data-add-furniture='${id}']`).click();
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.click(point.x, point.y);
+    };
+    const pieces = page.locator("[data-draw-furniture^='furniture-']");
+
+    // A worktop run along the top wall; each unit is pulled flush to it.
+    await put("kitchen-base-600", 5000, 2400);
+    await put("kitchen-sink", 5700, 2400);
+    await expect(pieces).toHaveCount(2);
+    // An upper unit hangs over the base unit below it.
+    await put("kitchen-upper-600", 5000, 2250);
+    await expect(pieces).toHaveCount(3);
+    await expect(page.locator("[data-mounting='upper']")).toHaveCount(1);
+    // A second upper unit cannot share that spot.
+    await put("kitchen-upper-600", 5100, 2250);
+    await expect(pieces).toHaveCount(3);
+    await expect(status).toContainText("занято другой мебелью");
+    await page.keyboard.press("Escape");
+
+    // Pieces stand above the room fill, so they read at full strength.
+    const layered = await page.evaluate(() => {
+        const room = document.querySelector("[data-draw-room-preview='true']");
+        const furniture = document.querySelector("[data-draw-furniture-layer='true']");
+        return Boolean(
+            room &&
+                furniture &&
+                room.compareDocumentPosition(furniture) & Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+    });
+    expect(layered).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("kitchen-units.png") });
+});
+
 test("a divider keeps the completed exterior and dimensions each room on its own", async ({
     page,
 }, testInfo) => {

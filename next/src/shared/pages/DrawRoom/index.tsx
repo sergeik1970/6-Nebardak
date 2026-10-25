@@ -7647,6 +7647,8 @@ const DrawRoom: React.FC = () => {
                                     </g>
                                 </g>
                             )}
+                            {/* Furniture stands over the room fill and walls, under the dimensions. */}
+                            <g data-draw-furniture-host="true" />
                             {tool === "select" && (preview || scene.segments.length > 0) && (
                                 <g
                                     className={styles.contourWallEditor}
