@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { LessThan, Repository } from "typeorm";
-import { User } from "../../entities/User/user.entity";
+import { User, UserRole } from "../../entities/User/user.entity";
 import { UserSession } from "../../entities/UserSession/user-session.entity";
 import {
     createSecretToken,
@@ -13,9 +13,31 @@ const DAY_MS = 24 * 60 * 60_000;
 
 export const SESSION_IDLE_TTL_MS = 30 * DAY_MS;
 export const SESSION_ABSOLUTE_TTL_MS = 90 * DAY_MS;
+/** An administrator signs in again with a fresh code at least once a day. */
+export const ADMIN_SESSION_IDLE_TTL_MS = 12 * 60 * 60_000;
+export const ADMIN_SESSION_ABSOLUTE_TTL_MS = DAY_MS;
 /** Activity is written at most this often, not on every request. */
 export const SESSION_TOUCH_INTERVAL_MS = 60 * 60_000;
 export const MAX_SESSIONS_PER_USER = 20;
+
+export interface SessionLifetime {
+    idleMs: number;
+    absoluteMs: number;
+}
+
+export function sessionLifetime(role: UserRole): SessionLifetime {
+    return role === "admin"
+        ? {
+              idleMs: ADMIN_SESSION_IDLE_TTL_MS,
+              absoluteMs: ADMIN_SESSION_ABSOLUTE_TTL_MS,
+          }
+        : { idleMs: SESSION_IDLE_TTL_MS, absoluteMs: SESSION_ABSOLUTE_TTL_MS };
+}
+
+export interface CreateSessionOptions {
+    /** The sign-in also passed the emailed one-time code. */
+    secondFactor?: boolean;
+}
 
 export interface AuthenticatedSession {
     user: User;
@@ -33,18 +55,19 @@ export class SessionService {
         user: User,
         userAgent?: string,
         now = new Date(),
+        options: CreateSessionOptions = {},
     ): Promise<{ token: string; session: UserSession }> {
         const token = createSecretToken();
-        const absoluteExpiresAt = new Date(
-            now.getTime() + SESSION_ABSOLUTE_TTL_MS,
-        );
+        const lifetime = sessionLifetime(user.role);
+        const absoluteExpiresAt = new Date(now.getTime() + lifetime.absoluteMs);
         const session = await this.sessionRepository.save(
             this.sessionRepository.create({
                 user: { id: user.id } as User,
                 tokenHash: hashSecretToken(token),
                 lastSeenAt: now,
-                expiresAt: new Date(now.getTime() + SESSION_IDLE_TTL_MS),
+                expiresAt: new Date(now.getTime() + lifetime.idleMs),
                 absoluteExpiresAt,
+                secondFactorAt: options.secondFactor ? now : null,
                 userAgent: this.normalizeUserAgent(userAgent),
             }),
         );
@@ -77,7 +100,7 @@ export class SessionService {
             session.lastSeenAt = now;
             session.expiresAt = new Date(
                 Math.min(
-                    now.getTime() + SESSION_IDLE_TTL_MS,
+                    now.getTime() + sessionLifetime(session.user.role).idleMs,
                     session.absoluteExpiresAt.getTime(),
                 ),
             );

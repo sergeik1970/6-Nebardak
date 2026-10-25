@@ -2,6 +2,8 @@ import { Repository } from "typeorm";
 import { User } from "../../entities/User/user.entity";
 import { UserSession } from "../../entities/UserSession/user-session.entity";
 import {
+    ADMIN_SESSION_ABSOLUTE_TTL_MS,
+    ADMIN_SESSION_IDLE_TTL_MS,
     MAX_SESSIONS_PER_USER,
     SESSION_ABSOLUTE_TTL_MS,
     SESSION_IDLE_TTL_MS,
@@ -49,6 +51,7 @@ function storedSession(overrides: Partial<UserSession> = {}): UserSession {
         expiresAt: new Date(now.getTime() + SESSION_IDLE_TTL_MS),
         absoluteExpiresAt: new Date(now.getTime() + SESSION_ABSOLUTE_TTL_MS),
         userAgent: null,
+        secondFactorAt: null,
         ...overrides,
     };
 }
@@ -70,6 +73,55 @@ describe("SessionService", () => {
         );
         expect(saved.absoluteExpiresAt.getTime()).toBe(
             now.getTime() + SESSION_ABSOLUTE_TTL_MS,
+        );
+    });
+
+    it("marks only a code-confirmed sign-in as second-factor", async () => {
+        const repository = makeRepository();
+        const service = new SessionService(repository);
+
+        await service.create(user, undefined, now);
+        await service.create(user, undefined, now, { secondFactor: true });
+
+        expect(repository.save.mock.calls[0][0].secondFactorAt).toBeNull();
+        expect(repository.save.mock.calls[1][0].secondFactorAt).toEqual(now);
+    });
+
+    it("gives administrators a short idle and absolute lifetime", async () => {
+        const repository = makeRepository();
+        const admin = { ...user, role: "admin" } as User;
+        const service = new SessionService(repository);
+
+        await service.create(admin, undefined, now, { secondFactor: true });
+
+        const saved = repository.save.mock.calls[0][0];
+        expect(saved.expiresAt.getTime()).toBe(
+            now.getTime() + ADMIN_SESSION_IDLE_TTL_MS,
+        );
+        expect(saved.absoluteExpiresAt.getTime()).toBe(
+            now.getTime() + ADMIN_SESSION_ABSOLUTE_TTL_MS,
+        );
+    });
+
+    it("slides an administrator session by the admin idle window", async () => {
+        const repository = makeRepository();
+        const admin = { ...user, role: "admin" } as User;
+        repository.findOne.mockResolvedValue(
+            storedSession({
+                user: admin,
+                expiresAt: new Date(now.getTime() + ADMIN_SESSION_IDLE_TTL_MS),
+                absoluteExpiresAt: new Date(
+                    now.getTime() + ADMIN_SESSION_ABSOLUTE_TTL_MS,
+                ),
+            }),
+        );
+        const service = new SessionService(repository);
+        const later = new Date(now.getTime() + 2 * SESSION_TOUCH_INTERVAL_MS);
+
+        await service.authenticate("a".repeat(43), later);
+
+        expect(repository.update.mock.calls[0][1].expiresAt.getTime()).toBe(
+            later.getTime() + ADMIN_SESSION_IDLE_TTL_MS,
         );
     });
 

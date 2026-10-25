@@ -7,7 +7,7 @@ import React, {
     useState,
     ReactNode,
 } from "react";
-import { User, RegisterData, LoginData } from "../types/auth";
+import { User, RegisterData, LoginData, LoginResult } from "../types/auth";
 import { authService } from "../services/authService";
 import { isAuthEnabled, isAuthRegistrationEnabled } from "@/shared/config/runtime";
 import { trackGoal } from "@/shared/lib/analytics";
@@ -29,12 +29,14 @@ interface AuthContextType {
     user: User | null;
     isLoading: boolean;
     isAuthenticated: boolean;
-    login: (data: LoginData) => Promise<void>;
+    login: (data: LoginData) => Promise<LoginResult>;
+    confirmLoginCode: (challenge: string, code: string) => Promise<void>;
     register: (data: RegisterData) => Promise<void>;
     logout: () => Promise<void>;
     logoutEverywhere: () => Promise<void>;
     verifyEmail: (token: string) => Promise<void>;
-    resetPassword: (token: string, password: string) => Promise<void>;
+    /** Resolves false when the password changed but a sign-in is still needed. */
+    resetPassword: (token: string, password: string) => Promise<boolean>;
     resendVerification: () => Promise<void>;
     updateProfile: (name: string) => Promise<void>;
     changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -91,20 +93,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
     }, []);
 
-    const login = useCallback(
-        async (data: LoginData) => {
-            if (!isAuthEnabled) {
-                throw new Error("Авторизация недоступна в демо-режиме");
-            }
-
-            const response = await authService.login(data);
-            commitUser(response.user);
+    const completeLogin = useCallback(
+        (signedIn: User) => {
+            commitUser(signedIn);
             setLastAuthEvent({ kind: "login", at: Date.now() });
             trackGoal("login");
             // A save paused by an expired session can continue now.
             void loadProjectSync().then((sync) => sync.getCurrentProjectSync()?.resume());
         },
         [commitUser],
+    );
+
+    const login = useCallback(
+        async (data: LoginData): Promise<LoginResult> => {
+            if (!isAuthEnabled) {
+                throw new Error("Авторизация недоступна в демо-режиме");
+            }
+
+            const response = await authService.login(data);
+            if (response.user === null) {
+                return { status: "code-required", challenge: response.secondFactor };
+            }
+            completeLogin(response.user);
+            return { status: "signed-in" };
+        },
+        [completeLogin],
+    );
+
+    const confirmLoginCode = useCallback(
+        async (challenge: string, code: string) => {
+            completeLogin((await authService.confirmLoginCode(challenge, code)).user);
+        },
+        [completeLogin],
     );
 
     const register = useCallback(
@@ -158,8 +178,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const resetPassword = useCallback(
         async (token: string, password: string) => {
-            commitUser(await authService.resetPassword(token, password));
+            const signedIn = await authService.resetPassword(token, password);
+            commitUser(signedIn);
+            if (!signedIn) return false;
             void loadProjectSync().then((sync) => sync.getCurrentProjectSync()?.resume());
+            return true;
         },
         [commitUser],
     );
@@ -191,6 +214,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isLoading,
         isAuthenticated: !!user,
         login,
+        confirmLoginCode,
         register,
         logout,
         logoutEverywhere,
