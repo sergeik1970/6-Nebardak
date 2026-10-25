@@ -26,11 +26,7 @@ import {
     searchFurnitureMenu,
 } from "./catalog-menu";
 import styles from "./furniture.module.scss";
-import FurniturePhoto from "@/shared/components/FurniturePhoto";
-import {
-    getFurniturePhoto,
-    getFurniturePhotos,
-} from "@/shared/lib/furniture-planner/furniture-photos";
+import FurnitureSymbol from "./FurnitureSymbol";
 import { isSchematicFurnitureSource } from "@/shared/lib/furniture-planner/catalog";
 
 const snap = (n: number) => Math.round(n / 10) * 10;
@@ -276,7 +272,6 @@ export default function FurnitureEditor({
     const symbol = (item: DrawFurniture, ghost = false) => {
         const geometry = furnitureGeometry(item);
         const definition = furnitureDefinition(item.definitionId)!;
-        const photo = getFurniturePhoto(item.definitionId, item.photoId);
         const own = ghost || inRoom(item);
         // Another room's furniture is judged on its own ground, not this room's.
         const invalid = Boolean(
@@ -387,85 +382,13 @@ export default function FurnitureEditor({
                     {definition.label} · {item.width} × {item.depth} мм
                 </title>
                 <g transform={transform}>
-                    {baseGeometry.bodyRects.map((rect, i) => (
-                        <g key={i}>
-                            <rect
-                                x={rect.x}
-                                y={rect.y}
-                                width={rect.width}
-                                height={rect.depth}
-                                rx={20}
-                            />
-                            {!photo &&
-                                (definition.category === "sleep" ||
-                                    definition.category === "living") && (
-                                    <rect
-                                        x={rect.x + rect.width * 0.12}
-                                        y={rect.y + rect.depth * 0.1}
-                                        width={rect.width * 0.76}
-                                        height={rect.depth * 0.2}
-                                        rx={30}
-                                        className={styles.detail}
-                                    />
-                                )}
-                            {!photo && definition.id === "kitchen-sink" && (
-                                <rect
-                                    x={rect.x + rect.width * 0.15}
-                                    y={rect.y + rect.depth * 0.2}
-                                    width={rect.width * 0.7}
-                                    height={rect.depth * 0.55}
-                                    rx={60}
-                                    className={styles.detail}
-                                />
-                            )}
-                            {!photo &&
-                                definition.id === "kitchen-cooker" &&
-                                [0.3, 0.7].flatMap((fx) =>
-                                    [0.3, 0.7].map((fy) => (
-                                        <circle
-                                            key={`${fx}-${fy}`}
-                                            cx={rect.x + rect.width * fx}
-                                            cy={rect.y + rect.depth * fy}
-                                            r={Math.min(rect.width, rect.depth) * 0.13}
-                                            className={styles.detail}
-                                        />
-                                    )),
-                                )}
-                            {!photo &&
-                                (definition.mounting === "upper" ||
-                                    [
-                                        "kitchen-fridge",
-                                        "kitchen-fridge-wide",
-                                        "kitchen-tall",
-                                    ].includes(definition.id)) && (
-                                    // Tall and upper units are crossed, as on a kitchen plan.
-                                    <path
-                                        d={`M ${rect.x} ${rect.y} L ${rect.x + rect.width} ${rect.y + rect.depth} M ${rect.x + rect.width} ${rect.y} L ${rect.x} ${rect.y + rect.depth}`}
-                                    />
-                                )}
-                            {!photo && definition.category === "storage" && (
-                                <path
-                                    d={`M ${rect.x + rect.width / 2} ${rect.y} v ${rect.depth}`}
-                                />
-                            )}
-                        </g>
-                    ))}
-                    {photo && (
-                        <svg width={item.width} height={item.depth} overflow="visible">
-                            <FurniturePhoto photo={photo} />
-                        </svg>
-                    )}
+                    <FurnitureSymbol
+                        definitionId={item.definitionId}
+                        rects={baseGeometry.bodyRects}
+                        width={baseGeometry.width}
+                        depth={baseGeometry.depth}
+                    />
                 </g>
-                {(!photo || (active && selectedId === item.id)) && (
-                    <text
-                        x={geometry.width / 2}
-                        y={geometry.depth * 0.62}
-                        fontSize={Math.min(120, geometry.width / 9, geometry.depth / 5)}
-                        textAnchor="middle"
-                    >
-                        {definition.shortLabel}
-                    </text>
-                )}
                 {active &&
                     own &&
                     // Upper units overlie base units: their sizes show when selected.
@@ -664,35 +587,6 @@ export default function FurnitureEditor({
                                         : ""}
                                     .
                                 </small>
-                            )}
-                            {getFurniturePhotos(editing.definitionId).length > 0 && (
-                                <div className={styles.variants} aria-label="Варианты изображения">
-                                    {getFurniturePhotos(editing.definitionId).map(
-                                        (photo, index) => (
-                                            <button
-                                                key={photo.id}
-                                                type="button"
-                                                aria-label={`Вариант ${index + 1}`}
-                                                disabled={Boolean(editing.locked)}
-                                                aria-pressed={
-                                                    getFurniturePhoto(
-                                                        editing.definitionId,
-                                                        editing.photoId,
-                                                    )?.id === photo.id
-                                                }
-                                                onClick={() => {
-                                                    const next = { ...editing, photoId: photo.id };
-                                                    if (pending) {
-                                                        setPending(next);
-                                                        setPreview(null);
-                                                    } else update(next);
-                                                }}
-                                            >
-                                                <FurniturePhoto photo={photo} fit />
-                                            </button>
-                                        ),
-                                    )}
-                                </div>
                             )}
                             {furnitureDefinition(editing.definitionId)?.sizes && (
                                 <div

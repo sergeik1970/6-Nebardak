@@ -110,18 +110,27 @@
     font-weight: 850;
     pointer-events: none;
 }
+// Plan symbols in lines on white, as on a drawing.
 .item {
     cursor: grab;
-    fill: #ede7db;
-    stroke: #626e68;
-    stroke-width: 1.5;
+    fill: #fffefb;
+    stroke: #3e4b47;
+    stroke-width: 1;
+    stroke-linejoin: round;
     touch-action: none;
     rect,
-    path {
+    path,
+    circle,
+    ellipse,
+    polygon {
         vector-effect: non-scaling-stroke;
     }
     path {
         fill: none;
+    }
+    [data-symbol-hit] {
+        fill: transparent;
+        stroke: none;
     }
     text {
         fill: #394c45;
@@ -141,9 +150,6 @@
         fill-opacity: 0.35;
         stroke-dasharray: 6 4;
     }
-}
-.detail {
-    fill: #fffdf7;
 }
 .variants {
     display: flex;
