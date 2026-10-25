@@ -1358,9 +1358,26 @@
     background: #fff;
     font: 750 13px/1 var(--font-primary);
 }
-.roomInspectorItem input:focus-visible {
+.roomInspectorItem select {
+    grid-column: 2;
+    min-width: 0;
+    min-height: 32px;
+    border: 1px solid #bfcccf;
+    padding: 0 6px;
+    color: var(--draw-graphite);
+    background: #fff;
+    font: 650 12px/1 var(--font-primary);
+}
+.roomInspectorItem input:focus-visible,
+.roomInspectorItem select:focus-visible {
     outline: 2px solid var(--draw-orange);
     outline-offset: 1px;
+}
+.roomInspectorItem[data-selected="true"] {
+    margin: 0 -10px;
+    padding: 8px 10px;
+    box-shadow: inset 3px 0 0 var(--draw-orange);
+    background: #fff4e5;
 }
 .roomRegionLabel {
     pointer-events: none;
@@ -1372,6 +1389,7 @@
     vector-effect: non-scaling-stroke;
     filter: drop-shadow(0 2px 4px rgba(35, 49, 54, 0.14));
 }
+.roomRegionTitle,
 .roomRegionHeight,
 .roomRegionArea {
     font-family: var(--font-primary);
@@ -1389,6 +1407,9 @@
 }
 .roomRegionArea {
     fill: #b84432;
+}
+.roomRegionTitle {
+    fill: var(--draw-graphite);
 }
 .rightAngleFeedback path {
     fill: none;
