@@ -92,3 +92,47 @@ export function passwordResetEmail(input: {
         ],
     });
 }
+
+/** The code letter has no link: a sign-in can only be finished in the tab that started it. */
+export function adminLoginCodeEmail(input: {
+    to: string;
+    name: string;
+    code: string;
+    ttlMinutes: number;
+}): MailMessage {
+    // The code stays out of the subject, which lock screens show to anyone nearby.
+    const subject = "Код входа в StyleFinder";
+    const lead =
+        "Кто-то ввёл верный пароль от вашего аккаунта администратора. Чтобы завершить вход, введите код:";
+    const notes = [
+        `Код действует ${input.ttlMinutes} минут и сработает один раз.`,
+        "Если это были не вы, смените пароль: значит, он известен кому-то ещё.",
+    ];
+
+    const text = [
+        `Здравствуйте, ${input.name}!`,
+        "",
+        lead,
+        "",
+        input.code,
+        "",
+        ...notes,
+        "",
+        "— StyleFinder",
+    ].join("\n");
+
+    const html = `<!doctype html>
+<html lang="ru">
+<body style="margin:0;padding:24px;background:#f4efe5;font-family:Arial,sans-serif;color:#302a24">
+<div style="max-width:520px;margin:0 auto;padding:32px;background:#fffdf8;border:1px solid #d7cbbb">
+<p style="margin:0 0 16px;font-size:16px">Здравствуйте, ${escapeHtml(input.name)}!</p>
+<p style="margin:0 0 24px;font-size:16px;line-height:1.5">${escapeHtml(lead)}</p>
+<p style="margin:0 0 24px;font-size:32px;font-weight:bold;letter-spacing:6px;font-family:'Courier New',monospace">${escapeHtml(input.code)}</p>
+${notes.map((note) => `<p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#625b52">${escapeHtml(note)}</p>`).join("\n")}
+<p style="margin:24px 0 0;font-size:13px;color:#625b52">— StyleFinder</p>
+</div>
+</body>
+</html>`;
+
+    return { to: input.to, subject, text, html };
+}

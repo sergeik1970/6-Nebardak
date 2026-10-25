@@ -39,6 +39,10 @@ export class UserSession {
     @Column({ name: "absolute_expires_at", type: "timestamptz" })
     absoluteExpiresAt: Date;
 
+    /** Set when the sign-in also passed the emailed code; admin routes require it. */
+    @Column({ name: "second_factor_at", type: "timestamptz", nullable: true })
+    secondFactorAt: Date | null;
+
     @Column({
         name: "user_agent",
         type: "varchar",

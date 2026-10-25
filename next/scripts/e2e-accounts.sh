@@ -33,6 +33,7 @@ done
 
 export E2E_DB_PORT="$(port_of "$db" 5432)"
 export E2E_DB_PASSWORD="$db_password"
+export E2E_DB_CONTAINER="$db"
 export E2E_SMTP_PORT="$(port_of "$mail" 1025)"
 export E2E_MAILPIT_URL="http://127.0.0.1:$(port_of "$mail" 8025)"
 
