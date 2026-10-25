@@ -2,7 +2,6 @@ import {
     FURNITURE_CATALOG,
     getRotatedGeometry,
     type DrawWallSegment,
-    type FurnitureCategory,
     type Rotation,
     type Rect,
     type RoomKind,
@@ -291,26 +290,4 @@ export function snapFurnitureToWalls(
         if (nearest) next[axis] = item[axis] - nearest.direction * nearest.distance;
     });
     return next;
-}
-
-const KIND_CATEGORIES: Record<RoomKind, FurnitureCategory[]> = {
-    bedroom: ["sleep", "storage", "work", "media"],
-    living: ["living", "media", "storage"],
-    kitchen: ["kitchen", "living", "storage"],
-    children: ["children", "sleep", "storage", "work"],
-    office: ["work", "storage", "living"],
-    hallway: ["storage", "living"],
-    bathroom: ["storage"],
-    other: [],
-};
-
-/** Catalogue sections for a room: what suits its kind first, the rest after. */
-export function furnitureCategoryOrder(
-    all: readonly FurnitureCategory[],
-    kind?: RoomKind,
-): FurnitureCategory[] {
-    const preferred = kind
-        ? KIND_CATEGORIES[kind].filter((category) => all.includes(category))
-        : [];
-    return [...preferred, ...all.filter((category) => !preferred.includes(category))];
 }

@@ -6,7 +6,6 @@ import {
 import { describe, expect, it } from "vitest";
 import {
     furnitureBelongsToRoom,
-    furnitureCategoryOrder,
     furnitureError,
     furnitureConflicts,
     furnitureInsideRoom,
@@ -281,13 +280,6 @@ describe("furniture in the selected room", () => {
         const snapped = snapFurnitureToWalls({ ...item, x: 120, y: 400 }, walls, 100);
         expect(snapped.x).toBe(0);
         expect(snapped.y).toBe(400);
-    });
-    it("offers the sections that suit the room kind first", () => {
-        const all = ["sleep", "living", "storage", "work", "media", "children"] as const;
-        expect(furnitureCategoryOrder(all, "children").slice(0, 2)).toEqual(["children", "sleep"]);
-        expect(furnitureCategoryOrder(all, "living")[0]).toBe("living");
-        expect(furnitureCategoryOrder(all)).toEqual([...all]);
-        expect(new Set(furnitureCategoryOrder(all, "office")).size).toBe(all.length);
     });
 });
 
