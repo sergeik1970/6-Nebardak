@@ -4305,8 +4305,9 @@ test("mobile drawing editor keeps the field and tool dock inside the viewport wi
         const matrix = (pattern as SVGElement).ownerSVGElement?.getScreenCTM();
         return Number(pattern.getAttribute("width")) * Math.abs(matrix?.a ?? 0);
     });
-    expect(hatchSpacing).toBeGreaterThanOrEqual(6);
-    expect(hatchSpacing).toBeLessThanOrEqual(10);
+    // The rotated tile's width is the perpendicular gap between hatch lines.
+    expect(hatchSpacing).toBeGreaterThanOrEqual(6 / Math.SQRT2);
+    expect(hatchSpacing).toBeLessThanOrEqual(10 / Math.SQRT2);
 });
 
 test("constructive 10 mm drawing keeps exact face chains, regions and responsive canvas space", async ({

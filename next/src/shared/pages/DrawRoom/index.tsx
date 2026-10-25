@@ -2758,6 +2758,38 @@ const getDimensionLabelBounds = (dimension: PositionedDimension): ScreenRect => 
     };
 };
 
+/**
+ * Up close a long wall's midpoint leaves the screen while its dimension line
+ * is still visible. Slide the label along its own line into the visible
+ * stretch so the value stays readable while the wall is being edited.
+ */
+const keepDimensionLabelInView = <
+    T extends Pick<PositionedDimension, "dimensionStart" | "dimensionEnd" | "label" | "labelWidth">,
+>(
+    dimension: T,
+    view: CanvasViewBox,
+    margin: number,
+): T => {
+    const horizontal =
+        Math.abs(dimension.dimensionStart.y - dimension.dimensionEnd.y) <
+        Math.abs(dimension.dimensionStart.x - dimension.dimensionEnd.x);
+    const axis = horizontal ? "x" : "y";
+    const viewStart = horizontal ? view.x : view.y;
+    const viewEnd = viewStart + (horizontal ? view.width : view.height);
+    const halfLabel = dimension.labelWidth / 2 + margin;
+    const low =
+        Math.max(Math.min(dimension.dimensionStart[axis], dimension.dimensionEnd[axis]), viewStart) +
+        halfLabel;
+    const high =
+        Math.min(Math.max(dimension.dimensionStart[axis], dimension.dimensionEnd[axis]), viewEnd) -
+        halfLabel;
+    if (low > high) return dimension;
+    const current = dimension.label[axis];
+    const next = clamp(current, low, high);
+    if (next === current) return dimension;
+    return { ...dimension, label: { ...dimension.label, [axis]: next } };
+};
+
 const rectsOverlap = (first: ScreenRect, second: ScreenRect, padding = 0) =>
     first.left - padding < second.right &&
     first.right + padding > second.left &&
@@ -4651,6 +4683,12 @@ const DrawRoom: React.FC = () => {
         () => clamp(millimetersPerPixel * 8, 70, 520),
         [millimetersPerPixel],
     );
+    // Same perpendicular distance between lines as the former diagonal tile.
+    const hatchPitch = hatchSpacing / Math.SQRT2;
+
+    const labelInViewMargin = annotationMillimetersPerPixel * 16;
+    const inView = <T extends Parameters<typeof keepDimensionLabelInView>[0]>(dimension: T) =>
+        keepDimensionLabelInView(dimension, viewBox, labelInViewMargin);
 
     useEffect(() => {
         if (!canvasSize.width || !canvasSize.height) return;
@@ -8122,19 +8160,25 @@ const DrawRoom: React.FC = () => {
                                         className={styles.majorGrid}
                                     />
                                 </pattern>
+                                {/* A diagonal drawn corner-to-corner in a square tile
+                                    loses its stroke ends at every tile corner, which
+                                    shows up as broken, rounded-off hatches when zoomed
+                                    in. Rotating the tile instead lets one straight
+                                    line run edge to edge, so the tiles join seamlessly. */}
                                 <pattern
                                     id="wall-hatch"
-                                    width={hatchSpacing}
-                                    height={hatchSpacing}
+                                    width={hatchPitch}
+                                    height={hatchPitch}
                                     patternUnits="userSpaceOnUse"
+                                    patternTransform="rotate(45)"
                                 >
                                     <rect
-                                        width={hatchSpacing}
-                                        height={hatchSpacing}
+                                        width={hatchPitch}
+                                        height={hatchPitch}
                                         className={styles.wallHatchBase}
                                     />
                                     <path
-                                        d={`M 0 ${hatchSpacing} L ${hatchSpacing} 0`}
+                                        d={`M ${hatchPitch / 2} 0 V ${hatchPitch}`}
                                         className={styles.wallHatchLine}
                                     />
                                 </pattern>
@@ -8563,7 +8607,7 @@ const DrawRoom: React.FC = () => {
                                         }
                                         aria-hidden="true"
                                     >
-                                        {visiblePersistentWallDimensions.map((dimension) => (
+                                        {visiblePersistentWallDimensions.map(inView).map((dimension) => (
                                             <g
                                                 key={`dimension-${dimension.segmentId}-${dimension.id}`}
                                                 data-draw-room-persistent-wall={dimension.segmentId}
@@ -8688,7 +8732,7 @@ const DrawRoom: React.FC = () => {
                                         data-draw-room-architectural-dimensions="true"
                                         aria-hidden="true"
                                     >
-                                        {openingChainDimensions.map((dimension) => (
+                                        {openingChainDimensions.map(inView).map((dimension) => (
                                             <g
                                                 key={dimension.id}
                                                 data-draw-room-dimension-chain={dimension.kind}
@@ -8801,7 +8845,7 @@ const DrawRoom: React.FC = () => {
                                         data-draw-room-branch-dimensions="true"
                                         aria-hidden="true"
                                     >
-                                        {closedBranchDimensions.map((dimension) => (
+                                        {closedBranchDimensions.map(inView).map((dimension) => (
                                             <g
                                                 key={`branch-dimension-${dimension.segmentId}-${dimension.dimensionId}`}
                                                 data-draw-room-branch-dimension={
@@ -9041,7 +9085,7 @@ const DrawRoom: React.FC = () => {
                                             data-draw-room-live-layout={liveDimensionLayout}
                                             aria-hidden="true"
                                         >
-                                            {liveWallDimensions.map((dimension) => (
+                                            {liveWallDimensions.map(inView).map((dimension) => (
                                                 <g
                                                     key={dimension.id}
                                                     data-draw-room-live-dimension={dimension.id}
