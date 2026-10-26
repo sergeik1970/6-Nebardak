@@ -3046,7 +3046,7 @@ test("furniture goes into the selected room, against its walls", async ({ page }
 
     await page.locator("[data-draw-room-step='furniture']").click();
     const panel = page.locator("[aria-label='Мебель на чертеже']");
-    await expect(panel.locator("header b")).toHaveText("Спальня");
+    await expect(panel.locator("[data-furniture-room]")).toHaveText("Спальня");
     // A bedroom lists the living and bedroom section first.
     await expect(panel.locator("[data-furniture-section]").first()).toContainText(
         "Гостиная и спальня",
@@ -3079,7 +3079,7 @@ test("furniture goes into the selected room, against its walls", async ({ page }
 
     // Clicking the other room moves the work there; the bedroom's bed stays quiet.
     await page.mouse.click(upperRoom.x, upperRoom.y);
-    await expect(panel.locator("header b")).toHaveText("Помещение 1");
+    await expect(panel.locator("[data-furniture-room]")).toHaveText("Помещение 1");
     await expect(pieces).toHaveCSS("opacity", "0.45");
     await expect(pieces.locator("[data-furniture-size]")).toHaveCount(0);
 
@@ -4864,4 +4864,41 @@ test("doors and windows carry their heights on the drawing and in the card", asy
             }),
         )
         .toBe(2000);
+});
+
+test("a piece put in a bed's passage is flagged, not refused", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Passages are covered once");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 4000, 3500);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
+    await page.locator("[data-draw-room-step='furniture']").click();
+    const panel = page.locator("[aria-label='Мебель на чертеже']");
+    const place = async (id: string, x: number, y: number) => {
+        const catalogue = panel.getByRole("button", { name: "Каталог" });
+        if (await catalogue.isVisible()) await catalogue.click();
+        await chooseFurniture(page, id);
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.click(point.x, point.y);
+    };
+
+    // A bed along the right wall: one passage, on the open side, shown dashed.
+    await place("single-bed", 7500, 3100);
+    const bedPassage = page.locator("[data-furniture-passage^='furniture-']");
+    await expect(bedPassage).toHaveCount(1);
+    await expect(bedPassage).toHaveAttribute("data-passage-blocked", "false");
+
+    // A dresser 10 cm from the bed still goes in, but the passage turns red.
+    await place("dresser", 6650, 3300);
+    await expect(page.locator("[data-draw-furniture^='furniture-']")).toHaveCount(2);
+    await expect(page.locator("[data-passage-blocked='true']")).toHaveCount(1);
+    await expect(page.locator("[data-furniture-passage-free]")).toHaveText("10 из 70 см");
+    await expect(panel.locator("[data-furniture-passage-warning]")).toContainText(
+        "Левый проход у «Односпальная кровать»: свободно 10 см из 70.",
+    );
 });

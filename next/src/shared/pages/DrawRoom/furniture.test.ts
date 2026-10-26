@@ -12,6 +12,8 @@ import {
     snapFurnitureToWalls,
     furnitureWallDistances,
     furnitureGeometry,
+    furniturePassages,
+    passageBlocked,
     rotatedFurnitureCandidates,
     readFurniture,
     type DrawFurniture,
@@ -314,5 +316,72 @@ describe("kitchen tiers", () => {
         const swing = [{ x: 0, y: 0, width: 900, depth: 900 }];
         expect(furnitureError(upper, [], [], 100, swing)).toBeNull();
         expect(furnitureError(base, [], [], 100, swing)).toContain("двер");
+    });
+});
+
+describe("passages around placed furniture", () => {
+    // A bed along the right wall, its face at x = 2950, like the owner's sketch.
+    const walls = [{ id: "right", start: { x: 3000, y: -1000 }, end: { x: 3000, y: 5000 } }];
+    const bed: DrawFurniture = { ...item, x: 2050, y: 0 };
+    const dresser = (x: number): DrawFurniture => ({
+        id: "dresser",
+        definitionId: "dresser",
+        x,
+        y: 600,
+        width: 600,
+        depth: 400,
+        rotation: 0,
+    });
+    const bedPassages = (items: DrawFurniture[]) =>
+        furniturePassages(items, walls, 100).filter((passage) => passage.itemId === "bed");
+
+    it("flags a bed whose only free side is 10 cm from a dresser", () => {
+        const passages = bedPassages([bed, dresser(2050 - 100 - 600)]);
+        // The wall side has nothing to free; the dresser side is the one shown.
+        expect(passages.map((passage) => [passage.label, passage.free, passage.need])).toEqual([
+            ["Левый проход", 100, 700],
+        ]);
+        expect(passageBlocked(passages[0])).toBe(true);
+    });
+
+    it("keeps one open side of a bed and drops the side against the wall", () => {
+        const passages = bedPassages([bed, dresser(500)]);
+        expect(passages).toHaveLength(1);
+        expect(passages[0]).toMatchObject({ label: "Левый проход", free: 700, need: 700 });
+    });
+
+    it("measures a wardrobe front up to the nearest piece; upper units hang above", () => {
+        const wardrobe: DrawFurniture = {
+            id: "wardrobe",
+            definitionId: "wardrobe-small",
+            x: 0,
+            y: 0,
+            width: 700,
+            depth: 500,
+            rotation: 0,
+        };
+        const front = (items: DrawFurniture[]) =>
+            furniturePassages(items, [], 100).find(
+                (passage) => passage.itemId === "wardrobe" && passage.label === "Зона доступа",
+            )!;
+        const upper: DrawFurniture = {
+            id: "upper",
+            definitionId: "kitchen-upper-600",
+            x: 0,
+            y: 600,
+            width: 600,
+            depth: 350,
+            rotation: 0,
+        };
+        expect(front([wardrobe, upper])).toMatchObject({ free: 800, need: 800 });
+        const pouf: DrawFurniture = {
+            ...upper,
+            id: "pouf",
+            definitionId: "pouf",
+            width: 500,
+            depth: 500,
+            y: 800,
+        };
+        expect(front([wardrobe, pouf])).toMatchObject({ free: 300, need: 800 });
     });
 });
