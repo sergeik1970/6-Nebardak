@@ -1,10 +1,12 @@
+// The chosen piece's parameters, on the right as in Remplanner.
 .panel {
     position: absolute;
     z-index: 1;
-    top: 100px;
-    left: 82px;
-    bottom: 32px;
-    width: 250px;
+    top: 102px;
+    right: 14px;
+    max-height: calc(100% - 132px);
+    width: 260px;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -13,6 +15,7 @@
     border: 1px solid #c8cfce;
     border-radius: 8px;
     box-shadow: 0 6px 24px #26343220;
+    overflow-y: auto;
     color: #273738;
     font-size: 13px;
     header {
@@ -299,9 +302,21 @@
         pointer-events: auto;
     }
 }
-// While a section is open the expanded rail and its list stand where the card is.
-.furniture[data-section-open="true"] .panel {
-    visibility: hidden;
+// A note with nothing chosen, e.g. a piece dropped outside the room.
+.toast {
+    position: absolute;
+    z-index: 4;
+    top: 102px;
+    left: 50%;
+    max-width: min(440px, calc(100% - 180px));
+    margin: 0;
+    padding: 9px 14px;
+    transform: translateX(-50%);
+    color: #fffdf8;
+    background: var(--draw-graphite);
+    box-shadow: 0 8px 22px rgba(20, 29, 34, 0.24);
+    font-size: 13px;
+    line-height: 1.4;
 }
 
 // The catalogue as the doors and windows step has its tools: a graphite rail
@@ -352,6 +367,35 @@
     height: 35px;
     border-bottom: 1px solid #4a5860;
     opacity: 1;
+}
+// Search as the rail's first row: the magnifier while folded, the field unfolded.
+.railSearch {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 1px solid #4a5860;
+    padding: 6px 15px;
+    color: #edf2f1;
+    cursor: text;
+    input {
+        min-width: 0;
+        flex: 1;
+        border: 1px solid #56646c;
+        border-radius: 4px;
+        padding: 8px;
+        color: #edf2f1;
+        background: #1d252c;
+        font: inherit;
+        font-size: 13px;
+        transition: opacity 120ms ease;
+    }
+    input::placeholder {
+        color: #8d9ca1;
+    }
+}
+.rail:not(:hover):not(:focus-within):not([data-open="true"]) .railSearch input {
+    opacity: 0;
 }
 .railButton {
     width: 100%;
@@ -492,10 +536,6 @@
         padding: 0;
     }
 }
-// Search results sit beside the card, which holds the search field.
-.flyout[data-furniture-search] {
-    left: 342px;
-}
 
 @media (max-width: 700px) {
     // One bottom sheet: the card's head, then the graphite catalogue below it.
@@ -538,25 +578,75 @@
     .rail[data-open="true"] {
         width: auto;
     }
-    .railIntro {
-        display: none;
+    .railIntro,
+    .rail:hover .railIntro,
+    .rail:focus-within .railIntro,
+    .rail[data-open="true"] .railIntro {
+        height: 35px;
+        border-bottom: 1px solid #4a5860;
+        opacity: 1;
+    }
+    // The phone's list is never folded: the field always shows.
+    .rail:not(:hover):not(:focus-within):not([data-open="true"]) .railSearch input {
+        opacity: 1;
     }
     .furniture[data-flyout-open="true"] .rail,
     .furniture[data-editing="true"] .rail,
     .furniture[data-editing="true"] .flyout {
         display: none;
     }
-    .furniture[data-section-open="true"] .panel {
-        visibility: visible;
-    }
-    .furniture[data-section-open="true"] .panel > :not(header) {
-        display: none;
+    // While searching the field stays above its results.
+    .furniture[data-searching="true"][data-editing="false"] .rail {
+        display: block;
+        flex: 0 0 auto;
+        min-height: 0;
+        > :not(.railSearch) {
+            display: none;
+        }
     }
     .furniture[data-editing="true"] .panel {
         flex: 1 1 auto;
+        max-height: none;
     }
-    // At rest the sheet is for the catalogue; the hint returns with a piece in hand.
-    .furniture[data-editing="false"] .panel > p[role="status"] {
-        display: none;
+    .toast {
+        position: static;
+        order: 0;
+        max-width: none;
+        transform: none;
+        box-shadow: none;
     }
+}
+
+// Passages from the catalogue's clearance zones: a quiet dashed outline, red
+// with how much is left when another piece or a wall stands in the way.
+.passage rect {
+    fill: rgba(62, 137, 173, 0.06);
+    stroke: #6f9db3;
+    stroke-width: 1;
+    stroke-dasharray: 5 4;
+    vector-effect: non-scaling-stroke;
+}
+.passage[data-passage-blocked="true"] rect {
+    fill: rgba(209, 60, 41, 0.12);
+    stroke: #bd3424;
+}
+.passage text {
+    fill: #9e2a1d;
+    stroke: #fffdfa;
+    stroke-width: 0.3em;
+    stroke-linejoin: round;
+    paint-order: stroke;
+    font-weight: 800;
+}
+.passageWarnings {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    border-left: 3px solid #bd3424;
+    padding: 6px 8px 6px 10px;
+    list-style: none;
+    color: #8f271c;
+    background: #fbece8;
+    font-size: 12px;
+    line-height: 1.4;
 }

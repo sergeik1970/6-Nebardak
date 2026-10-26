@@ -76,12 +76,20 @@ const WALL_EDGE_MANIFEST: Record<string, FurnitureBodyEdge[]> = {
 const CLEARANCE_MANIFEST: Record<string, ClearanceZone[]> = {
     "single-bed": [
         {
+            x: -700,
+            y: 350,
+            width: 700,
+            depth: 1650,
+            label: "Левый проход",
+            requirement: "one-of",
+        },
+        {
             x: 900,
             y: 350,
             width: 700,
             depth: 1650,
-            label: "Проход у кровати",
-            requirement: "hard",
+            label: "Правый проход",
+            requirement: "one-of",
         },
     ],
     "double-bed": [

@@ -208,6 +208,114 @@ export function furnitureError(
     );
 }
 
+/**
+ * A passage a piece needs in front of it or beside it, after the catalogue's
+ * clearance zones: in the plan's frame, with how much of it is clear.
+ */
+export interface FurniturePassage {
+    itemId: string;
+    label: string;
+    rect: Rect;
+    /** Millimetres the passage needs, measured away from the piece. */
+    need: number;
+    /** Millimetres clear from the piece's face to the nearest obstacle. */
+    free: number;
+}
+
+/** Positive-area intersection; pieces that only touch leave the passage open. */
+const intersection = (first: Rect, second: Rect): Rect | null => {
+    const x = Math.max(first.x, second.x);
+    const y = Math.max(first.y, second.y);
+    const right = Math.min(first.x + first.width, second.x + second.width);
+    const bottom = Math.min(first.y + first.depth, second.y + second.depth);
+    return right - x > 1 && bottom - y > 1 ? { x, y, width: right - x, depth: bottom - y } : null;
+};
+
+/**
+ * The passages manual placement keeps an eye on: every hard zone, and for
+ * either-side zones (a bed's left or right) the open ones, or the roomiest
+ * one when every side is taken. Other floor pieces and walls block a passage;
+ * upper units hang above it and do not.
+ */
+export function furniturePassages(
+    items: DrawFurniture[],
+    walls: DrawWallSegment[],
+    thickness: number,
+): FurniturePassage[] {
+    const floor = items.filter(
+        (item) => furnitureDefinition(item.definitionId)?.mounting !== "upper",
+    );
+    const bodies = floor.map((item) => ({
+        id: item.id,
+        rects: furnitureGeometry(item).bodyRects.map((rect) => ({
+            ...rect,
+            x: rect.x + item.x,
+            y: rect.y + item.y,
+        })),
+    }));
+    const wallRects = walls.map((wall) => wallRect(wall, thickness));
+    return floor.flatMap((item) => {
+        const definition = furnitureDefinition(item.definitionId);
+        if (!definition) return [];
+        const geometry = getRotatedGeometry(definition, item.rotation, item);
+        const face = {
+            left: item.x,
+            top: item.y,
+            right: item.x + geometry.width,
+            bottom: item.y + geometry.depth,
+        };
+        const obstacles = [
+            ...bodies.filter((body) => body.id !== item.id).flatMap((body) => body.rects),
+            ...wallRects,
+        ];
+        const measure = (zone: Rect, label: string): FurniturePassage => {
+            const rect = {
+                x: zone.x + item.x,
+                y: zone.y + item.y,
+                width: zone.width,
+                depth: zone.depth,
+            };
+            const hits = obstacles.flatMap((obstacle) => intersection(rect, obstacle) ?? []);
+            // Which face the passage opens from decides how clearance is measured.
+            const side =
+                rect.y >= face.bottom - 1
+                    ? "bottom"
+                    : rect.y + rect.depth <= face.top + 1
+                      ? "top"
+                      : rect.x >= face.right - 1
+                        ? "right"
+                        : rect.x + rect.width <= face.left + 1
+                          ? "left"
+                          : null;
+            const need = side === "top" || side === "bottom" ? rect.depth : rect.width;
+            const gaps = hits.map((hit) =>
+                side === "bottom"
+                    ? hit.y - face.bottom
+                    : side === "top"
+                      ? face.top - (hit.y + hit.depth)
+                      : side === "right"
+                        ? hit.x - face.right
+                        : side === "left"
+                          ? face.left - (hit.x + hit.width)
+                          : 0,
+            );
+            const free = Math.max(0, Math.min(need, ...gaps));
+            return { itemId: item.id, label, rect, need, free: Math.round(free) };
+        };
+        const hard = geometry.hardClearanceRects.map((zone) => measure(zone, zone.label));
+        const either = geometry.alternativeClearanceRects.map((zone) => measure(zone, zone.label));
+        const open = either.filter((passage) => passage.free >= passage.need);
+        // Every side taken: the roomiest one is the one worth freeing.
+        const best = either.reduce<FurniturePassage[]>(
+            (found, passage) => (found.length && found[0].free >= passage.free ? found : [passage]),
+            [],
+        );
+        return [...hard, ...(open.length ? open : best)];
+    });
+}
+
+export const passageBlocked = (passage: FurniturePassage) => passage.free < passage.need;
+
 export interface FurnitureWallDistance {
     side: "left" | "right" | "top" | "bottom";
     distance: number;

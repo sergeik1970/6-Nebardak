@@ -219,7 +219,11 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         shortLabel: "Кровать 1-местная",
         category: "sleep",
         body: rectShape(900, 2000),
-        clearanceZones: [bedSideZone(900, 700, 2000, "Проход у кровати")],
+        // Reached from either long side; the other may stand against a wall.
+        clearanceZones: [
+            bedSideZone(-700, 700, 2000, "Левый проход", "one-of"),
+            bedSideZone(900, 700, 2000, "Правый проход", "one-of"),
+        ],
         rotations: [0, 90, 180, 270],
         equivalentRotationGroups: NO_EQUIVALENT_ROTATIONS,
         placement: wallPlacement(false, true, ["back", "front", "left"], "allowed"),

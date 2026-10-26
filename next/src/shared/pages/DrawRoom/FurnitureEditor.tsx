@@ -14,6 +14,8 @@ import {
     furnitureConflicts,
     furnitureWallDistances,
     furnitureGeometry,
+    furniturePassages,
+    passageBlocked,
     rotatedFurnitureCandidates,
     snapFurnitureToWalls,
     type DrawFurniture,
@@ -429,6 +431,39 @@ export default function FurnitureEditor({
               radiatorObstacles,
           )
         : [];
+    // What stands on the plan right now, the piece being moved where it is moved to.
+    const shown = [
+        ...items.map((item) =>
+            preview?.id === item.id && !pending
+                ? preview
+                : reposition?.id === item.id && selectedId === item.id
+                  ? reposition
+                  : item,
+        ),
+        ...(pending && preview ? [preview] : []),
+    ];
+    // Passages are a warning, not a ban: shown for the room's every piece.
+    const passages = active ? furniturePassages(shown.filter(inRoom), walls, thickness) : [];
+    const passageWarnings = inspected
+        ? passages
+              .filter(passageBlocked)
+              .filter(
+                  (passage) =>
+                      passage.itemId === inspected.id ||
+                      furnitureGeometry(inspected).bodyRects.some(
+                          (body) =>
+                              body.x + inspected.x < passage.rect.x + passage.rect.width &&
+                              body.x + inspected.x + body.width > passage.rect.x &&
+                              body.y + inspected.y < passage.rect.y + passage.rect.depth &&
+                              body.y + inspected.y + body.depth > passage.rect.y,
+                      ),
+              )
+              .map((passage) => {
+                  const owner = shown.find((item) => item.id === passage.itemId);
+                  const name = owner ? furnitureDefinition(owner.definitionId)?.label : "";
+                  return `${passage.label}${passage.itemId === inspected.id ? "" : ` у «${name}»`}: свободно ${Math.round(passage.free / 10)} см из ${Math.round(passage.need / 10)}.`;
+              })
+        : [];
     const distances =
         selected && !pending && !preview && !reposition
             ? furnitureWallDistances(selected, walls, thickness)
@@ -463,8 +498,9 @@ export default function FurnitureEditor({
                     setReposition(null);
                     setPreview(null);
                     setMessage("");
-                    // The menu steps aside once a piece is chosen, as in Remplanner.
+                    // The menu and the search step aside once a piece is chosen, as in Remplanner.
                     setSection(null);
+                    setQuery("");
                 }}
             >
                 <FurnitureThumbnail definition={definition} />
@@ -482,6 +518,26 @@ export default function FurnitureEditor({
             {layerHost &&
                 createPortal(
                     <g data-draw-furniture-layer="true">
+                        <g pointerEvents="none" aria-hidden="true" data-furniture-passages="true">
+                            {passages.map((passage, index) => {
+                                const blocked = passageBlocked(passage);
+                                return (
+                                    <g
+                                        key={`${passage.itemId}-${index}`}
+                                        className={styles.passage}
+                                        data-furniture-passage={passage.itemId}
+                                        data-passage-blocked={blocked}
+                                    >
+                                        <rect
+                                            x={passage.rect.x}
+                                            y={passage.rect.y}
+                                            width={passage.rect.width}
+                                            height={passage.rect.depth}
+                                        />
+                                    </g>
+                                );
+                            })}
+                        </g>
                         {[...items]
                             .sort(
                                 (first, second) =>
@@ -504,6 +560,23 @@ export default function FurnitureEditor({
                                 ),
                             )}
                         {pending && preview && symbol(preview, true)}
+                        {/* What is left of a blocked passage reads over the pieces in it. */}
+                        <g pointerEvents="none" aria-hidden="true" className={styles.passage}>
+                            {passages.filter(passageBlocked).map((passage, index) => (
+                                <text
+                                    key={`${passage.itemId}-${index}`}
+                                    data-furniture-passage-free={passage.itemId}
+                                    x={passage.rect.x + passage.rect.width / 2}
+                                    y={passage.rect.y + passage.rect.depth / 2}
+                                    fontSize={11 * screenUnit}
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                >
+                                    {Math.round(passage.free / 10)} из{" "}
+                                    {Math.round(passage.need / 10)} см
+                                </text>
+                            ))}
+                        </g>
                         <g pointerEvents="none" aria-hidden="true" data-furniture-conflicts="true">
                             {conflicts.map((conflict, index) => (
                                 <rect
@@ -561,15 +634,38 @@ export default function FurnitureEditor({
                     data-editing={Boolean(editing)}
                     data-flyout-open={flyoutOpen}
                     data-section-open={Boolean((openSection || autoLayoutOpen) && !query.trim())}
+                    data-searching={Boolean(query.trim())}
                     onPointerDown={(event) => event.stopPropagation()}
                 >
                     {/* Sections in a dark rail, like the doors and windows step. */}
                     <nav
                         className={styles.rail}
                         aria-label="Разделы каталога"
-                        data-open={Boolean(openSection || autoLayoutOpen)}
+                        data-open={Boolean(openSection || autoLayoutOpen || query.trim())}
                     >
-                        <span className={styles.railIntro}>КАТАЛОГ МЕБЕЛИ</span>
+                        <span className={styles.railIntro} data-furniture-room>
+                            {room ? room.name : "Каталог мебели"}
+                        </span>
+                        {/* The magnifier shows in the folded rail; the field opens with it. */}
+                        <label className={styles.railSearch}>
+                            <svg
+                                className={styles.thumbnail}
+                                viewBox="0 0 26 26"
+                                aria-hidden="true"
+                            >
+                                <circle cx="11" cy="11" r="7" />
+                                <path d="m16 16 6 6" />
+                            </svg>
+                            <input
+                                aria-label="Поиск мебели"
+                                placeholder="Найти мебель"
+                                value={query}
+                                onChange={(event) => {
+                                    setQuery(event.target.value);
+                                    setSection(null);
+                                }}
+                            />
+                        </label>
                         {furnitureMenuOrder(room?.kind).map((menuSection) => (
                             <button
                                 key={menuSection.id}
@@ -691,10 +787,11 @@ export default function FurnitureEditor({
                             </div>
                         )
                     )}
-                    <div className={styles.panel}>
-                        <header>
-                            <b>{room ? room.name : "Мебель"}</b>
-                            {editing ? (
+                    {/* The piece's parameters, as Remplanner shows them: only while one is chosen. */}
+                    {editing ? (
+                        <div className={styles.panel}>
+                            <header>
+                                <b>{furnitureDefinition(editing.definitionId)?.label}</b>
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -707,230 +804,244 @@ export default function FurnitureEditor({
                                 >
                                     Каталог
                                 </button>
-                            ) : (
-                                <span>{items.filter(inRoom).length} в комнате</span>
-                            )}
-                        </header>
-                        {editing && (
-                            <section className={styles.properties}>
-                                <b>{furnitureDefinition(editing.definitionId)?.label}</b>
-                                {isSchematicFurnitureSource(
-                                    furnitureDefinition(editing.definitionId)!.source,
-                                ) && (
-                                    <small>
-                                        Типовые габариты. Уточните размеры вашего предмета
-                                        {editing.definitionId.startsWith("dining-")
-                                            ? ": вместе со стульями"
-                                            : ""}
-                                        .
-                                    </small>
-                                )}
-                                {furnitureDefinition(editing.definitionId)?.sizes && (
-                                    <div
-                                        className={styles.presets}
-                                        role="group"
-                                        aria-label="Типовые размеры"
-                                    >
-                                        {furnitureDefinition(editing.definitionId)!.sizes!.map(
-                                            ({ width, depth }) => (
-                                                <button
-                                                    key={`${width}x${depth}`}
-                                                    type="button"
-                                                    data-furniture-preset={`${width}x${depth}`}
+                            </header>
+                            {editing && (
+                                <section className={styles.properties}>
+                                    {isSchematicFurnitureSource(
+                                        furnitureDefinition(editing.definitionId)!.source,
+                                    ) && (
+                                        <small>
+                                            Типовые габариты. Уточните размеры вашего предмета
+                                            {editing.definitionId.startsWith("dining-")
+                                                ? ": вместе со стульями"
+                                                : ""}
+                                            .
+                                        </small>
+                                    )}
+                                    {furnitureDefinition(editing.definitionId)?.sizes && (
+                                        <div
+                                            className={styles.presets}
+                                            role="group"
+                                            aria-label="Типовые размеры"
+                                        >
+                                            {furnitureDefinition(editing.definitionId)!.sizes!.map(
+                                                ({ width, depth }) => (
+                                                    <button
+                                                        key={`${width}x${depth}`}
+                                                        type="button"
+                                                        data-furniture-preset={`${width}x${depth}`}
+                                                        disabled={Boolean(editing.locked)}
+                                                        aria-pressed={
+                                                            editing.width === width &&
+                                                            editing.depth === depth
+                                                        }
+                                                        onClick={() => {
+                                                            const next = {
+                                                                ...editing,
+                                                                width,
+                                                                depth,
+                                                            };
+                                                            if (pending) {
+                                                                setPending(next);
+                                                                setPreview(null);
+                                                            } else update(next);
+                                                        }}
+                                                    >
+                                                        {width} × {depth}
+                                                    </button>
+                                                ),
+                                            )}
+                                        </div>
+                                    )}
+                                    <div className={styles.sizes}>
+                                        {(["width", "depth"] as const).map((field) => (
+                                            <label key={`${editing.id}-${field}`}>
+                                                {field === "width" ? "Ширина, мм" : "Глубина, мм"}
+                                                <input
+                                                    key={`${editing.id}-${editing[field]}`}
+                                                    type="number"
+                                                    min={10}
+                                                    max={10000}
+                                                    step={10}
                                                     disabled={Boolean(editing.locked)}
-                                                    aria-pressed={
-                                                        editing.width === width &&
-                                                        editing.depth === depth
-                                                    }
-                                                    onClick={() => {
-                                                        const next = { ...editing, width, depth };
-                                                        if (pending) {
-                                                            setPending(next);
-                                                            setPreview(null);
-                                                        } else update(next);
-                                                    }}
-                                                >
-                                                    {width} × {depth}
-                                                </button>
-                                            ),
-                                        )}
-                                    </div>
-                                )}
-                                <div className={styles.sizes}>
-                                    {(["width", "depth"] as const).map((field) => (
-                                        <label key={`${editing.id}-${field}`}>
-                                            {field === "width" ? "Ширина, мм" : "Глубина, мм"}
-                                            <input
-                                                key={`${editing.id}-${editing[field]}`}
-                                                type="number"
-                                                min={10}
-                                                max={10000}
-                                                step={10}
-                                                disabled={Boolean(editing.locked)}
-                                                defaultValue={editing[field]}
-                                                onBlur={(event) => {
-                                                    const value = Number(event.target.value);
-                                                    if (
-                                                        !Number.isFinite(value) ||
-                                                        value < 10 ||
-                                                        value > 10000
-                                                    ) {
-                                                        event.target.value = String(editing[field]);
-                                                        return;
-                                                    }
-                                                    const next = { ...editing, [field]: value };
-                                                    if (pending) {
-                                                        setPending(next);
-                                                        setPreview(null);
-                                                    } else {
-                                                        update(next);
-                                                        if (error(next))
+                                                    defaultValue={editing[field]}
+                                                    onBlur={(event) => {
+                                                        const value = Number(event.target.value);
+                                                        if (
+                                                            !Number.isFinite(value) ||
+                                                            value < 10 ||
+                                                            value > 10000
+                                                        ) {
                                                             event.target.value = String(
                                                                 editing[field],
                                                             );
-                                                    }
-                                                }}
-                                                onKeyDown={(event) => {
-                                                    if (event.key === "Enter")
-                                                        event.currentTarget.blur();
-                                                }}
-                                            />
-                                        </label>
-                                    ))}
-                                </div>
-                                {distances.length > 0 && (
-                                    <fieldset className={styles.distances}>
-                                        <legend>До стен, мм</legend>
-                                        <div className={styles.sizes}>
-                                            {distances.map((entry) => (
-                                                <label key={entry.side}>
-                                                    {sideLabels[entry.side]}
-                                                    <input
-                                                        aria-label={`До стены ${sideLabels[entry.side].toLowerCase()}, мм`}
-                                                        key={`${selected!.id}-${entry.distance}-${entry.side}`}
-                                                        type="number"
-                                                        disabled={Boolean(editing.locked)}
-                                                        min={0}
-                                                        step={10}
-                                                        defaultValue={Math.round(entry.distance)}
-                                                        onBlur={(event) => {
-                                                            const value = Number(
-                                                                event.target.value,
-                                                            );
-                                                            if (
-                                                                !event.target.value.trim() ||
-                                                                !Number.isFinite(value) ||
-                                                                value < 0
-                                                            ) {
-                                                                event.target.value = String(
-                                                                    Math.round(entry.distance),
-                                                                );
-                                                                return;
-                                                            }
-                                                            const next = {
-                                                                ...selected!,
-                                                                [entry.axis]:
-                                                                    selected![entry.axis] +
-                                                                    entry.direction *
-                                                                        (value - entry.distance),
-                                                            };
+                                                            return;
+                                                        }
+                                                        const next = { ...editing, [field]: value };
+                                                        if (pending) {
+                                                            setPending(next);
+                                                            setPreview(null);
+                                                        } else {
                                                             update(next);
                                                             if (error(next))
                                                                 event.target.value = String(
-                                                                    Math.round(entry.distance),
+                                                                    editing[field],
                                                                 );
-                                                        }}
-                                                        onKeyDown={(event) => {
-                                                            if (event.key === "Enter")
-                                                                event.currentTarget.blur();
-                                                        }}
-                                                    />
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </fieldset>
-                                )}
-                                <div className={styles.actions}>
-                                    <button onClick={rotate} disabled={Boolean(editing.locked)}>
-                                        Повернуть ↻
-                                    </button>
-                                    <button
-                                        disabled={Boolean(editing.locked)}
-                                        onClick={() => {
-                                            if (pending) setPending(null);
-                                            else
-                                                onChange(
-                                                    items.filter((item) => item.id !== selectedId),
-                                                );
-                                            setSelectedId(null);
-                                            setReposition(null);
-                                            setPreview(null);
-                                        }}
-                                    >
-                                        {pending ? "Отменить" : "Удалить"}
-                                    </button>
-                                </div>
-                                {!pending && (
+                                                        }
+                                                    }}
+                                                    onKeyDown={(event) => {
+                                                        if (event.key === "Enter")
+                                                            event.currentTarget.blur();
+                                                    }}
+                                                />
+                                            </label>
+                                        ))}
+                                    </div>
+                                    {distances.length > 0 && (
+                                        <fieldset className={styles.distances}>
+                                            <legend>До стен, мм</legend>
+                                            <div className={styles.sizes}>
+                                                {distances.map((entry) => (
+                                                    <label key={entry.side}>
+                                                        {sideLabels[entry.side]}
+                                                        <input
+                                                            aria-label={`До стены ${sideLabels[entry.side].toLowerCase()}, мм`}
+                                                            key={`${selected!.id}-${entry.distance}-${entry.side}`}
+                                                            type="number"
+                                                            disabled={Boolean(editing.locked)}
+                                                            min={0}
+                                                            step={10}
+                                                            defaultValue={Math.round(
+                                                                entry.distance,
+                                                            )}
+                                                            onBlur={(event) => {
+                                                                const value = Number(
+                                                                    event.target.value,
+                                                                );
+                                                                if (
+                                                                    !event.target.value.trim() ||
+                                                                    !Number.isFinite(value) ||
+                                                                    value < 0
+                                                                ) {
+                                                                    event.target.value = String(
+                                                                        Math.round(entry.distance),
+                                                                    );
+                                                                    return;
+                                                                }
+                                                                const next = {
+                                                                    ...selected!,
+                                                                    [entry.axis]:
+                                                                        selected![entry.axis] +
+                                                                        entry.direction *
+                                                                            (value -
+                                                                                entry.distance),
+                                                                };
+                                                                update(next);
+                                                                if (error(next))
+                                                                    event.target.value = String(
+                                                                        Math.round(entry.distance),
+                                                                    );
+                                                            }}
+                                                            onKeyDown={(event) => {
+                                                                if (event.key === "Enter")
+                                                                    event.currentTarget.blur();
+                                                            }}
+                                                        />
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </fieldset>
+                                    )}
                                     <div className={styles.actions}>
+                                        <button onClick={rotate} disabled={Boolean(editing.locked)}>
+                                            Повернуть ↻
+                                        </button>
                                         <button
+                                            disabled={Boolean(editing.locked)}
                                             onClick={() => {
-                                                setPending({
-                                                    ...editing,
-                                                    id: "pending-copy",
-                                                    locked: false,
-                                                });
+                                                if (pending) setPending(null);
+                                                else
+                                                    onChange(
+                                                        items.filter(
+                                                            (item) => item.id !== selectedId,
+                                                        ),
+                                                    );
                                                 setSelectedId(null);
                                                 setReposition(null);
                                                 setPreview(null);
-                                                setMessage(
-                                                    "Копия готова. Укажите свободное место на плане. Esc — отмена.",
-                                                );
                                             }}
                                         >
-                                            Копировать
-                                        </button>
-                                        <button
-                                            aria-pressed={Boolean(editing.locked)}
-                                            disabled={Boolean(reposition)}
-                                            onClick={() => {
-                                                onChange(
-                                                    items.map((item) =>
-                                                        item.id === editing.id
-                                                            ? { ...item, locked: !item.locked }
-                                                            : item,
-                                                    ),
-                                                );
-                                                setMessage(
-                                                    editing.locked
-                                                        ? "Предмет разблокирован."
-                                                        : "Предмет закреплён. Его нельзя случайно сдвинуть или удалить.",
-                                                );
-                                            }}
-                                        >
-                                            {editing.locked ? "Разблокировать" : "Закрепить"}
+                                            {pending ? "Отменить" : "Удалить"}
                                         </button>
                                     </div>
-                                )}
-                            </section>
-                        )}
-                        <p role="status">
-                            {message ||
-                                (pending
-                                    ? "Щёлкните по свободному месту. У стены предмет прилипнет к ней. R — поворот, Shift — несколько, Esc — отмена."
-                                    : room
-                                      ? "Выберите раздел каталога, затем предмет и место в комнате. Shift — поставить несколько. Другая комната — нажмите на неё на плане."
-                                      : "Выберите раздел каталога, затем предмет и место на плане. Мебель можно перетаскивать мышью.")}
-                        </p>
-                        <input
-                            aria-label="Поиск мебели"
-                            placeholder="Найти мебель"
-                            value={query}
-                            onChange={(event) => {
-                                setQuery(event.target.value);
-                                setSection(null);
-                            }}
-                        />
-                    </div>
+                                    {!pending && (
+                                        <div className={styles.actions}>
+                                            <button
+                                                onClick={() => {
+                                                    setPending({
+                                                        ...editing,
+                                                        id: "pending-copy",
+                                                        locked: false,
+                                                    });
+                                                    setSelectedId(null);
+                                                    setReposition(null);
+                                                    setPreview(null);
+                                                    setMessage(
+                                                        "Копия готова. Укажите свободное место на плане. Esc — отмена.",
+                                                    );
+                                                }}
+                                            >
+                                                Копировать
+                                            </button>
+                                            <button
+                                                aria-pressed={Boolean(editing.locked)}
+                                                disabled={Boolean(reposition)}
+                                                onClick={() => {
+                                                    onChange(
+                                                        items.map((item) =>
+                                                            item.id === editing.id
+                                                                ? { ...item, locked: !item.locked }
+                                                                : item,
+                                                        ),
+                                                    );
+                                                    setMessage(
+                                                        editing.locked
+                                                            ? "Предмет разблокирован."
+                                                            : "Предмет закреплён. Его нельзя случайно сдвинуть или удалить.",
+                                                    );
+                                                }}
+                                            >
+                                                {editing.locked ? "Разблокировать" : "Закрепить"}
+                                            </button>
+                                        </div>
+                                    )}
+                                </section>
+                            )}
+                            {passageWarnings.length > 0 && (
+                                <ul
+                                    className={styles.passageWarnings}
+                                    data-furniture-passage-warning
+                                >
+                                    {passageWarnings.map((warning) => (
+                                        <li key={warning}>{warning}</li>
+                                    ))}
+                                </ul>
+                            )}
+                            <p role="status">
+                                {message ||
+                                    (pending
+                                        ? "Щёлкните по свободному месту. У стены предмет прилипнет к ней. R — поворот, Shift — несколько, Esc — отмена."
+                                        : "Потяните предмет, чтобы переместить. Delete — удалить, R — повернуть.")}
+                            </p>
+                        </div>
+                    ) : (
+                        // Nothing chosen: a note such as «вне комнаты» shows over the drawing.
+                        message && (
+                            <p role="status" className={styles.toast}>
+                                {message}
+                            </p>
+                        )
+                    )}
                 </aside>
             )}
         </>
