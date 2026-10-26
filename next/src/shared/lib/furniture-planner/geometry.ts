@@ -267,6 +267,9 @@ const isOwnPerimeterJambJoin = (
     );
 };
 
+/** Bodies of pinned pieces: other furniture stays clear of them like a wall. */
+export const getFixedFurnitureBodies = (room: Room): Rect[] => room.fixedFurniture?.bodies ?? [];
+
 /** Solid portions of internal walls after subtracting their door cut-outs. */
 export const getPartitionObstacleRects = (room: Room): Rect[] =>
     getPartitionMaterialObstacles(room).map((obstacle) => obstacle.rect);
@@ -854,6 +857,23 @@ const roomIssues = (placement: Placement, room: Room): ValidationIssue[] => {
     const doorObstacles = room.doors.flatMap((door) => getDoorFurnitureObstacles(door, room));
     const partitionObstacles = getPartitionObstacleRects(room);
 
+    // A pinned piece stays put: nothing may stand on it or in its passages,
+    // and a new piece's own passage may not run into it.
+    const fixedBodies = getFixedFurnitureBodies(room);
+    const fixedPassages = room.fixedFurniture?.passages ?? [];
+    if (
+        bodyRects.some((rect) =>
+            [...fixedBodies, ...fixedPassages].some((obstacle) => rectsIntersect(rect, obstacle)),
+        ) ||
+        clearanceRects.some((rect) => fixedBodies.some((body) => rectsIntersect(rect, body)))
+    ) {
+        issues.push({
+            code: "fixed-furniture-blocked",
+            message: `${definition.shortLabel}: мешает закреплённой мебели или её проходу.`,
+            instanceIds: [placement.instanceId],
+        });
+    }
+
     if (
         [...bodyRects, ...clearanceRects].some((rect) =>
             partitionObstacles.some((obstacle) => rectsIntersect(rect, obstacle)),
@@ -936,6 +956,7 @@ const alternativeClearanceIssues = (
     const fixedObstacles = [
         ...room.doors.map((door) => getDoorObstacle(door, room)),
         ...getPartitionObstacleRects(room),
+        ...getFixedFurnitureBodies(room),
         ...(room.radiators ?? []).map((radiator) => getRadiatorBody(radiator, room)),
     ];
     const otherBodies = allPlacements
@@ -1068,6 +1089,7 @@ const configurationDomain = (room: Room, passageWidth: number): Rect => {
 const accessObstacleRects = (room: Room, placements: Placement[]): Rect[] => [
     ...placements.flatMap(getWorldBodyRects),
     ...getPartitionObstacleRects(room),
+    ...getFixedFurnitureBodies(room),
     ...(room.radiators ?? []).map((radiator) => getRadiatorBody(radiator, room)),
 ];
 
@@ -1642,6 +1664,7 @@ export const getPreferredClearanceSummary = (
     const fixedObstacles = [
         ...room.doors.map((door) => getDoorObstacle(door, room)),
         ...getPartitionObstacleRects(room),
+        ...getFixedFurnitureBodies(room),
         ...room.windows.map((window) => getWindowCurtainObstacle(window, room)),
         ...(room.radiators ?? []).flatMap((radiator) => [
             getRadiatorBody(radiator, room),

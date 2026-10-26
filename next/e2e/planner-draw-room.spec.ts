@@ -3058,7 +3058,7 @@ test("furniture goes into the selected room, against its walls", async ({ page }
     await expect(page.getByLabel("До стены снизу, мм")).toHaveValue("0");
 
     // The other room does not take this room's furniture.
-    await panel.getByRole("button", { name: "Каталог" }).click();
+    await panel.getByRole("button", { name: "Закрыть", exact: true }).click();
     await chooseFurniture(page, "single-bed");
     const upperRoom = await getBoardScreenPoint(page, 6000, 2700);
     await page.mouse.move(upperRoom.x, upperRoom.y);
@@ -3189,7 +3189,7 @@ test("a kitchen is fitted with base and upper units", async ({ page }, testInfo)
     );
     const status = panel.getByRole("status");
     const put = async (id: string, x: number, y: number) => {
-        const catalogue = panel.getByRole("button", { name: "Каталог" });
+        const catalogue = panel.getByRole("button", { name: "Закрыть", exact: true });
         if (await catalogue.isVisible()) await catalogue.click();
         await chooseFurniture(page, id);
         const point = await getBoardScreenPoint(page, x, y);
@@ -3403,7 +3403,7 @@ test("auto layout rearranges the pieces placed in the room and can be undone", a
     // The person puts the pieces in by hand, anywhere in the bedroom.
     const pieces = page.locator("[data-draw-furniture^='furniture-']");
     const place = async (id: string, x: number, y: number) => {
-        const catalogue = page.getByRole("button", { name: "Каталог" });
+        const catalogue = page.getByRole("button", { name: "Закрыть", exact: true });
         if (await catalogue.isVisible()) await catalogue.click();
         await chooseFurniture(page, id);
         const point = await getBoardScreenPoint(page, x, y);
@@ -4869,7 +4869,7 @@ test("a piece put in a bed's passage is flagged, not refused", async ({ page }, 
     await page.locator("[data-draw-room-step='furniture']").click();
     const panel = page.locator("[aria-label='Мебель на чертеже']");
     const place = async (id: string, x: number, y: number) => {
-        const catalogue = panel.getByRole("button", { name: "Каталог" });
+        const catalogue = panel.getByRole("button", { name: "Закрыть", exact: true });
         if (await catalogue.isVisible()) await catalogue.click();
         await chooseFurniture(page, id);
         const point = await getBoardScreenPoint(page, x, y);
@@ -4891,4 +4891,128 @@ test("a piece put in a bed's passage is flagged, not refused", async ({ page }, 
     await expect(panel.locator("[data-furniture-passage-warning]")).toContainText(
         "Левый проход у «Односпальная кровать»: свободно 10 см из 70.",
     );
+});
+
+test("auto layout works around a pinned bed and loses nothing", async ({ page }, testInfo) => {
+    test.skip(
+        testInfo.project.name !== "desktop-chromium",
+        "The solver worker is covered once in Chromium",
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 4000, 3500);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
+    await page.locator("[data-draw-room-step='furniture']").click();
+    const panel = page.locator("[aria-label='Мебель на чертеже']");
+    const place = async (id: string, x: number, y: number) => {
+        const close = panel.getByRole("button", { name: "Закрыть", exact: true });
+        if (await close.isVisible()) await close.click();
+        await chooseFurniture(page, id);
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.click(point.x, point.y);
+    };
+    const saved = () =>
+        page.evaluate(
+            () =>
+                (
+                    JSON.parse(localStorage.getItem("stylefinder:draw-room-editor:v1") ?? "{}") as {
+                        furniture?: {
+                            definitionId: string;
+                            x: number;
+                            y: number;
+                            locked?: boolean;
+                        }[];
+                    }
+                ).furniture ?? [],
+        );
+
+    // The bed goes where the person wants it and is pinned there.
+    await place("double-bed", 6000, 3200);
+    await panel.getByRole("button", { name: "Закрепить" }).click();
+    await place("dresser", 4600, 5000);
+    await place("armchair", 7300, 5000);
+    await expect.poll(async () => (await saved()).length).toBe(3);
+    const bedBefore = (await saved()).find((item) => item.definitionId === "double-bed")!;
+    expect(bedBefore.locked).toBe(true);
+
+    await panel.getByRole("button", { name: "Закрыть", exact: true }).click();
+    await page.locator("[data-furniture-auto-layout]").click();
+    const auto = page.locator("[data-draw-room-auto-layout='true']");
+    await expect(auto.locator("[data-auto-layout-pinned]")).toContainText("Двуспальная кровать");
+    await expect(auto.locator("[data-auto-layout-item]")).toHaveCount(2);
+    await auto.getByRole("button", { name: "Подобрать", exact: true }).click();
+    const variant = auto.locator("[data-auto-layout-variant='0']");
+    await expect(variant).toBeVisible({ timeout: 30_000 });
+    await variant.click();
+
+    // Nothing is lost, the pinned bed has not moved and no piece is refused.
+    const after = await saved();
+    expect(after.map((item) => item.definitionId).sort()).toEqual([
+        "armchair",
+        "double-bed",
+        "dresser",
+    ]);
+    expect(after.find((item) => item.definitionId === "double-bed")).toMatchObject({
+        x: bedBefore.x,
+        y: bedBefore.y,
+        locked: true,
+    });
+    await expect(
+        page.locator("[data-draw-furniture^='furniture-'][data-invalid='true']"),
+    ).toHaveCount(0);
+});
+
+test("a piece auto layout cannot fit stays on the plan for the next try", async ({
+    page,
+}, testInfo) => {
+    test.skip(
+        testInfo.project.name !== "desktop-chromium",
+        "The solver worker is covered once in Chromium",
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    // A small bedroom: placed by hand, the four pieces do not all fit the solver's rules.
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 3600, 2700);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
+    await page.locator("[data-draw-room-step='furniture']").click();
+    const panel = page.locator("[aria-label='Мебель на чертеже']");
+    const place = async (id: string, x: number, y: number) => {
+        const close = panel.getByRole("button", { name: "Закрыть", exact: true });
+        if (await close.isVisible()) await close.click();
+        await chooseFurniture(page, id);
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.click(point.x, point.y);
+    };
+    await place("double-bed", 5000, 3100);
+    await place("wardrobe-medium", 6750, 2350);
+    await place("dresser", 7200, 4400);
+    await place("armchair", 6450, 3650);
+    const pieces = page.locator("[data-draw-furniture^='furniture-']");
+    await expect(pieces).toHaveCount(4);
+
+    await page.keyboard.press("Escape");
+    await page.locator("[data-furniture-auto-layout]").click();
+    const auto = page.locator("[data-draw-room-auto-layout='true']");
+    await auto.getByRole("button", { name: "Подобрать", exact: true }).click();
+    const variant = auto.locator("[data-auto-layout-variant='0']");
+    await expect(variant).toContainText("Не поместилось: Кресло", { timeout: 30_000 });
+    await variant.click();
+
+    // The armchair is still there, and the column says where it went.
+    await expect(pieces).toHaveCount(4);
+    await expect(auto.getByRole("status")).toContainText(
+        "Не поместилось: Кресло, схема 900 × 900 мм — оставлено на прежнем месте",
+    );
+    // The next try counts it again.
+    await expect(auto.locator("[data-auto-layout-item='armchair']")).toBeVisible();
 });

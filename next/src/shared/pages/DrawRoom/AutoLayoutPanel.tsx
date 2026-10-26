@@ -22,6 +22,7 @@ export interface AutoLayoutVariantSummary {
 export default function AutoLayoutPanel({
     set,
     resized = false,
+    pinned = [],
     onSolve,
     solving,
     status,
@@ -38,6 +39,8 @@ export default function AutoLayoutPanel({
     set: Record<string, number>;
     /** Some piece has a size of its own; the solver uses catalogue sizes. */
     resized?: boolean;
+    /** Pinned pieces stay put; the rest is arranged around them. */
+    pinned?: string[];
     onSolve: () => void;
     solving: boolean;
     status: string;
@@ -78,6 +81,11 @@ export default function AutoLayoutPanel({
                             </li>
                         ))}
                     </ul>
+                    {pinned.length > 0 && (
+                        <p data-auto-layout-pinned>
+                            Останутся на месте (закреплены): {pinned.join(", ")}.
+                        </p>
+                    )}
                     {resized && (
                         <p>Предметы с изменёнными размерами встанут в размере из каталога.</p>
                     )}
