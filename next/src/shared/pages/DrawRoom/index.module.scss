@@ -486,32 +486,9 @@
     height: 16px;
 }
 
-.rulerSide {
-    position: absolute;
-    z-index: 2;
-    color: #5c6d73;
-    font: 700 10px/1 var(--font-primary);
-    pointer-events: none;
-}
-
-.rulerSide {
-    top: 0;
-    bottom: 13px;
-    left: 0;
-    width: 48px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: center;
-    border-right: 1px solid #ccd7d9;
-    padding: 4px 0;
-    background: rgba(251, 252, 250, 0.88);
-    writing-mode: vertical-rl;
-    transform: rotate(180deg);
-}
-
 .canvas {
     position: absolute;
+    // The left gutter sits under the tool rail.
     inset: 0 16px 13px 49px;
     width: calc(100% - 65px);
     height: calc(100% - 13px);
@@ -1815,9 +1792,6 @@
         font-weight: 750;
     }
     .plannerEligibilityWarning {
-        display: none;
-    }
-    .rulerSide {
         display: none;
     }
     .canvas {

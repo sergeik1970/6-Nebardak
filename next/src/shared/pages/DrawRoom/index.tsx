@@ -4731,12 +4731,6 @@ const DrawRoom: React.FC = () => {
         }
     }, [canvasSize.height, canvasSize.width, fitViewBox, viewBox]);
 
-    const verticalRulerTicks = useMemo(
-        () =>
-            Array.from({ length: 6 }, (_, index) => viewBox.y + (viewBox.height * (5 - index)) / 5),
-        [viewBox.y, viewBox.height],
-    );
-
     useEffect(() => {
         const media = window.matchMedia(TOOL_SHEET_MEDIA_QUERY);
         const update = () => setToolSheetOverlaysCanvas(media.matches);
@@ -8114,15 +8108,6 @@ const DrawRoom: React.FC = () => {
                     )}
 
                     <div className={styles.canvasShell}>
-                        <div
-                            className={styles.rulerSide}
-                            aria-hidden="true"
-                            data-draw-room-ruler="side"
-                        >
-                            {verticalRulerTicks.map((tick) => (
-                                <span key={tick}>{formatMeters(tick)}</span>
-                            ))}
-                        </div>
                         <svg
                             ref={boardRef}
                             className={`${styles.canvas} ${tool === "wall" ? styles.canvasWallMode : ""}`}
