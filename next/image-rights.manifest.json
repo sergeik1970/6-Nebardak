@@ -37,8 +37,8 @@
             "id": "home-static",
             "path": "Home",
             "excludePrefixes": ["Home/test-images.20260716-v1", "Home/style-results.20260827-v1"],
-            "expectedFileCount": 19,
-            "contentDigestSha256": "1857155c39f38004b4b66daa054a945fbac7ff986fcff6da2ec9dd20bb0d2cf6",
+            "expectedFileCount": 21,
+            "contentDigestSha256": "10feeeb7a2ed0c7b2cae2d9e7c67a770fe34f710057fee5605a433d47264ed9c",
             "source": "designer-supplied",
             "rightsStatus": "cleared",
             "rightsEvidence": "record:docs/image-rights/2026-10-20-owner-attestation"

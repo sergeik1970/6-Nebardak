@@ -24,7 +24,7 @@
 	@versionedTestAssets path /images/Home/test-images.20260716-v1/*
 	header @versionedTestAssets >Cache-Control "public, max-age=31536000, immutable"
 
-	@fingerprintedHomeAssets path_regexp fingerprintedHomeAssets ^/images/Home/[^/]+\.[0-9a-f]{12}\.(jpg|webp|png)$
+	@fingerprintedHomeAssets path_regexp fingerprintedHomeAssets ^/images/Home/[^/]+\.[0-9a-f]{12}\.(jpg|webp|png|svg)$
 	header @fingerprintedHomeAssets >Cache-Control "public, max-age=31536000, immutable"
 
 	header {
