@@ -363,28 +363,18 @@ const expectCadSurfaceAlignment = async (page: Page) => {
     const metrics = await page.evaluate(() => {
         const board = document.querySelector<SVGSVGElement>("[data-draw-room-board='true']");
         const grid = document.querySelector<SVGGraphicsElement>("[data-draw-room-grid='true']");
-        const sideRuler = document.querySelector<HTMLElement>("[data-draw-room-ruler='side']");
         const boardBox = board?.getBoundingClientRect();
         const gridBox = grid?.getBoundingClientRect();
-        const sideBox = sideRuler?.getBoundingClientRect();
         return {
             gridWidthRatio: (gridBox?.width ?? 0) / (boardBox?.width ?? 1),
             gridHeightRatio: (gridBox?.height ?? 0) / (boardBox?.height ?? 1),
-            hasTopRuler: Boolean(document.querySelector("[data-draw-room-ruler='top']")),
-            hasSideRuler: (sideBox?.width ?? 0) > 0,
-            sideTopOffset: Math.abs((sideBox?.top ?? 0) - (boardBox?.top ?? 0)),
-            sideBottomOffset: Math.abs((sideBox?.bottom ?? 0) - (boardBox?.bottom ?? 0)),
-            sideRightOffset: Math.abs((sideBox?.right ?? 0) - (boardBox?.left ?? 0)),
+            // Sizes read from the dimension chains; the board has no rulers.
+            hasRuler: Boolean(document.querySelector("[data-draw-room-ruler]")),
         };
     });
     expect(metrics.gridWidthRatio).toBeGreaterThan(0.98);
     expect(metrics.gridHeightRatio).toBeGreaterThan(0.98);
-    expect(metrics.hasTopRuler).toBe(false);
-    if (metrics.hasSideRuler) {
-        expect(metrics.sideTopOffset).toBeLessThanOrEqual(1);
-        expect(metrics.sideBottomOffset).toBeLessThanOrEqual(1);
-        expect(metrics.sideRightOffset).toBeLessThanOrEqual(2);
-    }
+    expect(metrics.hasRuler).toBe(false);
 };
 
 const drawSimpleRect = async (page: Page) => {
@@ -1399,7 +1389,7 @@ test("wall preview is visible only during a live drag and the top ruler is absen
     );
     await page.goto("/planner/draw", { waitUntil: "networkidle" });
 
-    await expect(page.locator("[data-draw-room-ruler='top']")).toHaveCount(0);
+    await expect(page.locator("[data-draw-room-ruler]")).toHaveCount(0);
     const start = await getBoardScreenPoint(page, BOARD_WIDTH_MM * 0.2, BOARD_HEIGHT_MM * 0.3);
     const end = await getBoardScreenPoint(page, BOARD_WIDTH_MM * 0.7, BOARD_HEIGHT_MM * 0.3);
     await page.mouse.move(start.x, start.y);
