@@ -49,6 +49,7 @@ import {
     resizeDrawWallRun,
     findMovedDrawWallContourEdge,
     getRoomVertices,
+    getRotatedGeometry,
     readDrawRoomDraft,
     readProjectDraft,
     type DrawWallSegment,
@@ -90,9 +91,9 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { isAuthEnabled } from "@/shared/config/runtime";
 import {
-    ROOM_KIND_FURNITURE,
     buildRegionSolverRoom,
     buildRoomInstances,
+    roomFurnitureSet,
     solvedToDrawFurniture,
 } from "./auto-layout";
 import type {
@@ -7114,15 +7115,14 @@ const DrawRoom: React.FC = () => {
         [furnitureRegion],
     );
 
-    // «Подобрать расстановку»: a set per room, solved in a worker for that room alone.
-    const [autoLayoutSets, setAutoLayoutSets] = useState<Record<string, Record<string, number>>>(
-        {},
-    );
+    // «Авторасстановка»: the room's own pieces, solved in a worker for that room alone.
     const [autoLayoutSolving, setAutoLayoutSolving] = useState(false);
     const [autoLayoutStatus, setAutoLayoutStatus] = useState("");
     const [autoLayoutApplied, setAutoLayoutApplied] = useState<number | null>(null);
     const [autoLayoutVariants, setAutoLayoutVariants] = useState<{
         signature: string;
+        /** The pieces they were solved for; a piece added or removed makes them stale. */
+        setKey: string;
         variants: {
             summary: AutoLayoutVariantSummary;
             pieces: DrawFurniture[];
@@ -7162,9 +7162,24 @@ const DrawRoom: React.FC = () => {
     );
     const autoLayoutWorker = useRef<Worker | null>(null);
     useEffect(() => () => autoLayoutWorker.current?.terminate(), []);
-    const autoLayoutSet =
-        (furnitureRegion && autoLayoutSets[furnitureRegion.signature]) ??
-        ROOM_KIND_FURNITURE[furnitureRegion?.kind ?? "other"];
+    const autoLayoutPieces = useMemo(
+        () =>
+            furnitureRoom
+                ? (scene.furniture ?? []).filter((item) =>
+                      furnitureBelongsToRoom(item, furnitureRoom),
+                  )
+                : [],
+        [furnitureRoom, scene.furniture],
+    );
+    const autoLayoutSet = useMemo(() => roomFurnitureSet(autoLayoutPieces), [autoLayoutPieces]);
+    const autoLayoutSetKey = JSON.stringify(autoLayoutSet);
+    // The solver knows catalogue sizes only.
+    const autoLayoutResized = autoLayoutPieces.some((item) => {
+        const definition = furnitureDefinition(item.definitionId);
+        if (!definition || definition.mounting === "upper") return false;
+        const base = getRotatedGeometry(definition, 0);
+        return item.width !== base.width || item.depth !== base.depth;
+    });
     const autoLayoutTarget = useMemo(() => {
         if (!furnitureRegion || !furnitureRoom) return null;
         const owner = previews.find((item) => regionPrefix(item) === furnitureRegion.buildingId);
@@ -7182,7 +7197,12 @@ const DrawRoom: React.FC = () => {
         return {
             ...cut,
             offset: { x: owner.origin.x + cut.origin.x, y: owner.origin.y + cut.origin.y },
-            kept: items.filter((item) => !own.includes(item)),
+            // Upper units are not rearranged; they stay over the worktop.
+            kept: items.filter(
+                (item) =>
+                    !own.includes(item) ||
+                    furnitureDefinition(item.definitionId)?.mounting === "upper",
+            ),
         };
     }, [furnitureRegion, furnitureRoom, previews, scene.furniture]);
     const requestSolver = useCallback(
@@ -7250,7 +7270,15 @@ const DrawRoom: React.FC = () => {
                             {
                                 id: WORKING_CORE_OBSERVATION_ID,
                                 label: fallback.result.unplacedInstances.length
-                                    ? "Без части желательной мебели"
+                                    ? `Не поместилось: ${Array.from(
+                                          new Set(
+                                              fallback.result.unplacedInstances.map(
+                                                  (instance) =>
+                                                      furnitureDefinition(instance.definitionId)
+                                                          ?.label ?? instance.definitionId,
+                                              ),
+                                          ),
+                                      ).join(", ")}`
                                     : "Всё поместилось",
                                 placements: fallback.result.result.placements,
                                 exploredNodes: fallback.result.result.exploredNodes,
@@ -7312,6 +7340,7 @@ const DrawRoom: React.FC = () => {
             });
             setAutoLayoutVariants({
                 signature: furnitureRegion.signature,
+                setKey: autoLayoutSetKey,
                 variants: variants.map((variant) => ({
                     ...variant,
                     observation: observationRequests[variant.target.id],
@@ -7334,7 +7363,7 @@ const DrawRoom: React.FC = () => {
             setAutoLayoutStatus(
                 variants.length
                     ? "Выберите вариант — он заменит мебель этой комнаты. Отменить можно кнопкой «Отменить»."
-                    : "Не получилось расставить этот набор. Уберите часть мебели и попробуйте ещё раз.",
+                    : "Не получилось расставить эту мебель. Уберите часть предметов и попробуйте ещё раз.",
             );
             trackGoal(variants.length ? "layout_generated" : "layout_failed", {
                 source: "drawing",
@@ -7349,6 +7378,7 @@ const DrawRoom: React.FC = () => {
         }
     }, [
         autoLayoutSet,
+        autoLayoutSetKey,
         autoLayoutTarget,
         isAuthenticated,
         furnitureDoorObstacles,
@@ -7361,10 +7391,12 @@ const DrawRoom: React.FC = () => {
     ]);
     const currentAutoLayoutVariants = useMemo(
         () =>
-            autoLayoutVariants && autoLayoutVariants.signature === furnitureRegion?.signature
+            autoLayoutVariants &&
+            autoLayoutVariants.signature === furnitureRegion?.signature &&
+            autoLayoutVariants.setKey === autoLayoutSetKey
                 ? autoLayoutVariants.variants
                 : [],
-        [autoLayoutVariants, furnitureRegion?.signature],
+        [autoLayoutVariants, autoLayoutSetKey, furnitureRegion?.signature],
     );
     const applyAutoLayout = useCallback(
         (index: number) => {
@@ -10029,15 +10061,16 @@ const DrawRoom: React.FC = () => {
                                     <AutoLayoutPanel
                                         key={furnitureRegion.signature}
                                         set={autoLayoutSet}
-                                        onSetChange={(set) =>
-                                            setAutoLayoutSets((current) => ({
-                                                ...current,
-                                                [furnitureRegion.signature]: set,
-                                            }))
-                                        }
+                                        resized={autoLayoutResized}
                                         onSolve={() => void solveAutoLayout()}
                                         solving={autoLayoutSolving}
-                                        status={autoLayoutStatus}
+                                        status={
+                                            // A result for other pieces than now is stale.
+                                            autoLayoutSolving ||
+                                            autoLayoutVariants?.setKey === autoLayoutSetKey
+                                                ? autoLayoutStatus
+                                                : ""
+                                        }
                                         variants={currentAutoLayoutVariants.map(
                                             (variant) => variant.summary,
                                         )}

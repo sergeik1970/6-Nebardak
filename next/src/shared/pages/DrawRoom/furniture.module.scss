@@ -176,68 +176,59 @@
     cursor: not-allowed;
 }
 
+// «Авторасстановка» in the graphite column beside the catalogue rail.
 .autoLayout {
-    border: 1px solid #d9cdbb;
-    border-radius: 6px;
-    background: #fffaf2;
-}
-.autoLayoutToggle {
-    width: 100%;
-    min-height: 36px;
-    border: 0;
-    background: transparent;
-    color: #8a4900;
-    font-weight: 760;
-    text-align: left;
-    cursor: pointer;
-    padding: 0 10px;
-}
-.autoLayoutBody {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-    padding: 0 10px 10px;
+    gap: 10px;
+    padding: 12px 15px;
     font-size: 12px;
+    line-height: 1.45;
+    p {
+        margin: 0;
+        padding: 0;
+        color: #c9d3d5;
+    }
     ul {
         display: grid;
-        gap: 4px;
+        gap: 2px;
         margin: 0;
         padding: 0;
         list-style: none;
     }
     li {
-        display: grid;
-        grid-template-columns: 1fr 28px 20px 28px;
-        align-items: center;
-        gap: 4px;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        border-bottom: 1px solid #34424a;
+        padding: 6px 0;
+        color: #edf2f1;
     }
     li b {
-        text-align: center;
+        color: #aebcc0;
+        white-space: nowrap;
     }
-    li button {
-        min-height: 26px;
-        padding: 0;
-        text-align: center;
-    }
-    li span {
-        min-width: 0;
-    }
-    select {
-        width: 100%;
-        min-width: 0;
-        min-height: 30px;
-    }
-    p {
-        margin: 0;
-        color: #56666d;
+    button,
+    select,
+    textarea {
+        font: inherit;
     }
 }
 .autoLayoutSolve {
-    min-height: 34px;
-    border: 1px solid #ad5000 !important;
-    color: #fff;
-    background: #ad5000 !important;
+    min-height: 40px;
+    border: 0;
+    color: #fffdf8;
+    background: var(--draw-orange-strong);
     font-weight: 760;
+    cursor: pointer;
+}
+.autoLayoutSolve:hover:not(:disabled),
+.autoLayoutSolve:focus-visible {
+    background: #c25b00;
+}
+.autoLayoutSolve:disabled {
+    opacity: 0.6;
+    cursor: progress;
 }
 .autoLayoutVariants {
     display: grid;
@@ -245,30 +236,55 @@
     button {
         display: grid;
         gap: 2px;
+        border: 1px solid #46525a;
+        padding: 8px 10px;
+        color: #edf2f1;
+        background: #2b3740;
         text-align: left;
-        padding: 6px 8px;
+        cursor: pointer;
+    }
+    button:hover,
+    button:focus-visible {
+        background: #3a474f;
     }
     button[aria-pressed="true"] {
-        border-color: #e97800;
-        background: #fff0da;
+        border-color: #ffc36e;
+        background: var(--draw-orange-strong);
     }
     small {
-        color: #6a7b80;
+        color: #b9c5c8;
+    }
+    button[aria-pressed="true"] small {
+        color: #edf7fb;
     }
 }
-
 .autoLayoutReview {
     display: grid;
     gap: 6px;
-    border-top: 1px solid #e3d8c7;
-    padding-top: 8px;
+    border-top: 1px solid #4a5860;
+    padding-top: 10px;
+    select,
+    textarea {
+        border: 1px solid #56646c;
+        border-radius: 4px;
+        padding: 6px;
+        color: #edf2f1;
+        background: #1d252c;
+    }
     textarea {
         min-height: 56px;
         resize: vertical;
-        border: 1px solid #bbc6c4;
-        border-radius: 4px;
-        padding: 6px;
-        font: inherit;
+    }
+    button {
+        min-height: 34px;
+        border: 1px solid #56646c;
+        color: #edf2f1;
+        background: #2b3740;
+        cursor: pointer;
+    }
+    button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
     }
 }
 
@@ -471,6 +487,9 @@
     }
     .railButton {
         white-space: normal;
+    }
+    .autoLayout p {
+        padding: 0;
     }
 }
 // Search results sit beside the card, which holds the search field.

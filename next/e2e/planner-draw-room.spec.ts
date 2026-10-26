@@ -3372,7 +3372,7 @@ test("the result step lists each room's furniture, saves a PNG and prints the pl
     await expect(page.locator("[data-draw-room-print-sheet='true']")).toHaveCount(0);
 });
 
-test("the selected room is furnished automatically and the variant can be undone", async ({
+test("auto layout rearranges the pieces placed in the room and can be undone", async ({
     page,
 }, testInfo) => {
     test.skip(
@@ -3404,16 +3404,42 @@ test("the selected room is furnished automatically and the variant can be undone
     });
 
     await page.locator("[data-draw-room-step='furniture']").click();
+    // An empty room has nothing to arrange yet.
+    await page.locator("[data-furniture-auto-layout]").click();
     const auto = page.locator("[data-draw-room-auto-layout='true']");
-    await auto.getByRole("button", { name: "Подобрать расстановку" }).click();
-    // The bedroom set is offered first and can be edited.
-    await expect(auto.locator("[data-auto-layout-item='double-bed']")).toBeVisible();
+    await expect(auto.getByRole("status")).toContainText("Поставьте в комнату мебель");
+    await page.keyboard.press("Escape");
+
+    // The person puts the pieces in by hand, anywhere in the bedroom.
+    const pieces = page.locator("[data-draw-furniture^='furniture-']");
+    const place = async (id: string, x: number, y: number) => {
+        const catalogue = page.getByRole("button", { name: "Каталог" });
+        if (await catalogue.isVisible()) await catalogue.click();
+        await chooseFurniture(page, id);
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.click(point.x, point.y);
+    };
+    await place("double-bed", 4700, 3400);
+    await place("bedside-table", 3500, 5500);
+    await place("bedside-table", 3400, 2700);
+    await place("wardrobe-medium", 4700, 5600);
+    await expect(pieces).toHaveCount(4);
+    const handPlaced = await page.evaluate(
+        () => localStorage.getItem("stylefinder:draw-room-editor:v1") ?? "",
+    );
+
+    // «Авторасстановка», the rail's last row, rearranges exactly those pieces.
+    await page.keyboard.press("Escape");
+    await expect(page.locator("[data-furniture-section]").last()).toContainText("Для питомцев");
+    await page.locator("[data-furniture-auto-layout]").click();
+    await expect(auto.locator("[data-auto-layout-item]")).toHaveCount(3);
+    await expect(auto.locator("[data-auto-layout-item='bedside-table']")).toContainText("× 2");
     await auto.getByRole("button", { name: "Подобрать", exact: true }).click();
     const variant = auto.locator("[data-auto-layout-variant='0']");
     await expect(variant).toBeVisible({ timeout: 30_000 });
     await variant.click();
 
-    const pieces = page.locator("[data-draw-furniture^='furniture-']");
     await expect(pieces).toHaveCount(4);
     await expect(
         page.locator("[data-draw-furniture^='furniture-'][data-invalid='true']"),
@@ -3435,8 +3461,14 @@ test("the selected room is furnished automatically and the variant can be undone
     await expect(auto.locator("[data-auto-layout-review]")).toHaveCount(0);
     expect(observationRequests).toEqual([]);
 
+    // Undo brings back the hand-placed arrangement.
     await page.keyboard.press("ControlOrMeta+z");
-    await expect(pieces).toHaveCount(0);
+    await expect(pieces).toHaveCount(4);
+    await expect
+        .poll(() =>
+            page.evaluate(() => localStorage.getItem("stylefinder:draw-room-editor:v1") ?? ""),
+        )
+        .toBe(handPlaced);
 });
 
 test("a divider keeps the completed exterior and dimensions each room on its own", async ({

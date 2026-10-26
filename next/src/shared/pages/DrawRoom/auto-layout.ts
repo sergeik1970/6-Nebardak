@@ -16,7 +16,6 @@ import {
     type Rect,
     type Room,
     type RoomBoundarySegment,
-    type RoomKind,
     type WindowOpening,
 } from "@/shared/lib/furniture-planner";
 import type { DrawFurniture } from "./furniture";
@@ -26,22 +25,23 @@ type Point = { x: number; y: number };
 /** The solver's lattice: a sub-room is cut on whole 50 mm steps. */
 const SOLVER_GRID_MM = 50;
 
-/** A first set for a room kind; the person edits it before solving. */
-export const ROOM_KIND_FURNITURE: Record<RoomKind, Record<string, number>> = {
-    bedroom: { "double-bed": 1, "bedside-table": 2, "wardrobe-medium": 1 },
-    living: { "sofa-three": 1, "coffee-table": 1, "tv-console": 1, armchair: 1 },
-    kitchen: {
-        "kitchen-fridge": 1,
-        "kitchen-sink": 1,
-        "kitchen-cooker": 1,
-        "kitchen-base-600": 2,
-        "dining-round-four": 1,
-    },
-    children: { "child-bed": 1, "wardrobe-small": 1, desk: 1 },
-    office: { desk: 1, bookcase: 1, armchair: 1 },
-    hallway: { "wardrobe-small": 1 },
-    bathroom: { "kitchen-washer": 1 },
-    other: {},
+/**
+ * What «Авторасстановка» arranges: the pieces already standing in the room,
+ * counted by kind, the largest first. Upper units hang over the worktop and
+ * stay where they are.
+ */
+export const roomFurnitureSet = (pieces: readonly DrawFurniture[]): Record<string, number> => {
+    const area = (id: string) => {
+        const geometry = getRotatedGeometry(getFurniture(id), 0);
+        return geometry.width * geometry.depth;
+    };
+    const set: Record<string, number> = {};
+    for (const piece of pieces)
+        if (getFurniture(piece.definitionId).mounting !== "upper")
+            set[piece.definitionId] = (set[piece.definitionId] ?? 0) + 1;
+    return Object.fromEntries(
+        Object.entries(set).sort(([first], [second]) => area(second) - area(first)),
+    );
 };
 
 /** The first piece of a set is what the room is for; the rest may give way. */
