@@ -26,7 +26,7 @@ import {
     searchFurnitureMenu,
 } from "./catalog-menu";
 import styles from "./furniture.module.scss";
-import FurnitureSymbol from "./FurnitureSymbol";
+import FurnitureSymbol, { FurnitureThumbnail } from "./FurnitureSymbol";
 import { isSchematicFurnitureSource } from "@/shared/lib/furniture-planner/catalog";
 
 const snap = (n: number) => Math.round(n / 10) * 10;
@@ -436,12 +436,14 @@ export default function FurnitureEditor({
     const layerHost =
         board?.querySelector<SVGGElement>("[data-draw-furniture-host='true']") ?? board;
     const openSection = FURNITURE_MENU.find((menuSection) => menuSection.id === section);
+    const flyoutOpen = Boolean(query.trim() || openSection);
     const furnitureButton = (definition: FurnitureDefinition) => {
         const geometry = getRotatedGeometry(definition, 0);
         return (
             <button
                 key={definition.id}
                 type="button"
+                className={styles.railButton}
                 data-add-furniture={definition.id}
                 aria-pressed={pending?.definitionId === definition.id}
                 onClick={() => {
@@ -462,10 +464,13 @@ export default function FurnitureEditor({
                     setSection(null);
                 }}
             >
-                <span>{definition.label}</span>
-                <small>
-                    {geometry.width} × {geometry.depth} мм
-                </small>
+                <FurnitureThumbnail definition={definition} />
+                <span className={styles.railCopy}>
+                    <b>{definition.label}</b>
+                    <small>
+                        {geometry.width} × {geometry.depth} мм
+                    </small>
+                </span>
             </button>
         );
     };
@@ -548,297 +553,338 @@ export default function FurnitureEditor({
                 )}
             {active && (
                 <aside
-                    className={styles.panel}
+                    className={styles.furniture}
                     aria-label="Мебель на чертеже"
                     data-editing={Boolean(editing)}
+                    data-flyout-open={flyoutOpen}
                     data-section-open={Boolean(openSection && !query.trim())}
                     onPointerDown={(event) => event.stopPropagation()}
                 >
-                    <header>
-                        <b>{room ? room.name : "Мебель"}</b>
-                        {editing ? (
+                    {/* Sections in a dark rail, like the doors and windows step. */}
+                    <nav
+                        className={styles.rail}
+                        aria-label="Разделы каталога"
+                        data-open={Boolean(openSection)}
+                    >
+                        <span className={styles.railIntro}>КАТАЛОГ МЕБЕЛИ</span>
+                        {furnitureMenuOrder(room?.kind).map((menuSection) => (
                             <button
+                                key={menuSection.id}
                                 type="button"
+                                className={styles.railButton}
+                                data-furniture-section={menuSection.id}
+                                data-furniture-section-items={menuSection.groups
+                                    .flatMap((group) => group.ids)
+                                    .join(" ")}
+                                aria-expanded={openSection?.id === menuSection.id}
                                 onClick={() => {
-                                    setPending(null);
-                                    setSelectedId(null);
-                                    setReposition(null);
-                                    setPreview(null);
-                                    setMessage("");
+                                    setQuery("");
+                                    setSection(
+                                        openSection?.id === menuSection.id ? null : menuSection.id,
+                                    );
                                 }}
                             >
-                                Каталог
+                                <FurnitureThumbnail
+                                    definition={furnitureDefinition(menuSection.icon)!}
+                                />
+                                <span className={styles.railCopy}>
+                                    <b>{menuSection.label}</b>
+                                    <small>
+                                        {menuSection.groups.map((group) => group.label).join(", ")}
+                                    </small>
+                                </span>
                             </button>
-                        ) : (
-                            <span>{items.filter(inRoom).length} в комнате</span>
-                        )}
-                    </header>
-                    {!editing && autoLayout}
-                    {editing && (
-                        <section className={styles.properties}>
-                            <b>{furnitureDefinition(editing.definitionId)?.label}</b>
-                            {isSchematicFurnitureSource(
-                                furnitureDefinition(editing.definitionId)!.source,
-                            ) && (
-                                <small>
-                                    Типовые габариты. Уточните размеры вашего предмета
-                                    {editing.definitionId.startsWith("dining-")
-                                        ? ": вместе со стульями"
-                                        : ""}
-                                    .
-                                </small>
-                            )}
-                            {furnitureDefinition(editing.definitionId)?.sizes && (
-                                <div
-                                    className={styles.presets}
-                                    role="group"
-                                    aria-label="Типовые размеры"
-                                >
-                                    {furnitureDefinition(editing.definitionId)!.sizes!.map(
-                                        ({ width, depth }) => (
-                                            <button
-                                                key={`${width}x${depth}`}
-                                                type="button"
-                                                data-furniture-preset={`${width}x${depth}`}
-                                                disabled={Boolean(editing.locked)}
-                                                aria-pressed={
-                                                    editing.width === width &&
-                                                    editing.depth === depth
-                                                }
-                                                onClick={() => {
-                                                    const next = { ...editing, width, depth };
-                                                    if (pending) {
-                                                        setPending(next);
-                                                        setPreview(null);
-                                                    } else update(next);
-                                                }}
-                                            >
-                                                {width} × {depth}
-                                            </button>
-                                        ),
-                                    )}
-                                </div>
-                            )}
-                            <div className={styles.sizes}>
-                                {(["width", "depth"] as const).map((field) => (
-                                    <label key={`${editing.id}-${field}`}>
-                                        {field === "width" ? "Ширина, мм" : "Глубина, мм"}
-                                        <input
-                                            key={`${editing.id}-${editing[field]}`}
-                                            type="number"
-                                            min={10}
-                                            max={10000}
-                                            step={10}
-                                            disabled={Boolean(editing.locked)}
-                                            defaultValue={editing[field]}
-                                            onBlur={(event) => {
-                                                const value = Number(event.target.value);
-                                                if (
-                                                    !Number.isFinite(value) ||
-                                                    value < 10 ||
-                                                    value > 10000
-                                                ) {
-                                                    event.target.value = String(editing[field]);
-                                                    return;
-                                                }
-                                                const next = { ...editing, [field]: value };
-                                                if (pending) {
-                                                    setPending(next);
-                                                    setPreview(null);
-                                                } else {
-                                                    update(next);
-                                                    if (error(next))
-                                                        event.target.value = String(editing[field]);
-                                                }
-                                            }}
-                                            onKeyDown={(event) => {
-                                                if (event.key === "Enter")
-                                                    event.currentTarget.blur();
-                                            }}
-                                        />
-                                    </label>
-                                ))}
-                            </div>
-                            {distances.length > 0 && (
-                                <fieldset className={styles.distances}>
-                                    <legend>До стен, мм</legend>
-                                    <div className={styles.sizes}>
-                                        {distances.map((entry) => (
-                                            <label key={entry.side}>
-                                                {sideLabels[entry.side]}
-                                                <input
-                                                    aria-label={`До стены ${sideLabels[entry.side].toLowerCase()}, мм`}
-                                                    key={`${selected!.id}-${entry.distance}-${entry.side}`}
-                                                    type="number"
-                                                    disabled={Boolean(editing.locked)}
-                                                    min={0}
-                                                    step={10}
-                                                    defaultValue={Math.round(entry.distance)}
-                                                    onBlur={(event) => {
-                                                        const value = Number(event.target.value);
-                                                        if (
-                                                            !event.target.value.trim() ||
-                                                            !Number.isFinite(value) ||
-                                                            value < 0
-                                                        ) {
-                                                            event.target.value = String(
-                                                                Math.round(entry.distance),
-                                                            );
-                                                            return;
-                                                        }
-                                                        const next = {
-                                                            ...selected!,
-                                                            [entry.axis]:
-                                                                selected![entry.axis] +
-                                                                entry.direction *
-                                                                    (value - entry.distance),
-                                                        };
-                                                        update(next);
-                                                        if (error(next))
-                                                            event.target.value = String(
-                                                                Math.round(entry.distance),
-                                                            );
-                                                    }}
-                                                    onKeyDown={(event) => {
-                                                        if (event.key === "Enter")
-                                                            event.currentTarget.blur();
-                                                    }}
-                                                />
-                                            </label>
-                                        ))}
-                                    </div>
-                                </fieldset>
-                            )}
-                            <div className={styles.actions}>
-                                <button onClick={rotate} disabled={Boolean(editing.locked)}>
-                                    Повернуть ↻
-                                </button>
-                                <button
-                                    disabled={Boolean(editing.locked)}
-                                    onClick={() => {
-                                        if (pending) setPending(null);
-                                        else
-                                            onChange(
-                                                items.filter((item) => item.id !== selectedId),
-                                            );
-                                        setSelectedId(null);
-                                        setReposition(null);
-                                        setPreview(null);
-                                    }}
-                                >
-                                    {pending ? "Отменить" : "Удалить"}
-                                </button>
-                            </div>
-                            {!pending && (
-                                <div className={styles.actions}>
-                                    <button
-                                        onClick={() => {
-                                            setPending({
-                                                ...editing,
-                                                id: "pending-copy",
-                                                locked: false,
-                                            });
-                                            setSelectedId(null);
-                                            setReposition(null);
-                                            setPreview(null);
-                                            setMessage(
-                                                "Копия готова. Укажите свободное место на плане. Esc — отмена.",
-                                            );
-                                        }}
-                                    >
-                                        Копировать
-                                    </button>
-                                    <button
-                                        aria-pressed={Boolean(editing.locked)}
-                                        disabled={Boolean(reposition)}
-                                        onClick={() => {
-                                            onChange(
-                                                items.map((item) =>
-                                                    item.id === editing.id
-                                                        ? { ...item, locked: !item.locked }
-                                                        : item,
-                                                ),
-                                            );
-                                            setMessage(
-                                                editing.locked
-                                                    ? "Предмет разблокирован."
-                                                    : "Предмет закреплён. Его нельзя случайно сдвинуть или удалить.",
-                                            );
-                                        }}
-                                    >
-                                        {editing.locked ? "Разблокировать" : "Закрепить"}
-                                    </button>
-                                </div>
-                            )}
-                        </section>
-                    )}
-                    <p role="status">
-                        {message ||
-                            (pending
-                                ? "Щёлкните по свободному месту. У стены предмет прилипнет к ней. R — поворот, Shift — несколько, Esc — отмена."
-                                : room
-                                  ? "Выберите предмет и укажите место в комнате. Shift — поставить несколько. Другая комната — нажмите на неё на плане."
-                                  : "Выберите предмет и укажите место на плане. Мебель можно перетаскивать мышью.")}
-                    </p>
-                    <input
-                        aria-label="Поиск мебели"
-                        placeholder="Найти мебель"
-                        value={query}
-                        onChange={(event) => {
-                            setQuery(event.target.value);
-                            setSection(null);
-                        }}
-                    />
+                        ))}
+                    </nav>
                     {query.trim() ? (
-                        <div className={styles.catalog} data-furniture-search>
+                        <div
+                            className={styles.flyout}
+                            role="region"
+                            aria-label="Найденная мебель"
+                            data-furniture-search
+                        >
+                            <header>
+                                <b>Поиск</b>
+                                <button
+                                    type="button"
+                                    aria-label="Закрыть поиск"
+                                    onClick={() => setQuery("")}
+                                >
+                                    ×
+                                </button>
+                            </header>
                             {searchFurnitureMenu(query).map(furnitureButton)}
                             {searchFurnitureMenu(query).length === 0 && <p>Ничего не найдено.</p>}
                         </div>
                     ) : (
-                        <nav
-                            className={styles.sections}
-                            aria-label="Разделы каталога"
-                            data-open={Boolean(openSection)}
-                        >
-                            {furnitureMenuOrder(room?.kind).map((menuSection) => (
+                        openSection && (
+                            // Like Remplanner: the section's groups open beside the rail.
+                            <div
+                                className={styles.flyout}
+                                role="region"
+                                aria-label={openSection.label}
+                                data-furniture-flyout={openSection.id}
+                            >
+                                <header>
+                                    <b>{openSection.label}</b>
+                                    <button
+                                        type="button"
+                                        aria-label="Закрыть раздел"
+                                        onClick={() => setSection(null)}
+                                    >
+                                        ×
+                                    </button>
+                                </header>
+                                {openSection.groups.map((group) => (
+                                    <section key={group.label}>
+                                        <h3>{group.label}</h3>
+                                        {menuGroupDefinitions(group).map(furnitureButton)}
+                                    </section>
+                                ))}
+                            </div>
+                        )
+                    )}
+                    <div className={styles.panel}>
+                        <header>
+                            <b>{room ? room.name : "Мебель"}</b>
+                            {editing ? (
                                 <button
-                                    key={menuSection.id}
                                     type="button"
-                                    data-furniture-section={menuSection.id}
-                                    data-furniture-section-items={menuSection.groups
-                                        .flatMap((group) => group.ids)
-                                        .join(" ")}
-                                    aria-expanded={openSection?.id === menuSection.id}
-                                    onClick={() => setSection(menuSection.id)}
+                                    onClick={() => {
+                                        setPending(null);
+                                        setSelectedId(null);
+                                        setReposition(null);
+                                        setPreview(null);
+                                        setMessage("");
+                                    }}
                                 >
-                                    <span>{menuSection.label}</span>
-                                    <span aria-hidden="true">›</span>
+                                    Каталог
                                 </button>
-                            ))}
-                        </nav>
-                    )}
-                    {openSection && !query.trim() && (
-                        // Like Remplanner: the section's groups open beside the panel.
-                        <div
-                            className={styles.flyout}
-                            role="region"
-                            aria-label={openSection.label}
-                            data-furniture-flyout={openSection.id}
-                        >
-                            <header>
-                                <button type="button" onClick={() => setSection(null)}>
-                                    ‹ Разделы
-                                </button>
-                                <b>{openSection.label}</b>
-                            </header>
-                            {openSection.groups.map((group) => (
-                                <section key={group.label}>
-                                    <h3>{group.label}</h3>
-                                    {menuGroupDefinitions(group).map(furnitureButton)}
-                                </section>
-                            ))}
-                        </div>
-                    )}
+                            ) : (
+                                <span>{items.filter(inRoom).length} в комнате</span>
+                            )}
+                        </header>
+                        {!editing && autoLayout}
+                        {editing && (
+                            <section className={styles.properties}>
+                                <b>{furnitureDefinition(editing.definitionId)?.label}</b>
+                                {isSchematicFurnitureSource(
+                                    furnitureDefinition(editing.definitionId)!.source,
+                                ) && (
+                                    <small>
+                                        Типовые габариты. Уточните размеры вашего предмета
+                                        {editing.definitionId.startsWith("dining-")
+                                            ? ": вместе со стульями"
+                                            : ""}
+                                        .
+                                    </small>
+                                )}
+                                {furnitureDefinition(editing.definitionId)?.sizes && (
+                                    <div
+                                        className={styles.presets}
+                                        role="group"
+                                        aria-label="Типовые размеры"
+                                    >
+                                        {furnitureDefinition(editing.definitionId)!.sizes!.map(
+                                            ({ width, depth }) => (
+                                                <button
+                                                    key={`${width}x${depth}`}
+                                                    type="button"
+                                                    data-furniture-preset={`${width}x${depth}`}
+                                                    disabled={Boolean(editing.locked)}
+                                                    aria-pressed={
+                                                        editing.width === width &&
+                                                        editing.depth === depth
+                                                    }
+                                                    onClick={() => {
+                                                        const next = { ...editing, width, depth };
+                                                        if (pending) {
+                                                            setPending(next);
+                                                            setPreview(null);
+                                                        } else update(next);
+                                                    }}
+                                                >
+                                                    {width} × {depth}
+                                                </button>
+                                            ),
+                                        )}
+                                    </div>
+                                )}
+                                <div className={styles.sizes}>
+                                    {(["width", "depth"] as const).map((field) => (
+                                        <label key={`${editing.id}-${field}`}>
+                                            {field === "width" ? "Ширина, мм" : "Глубина, мм"}
+                                            <input
+                                                key={`${editing.id}-${editing[field]}`}
+                                                type="number"
+                                                min={10}
+                                                max={10000}
+                                                step={10}
+                                                disabled={Boolean(editing.locked)}
+                                                defaultValue={editing[field]}
+                                                onBlur={(event) => {
+                                                    const value = Number(event.target.value);
+                                                    if (
+                                                        !Number.isFinite(value) ||
+                                                        value < 10 ||
+                                                        value > 10000
+                                                    ) {
+                                                        event.target.value = String(editing[field]);
+                                                        return;
+                                                    }
+                                                    const next = { ...editing, [field]: value };
+                                                    if (pending) {
+                                                        setPending(next);
+                                                        setPreview(null);
+                                                    } else {
+                                                        update(next);
+                                                        if (error(next))
+                                                            event.target.value = String(
+                                                                editing[field],
+                                                            );
+                                                    }
+                                                }}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === "Enter")
+                                                        event.currentTarget.blur();
+                                                }}
+                                            />
+                                        </label>
+                                    ))}
+                                </div>
+                                {distances.length > 0 && (
+                                    <fieldset className={styles.distances}>
+                                        <legend>До стен, мм</legend>
+                                        <div className={styles.sizes}>
+                                            {distances.map((entry) => (
+                                                <label key={entry.side}>
+                                                    {sideLabels[entry.side]}
+                                                    <input
+                                                        aria-label={`До стены ${sideLabels[entry.side].toLowerCase()}, мм`}
+                                                        key={`${selected!.id}-${entry.distance}-${entry.side}`}
+                                                        type="number"
+                                                        disabled={Boolean(editing.locked)}
+                                                        min={0}
+                                                        step={10}
+                                                        defaultValue={Math.round(entry.distance)}
+                                                        onBlur={(event) => {
+                                                            const value = Number(
+                                                                event.target.value,
+                                                            );
+                                                            if (
+                                                                !event.target.value.trim() ||
+                                                                !Number.isFinite(value) ||
+                                                                value < 0
+                                                            ) {
+                                                                event.target.value = String(
+                                                                    Math.round(entry.distance),
+                                                                );
+                                                                return;
+                                                            }
+                                                            const next = {
+                                                                ...selected!,
+                                                                [entry.axis]:
+                                                                    selected![entry.axis] +
+                                                                    entry.direction *
+                                                                        (value - entry.distance),
+                                                            };
+                                                            update(next);
+                                                            if (error(next))
+                                                                event.target.value = String(
+                                                                    Math.round(entry.distance),
+                                                                );
+                                                        }}
+                                                        onKeyDown={(event) => {
+                                                            if (event.key === "Enter")
+                                                                event.currentTarget.blur();
+                                                        }}
+                                                    />
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </fieldset>
+                                )}
+                                <div className={styles.actions}>
+                                    <button onClick={rotate} disabled={Boolean(editing.locked)}>
+                                        Повернуть ↻
+                                    </button>
+                                    <button
+                                        disabled={Boolean(editing.locked)}
+                                        onClick={() => {
+                                            if (pending) setPending(null);
+                                            else
+                                                onChange(
+                                                    items.filter((item) => item.id !== selectedId),
+                                                );
+                                            setSelectedId(null);
+                                            setReposition(null);
+                                            setPreview(null);
+                                        }}
+                                    >
+                                        {pending ? "Отменить" : "Удалить"}
+                                    </button>
+                                </div>
+                                {!pending && (
+                                    <div className={styles.actions}>
+                                        <button
+                                            onClick={() => {
+                                                setPending({
+                                                    ...editing,
+                                                    id: "pending-copy",
+                                                    locked: false,
+                                                });
+                                                setSelectedId(null);
+                                                setReposition(null);
+                                                setPreview(null);
+                                                setMessage(
+                                                    "Копия готова. Укажите свободное место на плане. Esc — отмена.",
+                                                );
+                                            }}
+                                        >
+                                            Копировать
+                                        </button>
+                                        <button
+                                            aria-pressed={Boolean(editing.locked)}
+                                            disabled={Boolean(reposition)}
+                                            onClick={() => {
+                                                onChange(
+                                                    items.map((item) =>
+                                                        item.id === editing.id
+                                                            ? { ...item, locked: !item.locked }
+                                                            : item,
+                                                    ),
+                                                );
+                                                setMessage(
+                                                    editing.locked
+                                                        ? "Предмет разблокирован."
+                                                        : "Предмет закреплён. Его нельзя случайно сдвинуть или удалить.",
+                                                );
+                                            }}
+                                        >
+                                            {editing.locked ? "Разблокировать" : "Закрепить"}
+                                        </button>
+                                    </div>
+                                )}
+                            </section>
+                        )}
+                        <p role="status">
+                            {message ||
+                                (pending
+                                    ? "Щёлкните по свободному месту. У стены предмет прилипнет к ней. R — поворот, Shift — несколько, Esc — отмена."
+                                    : room
+                                      ? "Выберите раздел каталога, затем предмет и место в комнате. Shift — поставить несколько. Другая комната — нажмите на неё на плане."
+                                      : "Выберите раздел каталога, затем предмет и место на плане. Мебель можно перетаскивать мышью.")}
+                        </p>
+                        <input
+                            aria-label="Поиск мебели"
+                            placeholder="Найти мебель"
+                            value={query}
+                            onChange={(event) => {
+                                setQuery(event.target.value);
+                                setSection(null);
+                            }}
+                        />
+                    </div>
                 </aside>
             )}
         </>
