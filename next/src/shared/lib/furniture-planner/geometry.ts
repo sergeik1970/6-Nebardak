@@ -994,15 +994,19 @@ const pairIssues = (first: Placement, second: Placement): ValidationIssue[] => {
             relation.clearanceOverlapException === "target-clearance" &&
             relationTargetsDefinition(relation, firstDefinition),
     );
+    // A zone may name the pieces that belong in it, e.g. a coffee table before a sofa.
+    const blocks = (bodies: Rect[], definitionId: string, clearances: ClearanceZone[]) =>
+        bodies.some((body) =>
+            clearances.some(
+                (clearance) =>
+                    !clearance.allows?.includes(definitionId) && rectsIntersect(body, clearance),
+            ),
+        );
     const accessBlocked =
         (!firstMayEnterSecondClearance &&
-            firstBodies.some((body) =>
-                secondClearances.some((clearance) => rectsIntersect(body, clearance)),
-            )) ||
+            blocks(firstBodies, first.definitionId, secondClearances)) ||
         (!secondMayEnterFirstClearance &&
-            secondBodies.some((body) =>
-                firstClearances.some((clearance) => rectsIntersect(body, clearance)),
-            ));
+            blocks(secondBodies, second.definitionId, firstClearances));
 
     if (accessBlocked) {
         issues.push({

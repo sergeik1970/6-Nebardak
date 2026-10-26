@@ -1,6 +1,7 @@
 import {
     FURNITURE_CATALOG,
     getRotatedGeometry,
+    type ClearanceZone,
     type DrawWallSegment,
     type Rotation,
     type Rect,
@@ -247,6 +248,7 @@ export function furniturePassages(
     );
     const bodies = floor.map((item) => ({
         id: item.id,
+        definitionId: item.definitionId,
         rects: furnitureGeometry(item).bodyRects.map((rect) => ({
             ...rect,
             x: rect.x + item.x,
@@ -264,11 +266,15 @@ export function furniturePassages(
             right: item.x + geometry.width,
             bottom: item.y + geometry.depth,
         };
-        const obstacles = [
-            ...bodies.filter((body) => body.id !== item.id).flatMap((body) => body.rects),
-            ...wallRects,
-        ];
-        const measure = (zone: Rect, label: string): FurniturePassage => {
+        const others = bodies.filter((body) => body.id !== item.id);
+        const measure = (zone: ClearanceZone, label: string): FurniturePassage => {
+            // A coffee table belongs in a sofa's passage; the zone says what may stand in it.
+            const obstacles = [
+                ...others
+                    .filter((body) => !zone.allows?.includes(body.definitionId))
+                    .flatMap((body) => body.rects),
+                ...wallRects,
+            ];
             const rect = {
                 x: zone.x + item.x,
                 y: zone.y + item.y,

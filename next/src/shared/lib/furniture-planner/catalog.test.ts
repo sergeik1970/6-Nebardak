@@ -73,6 +73,8 @@ const WALL_EDGE_MANIFEST: Record<string, FurnitureBodyEdge[]> = {
     "tv-console": ["back", "right", "left"],
     pouf: ["back", "right", "front", "left"],
 };
+// Only a coffee table or a pouf belongs in front of a sofa.
+const SOFA_FRONT = ["coffee-table", "coffee-table-rect", "pouf"];
 const CLEARANCE_MANIFEST: Record<string, ClearanceZone[]> = {
     "single-bed": [
         {
@@ -236,39 +238,35 @@ const CLEARANCE_MANIFEST: Record<string, ClearanceZone[]> = {
         {
             x: 0,
             y: 950,
-            width: 500,
+            width: 1600,
             depth: 700,
-            label: "Боковой проход",
+            label: "Проход перед диваном",
             requirement: "hard",
-        },
-        {
-            x: 1100,
-            y: 950,
-            width: 500,
-            depth: 700,
-            label: "Боковой проход",
-            requirement: "hard",
+            allows: SOFA_FRONT,
         },
     ],
     "sofa-three": [
         {
             x: 0,
             y: 950,
-            width: 800,
+            width: 2200,
             depth: 700,
-            label: "Боковой проход",
+            label: "Проход перед диваном",
             requirement: "hard",
-        },
-        {
-            x: 1400,
-            y: 950,
-            width: 800,
-            depth: 700,
-            label: "Боковой проход",
-            requirement: "hard",
+            allows: SOFA_FRONT,
         },
     ],
-    "sofa-four-left": [],
+    "sofa-four-left": [
+        {
+            x: 730,
+            y: 950,
+            width: 1470,
+            depth: 700,
+            label: "Проход перед диваном",
+            requirement: "hard",
+            allows: SOFA_FRONT,
+        },
+    ],
     "dining-table": [
         {
             x: 0,
@@ -775,13 +773,13 @@ describe("furniture catalog golden manifest", () => {
         }
     });
 
-    it("keeps the corner sofa's concave corner free for other furniture", () => {
+    it("keeps the corner sofa's seats reachable beside the chaise", () => {
         const sofa = getFurniture("sofa-four-left");
         const geometry = getRotatedGeometry(sofa, 0);
 
         expect(geometry.bodyRects).toEqual(BODY_MANIFEST["sofa-four-left"]);
         expect(getBounds(geometry.bodyRects)).toEqual({ x: 0, y: 0, width: 2200, depth: 1500 });
-        expect(geometry.clearanceRects).toEqual([]);
+        expect(geometry.clearanceRects).toEqual(CLEARANCE_MANIFEST["sofa-four-left"]);
         expect(getBounds(geometry.bodyRects)).toEqual({
             x: 0,
             y: 0,

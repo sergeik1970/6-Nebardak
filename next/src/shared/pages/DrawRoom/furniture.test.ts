@@ -350,6 +350,32 @@ describe("passages around placed furniture", () => {
         expect(passages[0]).toMatchObject({ label: "Левый проход", free: 700, need: 700 });
     });
 
+    it("lets only a coffee table or a pouf into a sofa's front passage", () => {
+        const sofa: DrawFurniture = {
+            id: "sofa",
+            definitionId: "sofa-two",
+            x: 0,
+            y: 0,
+            width: 1600,
+            depth: 950,
+            rotation: 0,
+        };
+        const before = (definitionId: string, width: number, depth: number) =>
+            furniturePassages(
+                [sofa, { id: "piece", definitionId, x: 550, y: 1350, width, depth, rotation: 0 }],
+                [],
+                100,
+            ).find((passage) => passage.itemId === "sofa")!;
+        expect(before("coffee-table-rect", 1000, 550)).toMatchObject({ free: 700, need: 700 });
+        expect(before("pouf", 500, 500)).toMatchObject({ free: 700 });
+        // The owner's case: a wardrobe pushed into the gap between the sofa's passages.
+        expect(before("wardrobe-small", 700, 500)).toMatchObject({
+            label: "Проход перед диваном",
+            free: 400,
+            need: 700,
+        });
+    });
+
     it("measures a wardrobe front up to the nearest piece; upper units hang above", () => {
         const wardrobe: DrawFurniture = {
             id: "wardrobe",
