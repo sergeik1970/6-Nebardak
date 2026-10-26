@@ -59,6 +59,7 @@ import {
     type DrawRoomRegion,
     type Placement,
     type RadiatorObstacle,
+    type Rect,
     type Room,
     type RoomBoundarySegment,
     type RoomKind,
@@ -7120,6 +7121,8 @@ const DrawRoom: React.FC = () => {
         variants: {
             summary: AutoLayoutVariantSummary;
             pieces: DrawFurniture[];
+            /** What did not fit, left where the person had put it. */
+            leftover: DrawFurniture[];
             observation?: PlannerObservationCreateInput;
         }[];
     } | null>(null);
@@ -7165,10 +7168,16 @@ const DrawRoom: React.FC = () => {
                 : [],
         [furnitureRoom, scene.furniture],
     );
-    const autoLayoutSet = useMemo(() => roomFurnitureSet(autoLayoutPieces), [autoLayoutPieces]);
+    // Pinned pieces stay where they are; the rest is arranged around them.
+    const autoLayoutPinned = autoLayoutPieces.filter((item) => item.locked);
+    const autoLayoutMovable = useMemo(
+        () => autoLayoutPieces.filter((item) => !item.locked),
+        [autoLayoutPieces],
+    );
+    const autoLayoutSet = useMemo(() => roomFurnitureSet(autoLayoutMovable), [autoLayoutMovable]);
     const autoLayoutSetKey = JSON.stringify(autoLayoutSet);
     // The solver knows catalogue sizes only.
-    const autoLayoutResized = autoLayoutPieces.some((item) => {
+    const autoLayoutResized = autoLayoutMovable.some((item) => {
         const definition = furnitureDefinition(item.definitionId);
         if (!definition || definition.mounting === "upper") return false;
         const base = getRotatedGeometry(definition, 0);
@@ -7180,23 +7189,37 @@ const DrawRoom: React.FC = () => {
         if (!owner) return null;
         const items = scene.furniture ?? [];
         const own = items.filter((item) => furnitureBelongsToRoom(item, furnitureRoom));
-        if (own.some((item) => item.locked))
-            return {
-                status: "unsupported" as const,
-                message:
-                    "В комнате есть закреплённые предметы. Снимите закрепление, чтобы подобрать расстановку.",
-            };
         const cut = buildRegionSolverRoom(owner.room, furnitureRegion);
         if (cut.status !== "ready") return cut;
+        const offset = { x: owner.origin.x + cut.origin.x, y: owner.origin.y + cut.origin.y };
+        const upper = (item: DrawFurniture) =>
+            furnitureDefinition(item.definitionId)?.mounting === "upper";
+        // A pinned floor piece is a fixed obstacle for the solver, passages included.
+        const pinned = own.filter((item) => item.locked && !upper(item));
+        const local = (rect: Rect, item: DrawFurniture) => ({
+            x: rect.x + item.x - offset.x,
+            y: rect.y + item.y - offset.y,
+            width: rect.width,
+            depth: rect.depth,
+        });
+        const fixedFurniture = {
+            bodies: pinned.flatMap((item) =>
+                furnitureGeometry(item).bodyRects.map((rect) => local(rect, item)),
+            ),
+            passages: pinned.flatMap((item) =>
+                getRotatedGeometry(
+                    furnitureDefinition(item.definitionId)!,
+                    item.rotation,
+                    item,
+                ).hardClearanceRects.map((rect) => local(rect, item)),
+            ),
+        };
         return {
             ...cut,
-            offset: { x: owner.origin.x + cut.origin.x, y: owner.origin.y + cut.origin.y },
+            room: pinned.length ? { ...cut.room, fixedFurniture } : cut.room,
+            offset,
             // Upper units are not rearranged; they stay over the worktop.
-            kept: items.filter(
-                (item) =>
-                    !own.includes(item) ||
-                    furnitureDefinition(item.definitionId)?.mounting === "upper",
-            ),
+            kept: items.filter((item) => !own.includes(item) || item.locked || upper(item)),
         };
     }, [furnitureRegion, furnitureRoom, previews, scene.furniture]);
     const requestSolver = useCallback(
@@ -7309,11 +7332,21 @@ const DrawRoom: React.FC = () => {
                             furnitureRadiatorObstacles,
                         ),
                 );
+                // Pieces that did not fit stay where the person had put them.
+                const remaining = [...autoLayoutMovable];
+                const leftover = (variant.workingCore?.unplacedInstanceIds ?? []).flatMap((id) => {
+                    const definitionId = instances.find(
+                        (instance) => instance.instanceId === id,
+                    )?.definitionId;
+                    const index = remaining.findIndex((item) => item.definitionId === definitionId);
+                    return index === -1 ? [] : remaining.splice(index, 1);
+                });
                 return fits && pieces.length
                     ? [
                           {
                               summary: { label: variant.label, count: pieces.length },
                               pieces,
+                              leftover,
                               target: variant,
                           },
                       ]
@@ -7371,6 +7404,7 @@ const DrawRoom: React.FC = () => {
             setAutoLayoutSolving(false);
         }
     }, [
+        autoLayoutMovable,
         autoLayoutSet,
         autoLayoutSetKey,
         autoLayoutTarget,
@@ -7396,9 +7430,26 @@ const DrawRoom: React.FC = () => {
         (index: number) => {
             const variant = currentAutoLayoutVariants[index];
             if (!variant || autoLayoutTarget?.status !== "ready") return;
-            commitScene({ ...scene, furniture: [...autoLayoutTarget.kept, ...variant.pieces] });
+            commitScene({
+                ...scene,
+                furniture: [...autoLayoutTarget.kept, ...variant.pieces, ...variant.leftover],
+            });
             setAutoLayoutApplied(index);
-            setNotice(`Вариант ${index + 1} расставлен. Предметы можно двигать вручную.`);
+            const missed = Array.from(
+                new Set(
+                    variant.leftover.map(
+                        (item) =>
+                            furnitureDefinition(item.definitionId)?.label ?? item.definitionId,
+                    ),
+                ),
+            );
+            const applied = missed.length
+                ? `Вариант ${index + 1} расставлен. Не поместилось: ${missed.join(", ")} — оставлено на прежнем месте, передвиньте вручную.`
+                : `Вариант ${index + 1} расставлен. Предметы можно двигать вручную.`;
+            // The furniture step keeps its own hint above the drawing; the
+            // auto layout column says what happened.
+            setNotice(applied);
+            setAutoLayoutStatus(applied);
         },
         [autoLayoutTarget, commitScene, currentAutoLayoutVariants, scene],
     );
@@ -10047,6 +10098,11 @@ const DrawRoom: React.FC = () => {
                                         key={furnitureRegion.signature}
                                         set={autoLayoutSet}
                                         resized={autoLayoutResized}
+                                        pinned={autoLayoutPinned.map(
+                                            (item) =>
+                                                furnitureDefinition(item.definitionId)?.label ??
+                                                item.definitionId,
+                                        )}
                                         onSolve={() => void solveAutoLayout()}
                                         solving={autoLayoutSolving}
                                         status={

@@ -792,8 +792,12 @@ export default function FurnitureEditor({
                         <div className={styles.panel}>
                             <header>
                                 <b>{furnitureDefinition(editing.definitionId)?.label}</b>
+                                {/* Done with this piece: the card closes, the catalogue stays. */}
                                 <button
                                     type="button"
+                                    className={styles.panelClose}
+                                    aria-label="Закрыть"
+                                    title="Готово — снять выбор"
                                     onClick={() => {
                                         setPending(null);
                                         setSelectedId(null);
@@ -802,7 +806,7 @@ export default function FurnitureEditor({
                                         setMessage("");
                                     }}
                                 >
-                                    Каталог
+                                    ×
                                 </button>
                             </header>
                             {editing && (

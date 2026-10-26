@@ -51,6 +51,7 @@ export const drawingBlockingIssues = (issues: ValidationIssue[]) =>
             "outside-room",
             "body-overlap",
             "partition-blocked",
+            "fixed-furniture-blocked",
             "door-blocked",
             "radiator-blocked",
         ].includes(issue.code),

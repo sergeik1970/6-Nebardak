@@ -650,3 +650,24 @@
     font-size: 12px;
     line-height: 1.4;
 }
+
+// The card's «×»: done with the chosen piece.
+.panel header .panelClose {
+    flex: none;
+    width: 36px;
+    min-height: 36px;
+    height: 36px;
+    padding: 0;
+    border-color: transparent;
+    background: transparent;
+    color: #617171;
+    font-size: 22px;
+    line-height: 1;
+    text-align: center;
+}
+.panel header .panelClose:hover,
+.panel header .panelClose:focus-visible {
+    border-color: var(--draw-orange);
+    background: #fff0da;
+    color: #273738;
+}

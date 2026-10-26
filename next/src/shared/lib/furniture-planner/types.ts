@@ -356,6 +356,11 @@ export interface Room {
     radiators?: RadiatorObstacle[];
     /** Optional named regions derived from the physical wall graph. */
     regions?: RoomRegionsState;
+    /**
+     * Pieces the person pinned in place on the drawing: the solver works
+     * around their bodies like a wall and keeps their passages free.
+     */
+    fixedFurniture?: { bodies: Rect[]; passages: Rect[] };
 }
 
 export interface LayoutPreferences {
@@ -368,6 +373,7 @@ export type ValidationCode =
     | "door-blocked"
     | "partition-blocked"
     | "radiator-blocked"
+    | "fixed-furniture-blocked"
     | "body-overlap"
     | "clearance-blocked"
     | "alternative-clearance-blocked"

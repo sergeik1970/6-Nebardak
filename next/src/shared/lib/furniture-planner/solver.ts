@@ -14,6 +14,7 @@ import {
     analyzeConnectedAccess,
     getBounds,
     getDoorObstacle,
+    getFixedFurnitureBodies,
     getPartitionObstacleRects,
     getPreferredClearanceSummary,
     getRadiatorBody,
@@ -293,6 +294,8 @@ export const getCriticalAxisCoordinates = (
 const roomObstacleRects = (room: Room): Rect[] => [
     ...room.doors.map((door) => getDoorObstacle(door, room)),
     ...getPartitionObstacleRects(room),
+    ...getFixedFurnitureBodies(room),
+    ...(room.fixedFurniture?.passages ?? []),
     ...room.windows.map((window) => getWindowCurtainObstacle(window, room)),
     ...(room.radiators ?? []).flatMap((radiator) => [
         getRadiatorBody(radiator, room),
