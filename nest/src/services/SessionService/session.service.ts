@@ -13,9 +13,12 @@ const DAY_MS = 24 * 60 * 60_000;
 
 export const SESSION_IDLE_TTL_MS = 30 * DAY_MS;
 export const SESSION_ABSOLUTE_TTL_MS = 90 * DAY_MS;
-/** An administrator signs in again with a fresh code at least once a day. */
-export const ADMIN_SESSION_IDLE_TTL_MS = 12 * 60 * 60_000;
-export const ADMIN_SESSION_ABSOLUTE_TTL_MS = DAY_MS;
+/**
+ * An administrator signs in again after a week away and at least once a
+ * month; the emailed code is asked again when the trusted device expires.
+ */
+export const ADMIN_SESSION_IDLE_TTL_MS = 7 * DAY_MS;
+export const ADMIN_SESSION_ABSOLUTE_TTL_MS = 30 * DAY_MS;
 /** Activity is written at most this often, not on every request. */
 export const SESSION_TOUCH_INTERVAL_MS = 60 * 60_000;
 export const MAX_SESSIONS_PER_USER = 20;
