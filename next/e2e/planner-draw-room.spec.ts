@@ -429,6 +429,14 @@ const drawCompactLRoom = async (page: Page) => {
  * Tools live in collapsible groups. A selected wall's card and, on a phone,
  * the rooms card can cover the rail, so step back to the tools like a person.
  */
+/** Opens the catalogue section that holds a piece, then picks the piece. */
+const chooseFurniture = async (page: Page, id: string) => {
+    const piece = page.locator(`[data-add-furniture='${id}']`);
+    if (!(await piece.isVisible()))
+        await page.locator(`[data-furniture-section-items~='${id}']`).click();
+    await piece.click();
+};
+
 const openToolGroup = async (page: Page, group: "walls" | "opening") => {
     const clearWall = page.getByRole("button", { name: "Снять выделение стены" });
     if (await clearWall.isVisible()) await clearWall.click();
@@ -2117,7 +2125,10 @@ test("openings are cut from wall material and expose an accessible inspector", a
     await expect(doorPreview).toBeVisible();
     await expect(doorPreview.locator("circle")).toHaveCount(1);
     await expect(doorPreview.locator("path")).toHaveCount(1);
-    await expect(doorPreview).toContainText("900 мм");
+    // The door being placed already splits the wall's chain at the cursor.
+    await expect(
+        page.locator("[data-draw-room-dimension-id$='-cut-1'] [data-draw-room-wall-dimension]"),
+    ).toContainText(["90", "90"]);
     await pointOnBoard(page, 0.5, 0.69);
     const door = page.locator("[data-draw-room-opening='door']");
     await expect(door).toHaveCount(1);
@@ -2129,10 +2140,11 @@ test("openings are cut from wall material and expose an accessible inspector", a
     await expect(width).toHaveValue("1000");
     await expect(door).toHaveAttribute("data-door-width-mm", "1000");
     await expect(door).toHaveAttribute("data-door-sweep-mm", "1000");
+    // The wall chains carry the opening: wall | door | wall, in centimetres.
     await expect(page.locator("[data-draw-room-door-width-label]")).toHaveCount(0);
-    await expect(page.locator("[data-draw-room-opening-dimension='width']")).toContainText(
-        "1000 мм",
-    );
+    await expect(
+        page.locator("[data-draw-room-dimension-id$='-cut-1'] [data-draw-room-wall-dimension]"),
+    ).toContainText(["100", "100"]);
     await expect
         .poll(async () =>
             page.evaluate(() => {
@@ -2167,7 +2179,9 @@ test("openings are cut from wall material and expose an accessible inspector", a
     await expect(page.locator("[data-draw-room-notice='true']")).toContainText("Проём перемещён");
 
     await inspector.getByRole("button", { name: "Закрыть параметры проёма" }).click();
-    await expect(page.locator("[data-draw-room-door-width-label]")).toContainText("1000 мм");
+    await expect(
+        page.locator("[data-draw-room-dimension-id$='-cut-1'] [data-draw-room-wall-dimension]"),
+    ).toContainText(["100", "100"]);
 
     await page.locator("[data-draw-room-tool='window']").click();
     await pointOnBoard(page, 0.5, 0.23);
@@ -2933,7 +2947,7 @@ test("the plan is worked through steps and furniture is placed on the drawing", 
         await step("furniture").click();
         await expect(step("furniture")).toHaveAttribute("aria-current", "step");
         await expect(page.locator("[data-draw-room-room-inspector='true']")).toHaveCount(0);
-        await page.locator("[data-add-furniture='single-bed']").click();
+        await chooseFurniture(page, "single-bed");
         // Turned along the 3,9 m wall, the 2 m bed fits the 1,4 m deep room.
         await page.keyboard.press("r");
         const bedCentre = await getBoardScreenPoint(page, 6000, 2750);
@@ -3032,14 +3046,16 @@ test("furniture goes into the selected room, against its walls", async ({ page }
 
     await page.locator("[data-draw-room-step='furniture']").click();
     const panel = page.locator("[aria-label='Мебель на чертеже']");
-    await expect(panel.locator("header b")).toHaveText("Спальня");
-    // A bedroom opens the catalogue on beds and storage.
-    await expect(panel.locator("h3").first()).toHaveText("Кровати");
+    await expect(panel.locator("[data-furniture-room]")).toHaveText("Спальня");
+    // A bedroom lists the living and bedroom section first.
+    await expect(panel.locator("[data-furniture-section]").first()).toContainText(
+        "Гостиная и спальня",
+    );
     // Only the other room is greyed out.
     await expect(page.locator("[data-draw-room-region-fill]")).toHaveCount(1);
 
     // Dropped 10 cm short of the bottom wall, the bed is pulled flush to it.
-    await page.locator("[data-add-furniture='single-bed']").click();
+    await chooseFurniture(page, "single-bed");
     await page.keyboard.press("r");
     const nearWall = await getBoardScreenPoint(page, 5200, 4400);
     await page.mouse.move(nearWall.x, nearWall.y);
@@ -3053,7 +3069,7 @@ test("furniture goes into the selected room, against its walls", async ({ page }
 
     // The other room does not take this room's furniture.
     await panel.getByRole("button", { name: "Каталог" }).click();
-    await page.locator("[data-add-furniture='single-bed']").click();
+    await chooseFurniture(page, "single-bed");
     const upperRoom = await getBoardScreenPoint(page, 6000, 2700);
     await page.mouse.move(upperRoom.x, upperRoom.y);
     await page.mouse.click(upperRoom.x, upperRoom.y);
@@ -3063,12 +3079,12 @@ test("furniture goes into the selected room, against its walls", async ({ page }
 
     // Clicking the other room moves the work there; the bedroom's bed stays quiet.
     await page.mouse.click(upperRoom.x, upperRoom.y);
-    await expect(panel.locator("header b")).toHaveText("Помещение 1");
+    await expect(panel.locator("[data-furniture-room]")).toHaveText("Помещение 1");
     await expect(pieces).toHaveCSS("opacity", "0.45");
     await expect(pieces.locator("[data-furniture-size]")).toHaveCount(0);
 
     // Shift keeps the piece in hand for several spots.
-    await page.locator("[data-add-furniture='pouf']").click();
+    await chooseFurniture(page, "pouf");
     const first = await getBoardScreenPoint(page, 5000, 2750);
     const second = await getBoardScreenPoint(page, 7000, 2750);
     await page.mouse.move(first.x, first.y);
@@ -3078,6 +3094,88 @@ test("furniture goes into the selected room, against its walls", async ({ page }
     await page.mouse.click(second.x, second.y);
     await page.keyboard.up("Shift");
     await expect(pieces).toHaveCount(3);
+});
+
+test("the furniture catalogue opens by sections like Remplanner", async ({ page }, testInfo) => {
+    if (testInfo.project.name === "desktop-chromium")
+        await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 4000, 3500);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
+    await page.locator("[data-draw-room-step='furniture']").click();
+
+    const panel = page.locator("[aria-label='Мебель на чертеже']");
+    const sections = panel.locator("[data-furniture-section]");
+    await expect(sections.first()).toContainText("Гостиная и спальня");
+    await expect(panel.locator("[data-add-furniture]")).toHaveCount(0);
+
+    // A section opens its groups; Esc puts it away.
+    await sections.first().click();
+    const flyout = panel.locator("[data-furniture-flyout='living-bedroom']");
+    await expect(flyout.locator("h3")).toHaveText([
+        "Кровати",
+        "Диваны",
+        "Кресла и пуфы",
+        "Столики",
+        "Комоды и тумбы",
+    ]);
+    await expect(sections.first()).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Escape");
+    await expect(flyout).toHaveCount(0);
+
+    // Choosing a piece closes the menu and starts placing it.
+    await sections.first().click();
+    await flyout.locator("[data-add-furniture='double-bed']").click();
+    await expect(flyout).toHaveCount(0);
+    await expect(panel.getByRole("status")).toContainText("Щёлкните по свободному месту");
+    await page.keyboard.press("Escape");
+
+    // Search looks through every section at once.
+    await panel.getByLabel("Поиск мебели").fill("холодильник");
+    const results = panel.locator("[data-furniture-search]");
+    await expect(results.locator("[data-add-furniture]")).toHaveCount(2);
+    await results.getByRole("button", { name: "Закрыть поиск" }).click();
+    await expect(results).toHaveCount(0);
+    await expect(panel.getByLabel("Поиск мебели")).toHaveValue("");
+});
+
+test("a piece takes a standard size from the designer's drawings", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Size presets are covered once");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 4000, 3500);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("living");
+    await page.locator("[data-draw-room-step='furniture']").click();
+
+    const panel = page.locator("[aria-label='Мебель на чертеже']");
+    await chooseFurniture(page, "sofa-bed");
+    const centre = await getBoardScreenPoint(page, 6000, 3750);
+    await page.mouse.move(centre.x, centre.y);
+    await page.mouse.click(centre.x, centre.y);
+    const piece = page.locator("[data-draw-furniture^='furniture-']");
+    await expect(piece).toHaveCount(1);
+
+    const presets = panel.getByRole("group", { name: "Типовые размеры" });
+    await expect(presets.getByRole("button")).toHaveText(["1400 × 1000", "2000 × 1000"]);
+    await expect(presets.getByRole("button", { name: "2000 × 1000" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+    );
+    await presets.getByRole("button", { name: "1400 × 1000" }).click();
+    await expect(piece.locator("[data-furniture-size='width']")).toHaveText("140");
+    await expect(panel.getByLabel("Ширина, мм")).toHaveValue("1400");
+    await expect(presets.getByRole("button", { name: "1400 × 1000" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+    );
 });
 
 test("a kitchen is fitted with base and upper units", async ({ page }, testInfo) => {
@@ -3096,12 +3194,14 @@ test("a kitchen is fitted with base and upper units", async ({ page }, testInfo)
     await page.locator("[data-draw-room-step='furniture']").click();
 
     const panel = page.locator("[aria-label='Мебель на чертеже']");
-    await expect(panel.locator("h3").first()).toHaveText("Кухня");
+    await expect(panel.locator("[data-furniture-section]").first()).toContainText(
+        "Кухня и столовая",
+    );
     const status = panel.getByRole("status");
     const put = async (id: string, x: number, y: number) => {
         const catalogue = panel.getByRole("button", { name: "Каталог" });
         if (await catalogue.isVisible()) await catalogue.click();
-        await page.locator(`[data-add-furniture='${id}']`).click();
+        await chooseFurniture(page, id);
         const point = await getBoardScreenPoint(page, x, y);
         await page.mouse.move(point.x, point.y);
         await page.mouse.click(point.x, point.y);
@@ -3183,7 +3283,7 @@ test("a radiator is placed on the drawing, keeps furniture away and stays after 
 
     // A radiator wants no furniture in front of it.
     await page.locator("[data-draw-room-step='furniture']").click();
-    await page.locator("[data-add-furniture='single-bed']").click();
+    await chooseFurniture(page, "single-bed");
     await page.keyboard.press("r");
     const inFront = await getBoardScreenPoint(page, 6000, 3950);
     await page.mouse.move(inFront.x, inFront.y);
@@ -3221,7 +3321,7 @@ test("the result step lists each room's furniture, saves a PNG and prints the pl
     await kinds.nth(1).selectOption("bedroom");
 
     await page.locator("[data-draw-room-step='furniture']").click();
-    await page.locator("[data-add-furniture='kitchen-sink']").click();
+    await chooseFurniture(page, "kitchen-sink");
     const sink = await getBoardScreenPoint(page, 5000, 2400);
     await page.mouse.move(sink.x, sink.y);
     await page.mouse.click(sink.x, sink.y);
@@ -3272,7 +3372,7 @@ test("the result step lists each room's furniture, saves a PNG and prints the pl
     await expect(page.locator("[data-draw-room-print-sheet='true']")).toHaveCount(0);
 });
 
-test("the selected room is furnished automatically and the variant can be undone", async ({
+test("auto layout rearranges the pieces placed in the room and can be undone", async ({
     page,
 }, testInfo) => {
     test.skip(
@@ -3304,16 +3404,42 @@ test("the selected room is furnished automatically and the variant can be undone
     });
 
     await page.locator("[data-draw-room-step='furniture']").click();
+    // An empty room has nothing to arrange yet.
+    await page.locator("[data-furniture-auto-layout]").click();
     const auto = page.locator("[data-draw-room-auto-layout='true']");
-    await auto.getByRole("button", { name: "Подобрать расстановку" }).click();
-    // The bedroom set is offered first and can be edited.
-    await expect(auto.locator("[data-auto-layout-item='double-bed']")).toBeVisible();
+    await expect(auto.getByRole("status")).toContainText("Поставьте в комнату мебель");
+    await page.keyboard.press("Escape");
+
+    // The person puts the pieces in by hand, anywhere in the bedroom.
+    const pieces = page.locator("[data-draw-furniture^='furniture-']");
+    const place = async (id: string, x: number, y: number) => {
+        const catalogue = page.getByRole("button", { name: "Каталог" });
+        if (await catalogue.isVisible()) await catalogue.click();
+        await chooseFurniture(page, id);
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.click(point.x, point.y);
+    };
+    await place("double-bed", 4700, 3400);
+    await place("bedside-table", 3500, 5500);
+    await place("bedside-table", 3400, 2700);
+    await place("wardrobe-medium", 4700, 5600);
+    await expect(pieces).toHaveCount(4);
+    const handPlaced = await page.evaluate(
+        () => localStorage.getItem("stylefinder:draw-room-editor:v1") ?? "",
+    );
+
+    // «Авторасстановка», the rail's last row, rearranges exactly those pieces.
+    await page.keyboard.press("Escape");
+    await expect(page.locator("[data-furniture-section]").last()).toContainText("Для питомцев");
+    await page.locator("[data-furniture-auto-layout]").click();
+    await expect(auto.locator("[data-auto-layout-item]")).toHaveCount(3);
+    await expect(auto.locator("[data-auto-layout-item='bedside-table']")).toContainText("× 2");
     await auto.getByRole("button", { name: "Подобрать", exact: true }).click();
     const variant = auto.locator("[data-auto-layout-variant='0']");
     await expect(variant).toBeVisible({ timeout: 30_000 });
     await variant.click();
 
-    const pieces = page.locator("[data-draw-furniture^='furniture-']");
     await expect(pieces).toHaveCount(4);
     await expect(
         page.locator("[data-draw-furniture^='furniture-'][data-invalid='true']"),
@@ -3335,8 +3461,14 @@ test("the selected room is furnished automatically and the variant can be undone
     await expect(auto.locator("[data-auto-layout-review]")).toHaveCount(0);
     expect(observationRequests).toEqual([]);
 
+    // Undo brings back the hand-placed arrangement.
     await page.keyboard.press("ControlOrMeta+z");
-    await expect(pieces).toHaveCount(0);
+    await expect(pieces).toHaveCount(4);
+    await expect
+        .poll(() =>
+            page.evaluate(() => localStorage.getItem("stylefinder:draw-room-editor:v1") ?? ""),
+        )
+        .toBe(handPlaced);
 });
 
 test("a divider keeps the completed exterior and dimensions each room on its own", async ({
@@ -4299,8 +4431,9 @@ test("mobile drawing editor keeps the field and tool dock inside the viewport wi
         const matrix = (pattern as SVGElement).ownerSVGElement?.getScreenCTM();
         return Number(pattern.getAttribute("width")) * Math.abs(matrix?.a ?? 0);
     });
-    expect(hatchSpacing).toBeGreaterThanOrEqual(6);
-    expect(hatchSpacing).toBeLessThanOrEqual(10);
+    // The rotated tile's width is the perpendicular gap between hatch lines.
+    expect(hatchSpacing).toBeGreaterThanOrEqual(6 / Math.SQRT2);
+    expect(hatchSpacing).toBeLessThanOrEqual(10 / Math.SQRT2);
 });
 
 test("constructive 10 mm drawing keeps exact face chains, regions and responsive canvas space", async ({
@@ -4643,4 +4776,129 @@ test("a phone frames a freshly closed room and the tool dock reaches past an ope
     await openingGroup.click();
     await expect(page.locator("[data-draw-room-tool='window']")).toBeVisible();
     await expect(openingGroup).toHaveAttribute("aria-expanded", "true");
+});
+
+test("the wall tool resting on a wall measures from the cursor to each corner", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Desktop hover is covered once");
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await drawSimpleRect(page);
+    const chainPieces = page.locator(
+        "[data-draw-room-dimension-id*='-cut-'] [data-draw-room-wall-dimension]",
+    );
+    await expect(chainPieces).toHaveCount(0);
+    await openToolGroup(page, "walls");
+    await page.locator("[data-draw-room-tool='wall']").click();
+
+    // The top wall runs from x = 3200 to 12800 on its centre line, 100 mm thick.
+    const onTopWall = await getBoardScreenPoint(page, 5600, BOARD_HEIGHT_MM * 0.23);
+    await page.mouse.move(onTopWall.x, onTopWall.y);
+    await expect(
+        page.locator("[data-draw-room-dimension-id$='-cut-0'] [data-draw-room-wall-dimension]"),
+    ).toContainText(["245", "235"]);
+    await expect(
+        page.locator("[data-draw-room-dimension-id$='-cut-1'] [data-draw-room-wall-dimension]"),
+    ).toContainText(["725", "715"]);
+
+    // Inside the room, away from every wall, the chains are whole again.
+    const inside = await getBoardScreenPoint(page, 8000, 4600);
+    await page.mouse.move(inside.x, inside.y);
+    await expect(chainPieces).toHaveCount(0);
+});
+
+test("doors and windows carry their heights on the drawing and in the card", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Desktop opening card is covered once");
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await drawSimpleRect(page);
+
+    await openToolGroup(page, "opening");
+    await page.locator("[data-draw-room-door-kind='room']").click();
+    await pointOnBoard(page, 0.5, 0.69);
+    const door = page.locator("[data-draw-room-opening='door']");
+    const doorId = await door.getAttribute("data-draw-room-opening-id");
+    const doorTag = page.locator(`[data-draw-room-opening-height='${doorId}']`);
+    await expect(doorTag).toHaveText("H=210");
+
+    const doorCard = page.getByLabel("Параметры: дверь");
+    const doorHeight = doorCard.getByLabel("Высота, мм");
+    await expect(doorHeight).toHaveValue("2100");
+    await doorHeight.fill("2000");
+    await doorHeight.press("Enter");
+    await expect(doorTag).toHaveText("H=200");
+    await doorHeight.fill("3000");
+    await doorHeight.press("Enter");
+    await expect(page.locator("[data-draw-room-notice='true']")).toContainText("Высота двери");
+    await expect(doorHeight).toHaveValue("2000");
+    await doorCard.getByRole("button", { name: "Закрыть параметры проёма" }).click();
+
+    await openToolGroup(page, "opening");
+    await page.locator("[data-draw-room-tool='window']").click();
+    await pointOnBoard(page, 0.5, 0.23);
+    const window = page.locator("[data-draw-room-opening='window']");
+    const windowId = await window.getAttribute("data-draw-room-opening-id");
+    const windowTag = page.locator(`[data-draw-room-opening-height='${windowId}']`);
+    await expect(windowTag).toHaveText(/H=150\s*Н под\.=85/);
+
+    const windowCard = page.getByLabel("Параметры: окно");
+    const sill = windowCard.getByLabel("Высота подоконника, мм");
+    await sill.fill("900");
+    await sill.blur();
+    await expect(windowTag).toHaveText(/H=150\s*Н под\.=90/);
+    await sill.fill("1300");
+    await sill.press("Enter");
+    await expect(page.locator("[data-draw-room-notice='true']")).toContainText("не выше потолка");
+    await expect(sill).toHaveValue("900");
+
+    await windowCard.getByRole("button", { name: "Панорамное" }).click();
+    await expect(windowTag).toHaveText("H=240");
+    await expect(windowCard.getByLabel("Высота подоконника, мм")).toHaveCount(0);
+
+    await expect
+        .poll(async () =>
+            page.evaluate(() => {
+                const saved = localStorage.getItem("stylefinder:draw-room-editor:v1");
+                return saved ? JSON.parse(saved).doors[0].height : null;
+            }),
+        )
+        .toBe(2000);
+});
+
+test("a piece put in a bed's passage is flagged, not refused", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Passages are covered once");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 4000, 3500);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
+    await page.locator("[data-draw-room-step='furniture']").click();
+    const panel = page.locator("[aria-label='Мебель на чертеже']");
+    const place = async (id: string, x: number, y: number) => {
+        const catalogue = panel.getByRole("button", { name: "Каталог" });
+        if (await catalogue.isVisible()) await catalogue.click();
+        await chooseFurniture(page, id);
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.click(point.x, point.y);
+    };
+
+    // A bed along the right wall: one passage, on the open side, shown dashed.
+    await place("single-bed", 7500, 3100);
+    const bedPassage = page.locator("[data-furniture-passage^='furniture-']");
+    await expect(bedPassage).toHaveCount(1);
+    await expect(bedPassage).toHaveAttribute("data-passage-blocked", "false");
+
+    // A dresser 10 cm from the bed still goes in, but the passage turns red.
+    await place("dresser", 6650, 3300);
+    await expect(page.locator("[data-draw-furniture^='furniture-']")).toHaveCount(2);
+    await expect(page.locator("[data-passage-blocked='true']")).toHaveCount(1);
+    await expect(page.locator("[data-furniture-passage-free]")).toHaveText("10 из 70 см");
+    await expect(panel.locator("[data-furniture-passage-warning]")).toContainText(
+        "Левый проход у «Односпальная кровать»: свободно 10 см из 70.",
+    );
 });

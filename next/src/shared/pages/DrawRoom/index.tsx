@@ -49,6 +49,7 @@ import {
     resizeDrawWallRun,
     findMovedDrawWallContourEdge,
     getRoomVertices,
+    getRotatedGeometry,
     readDrawRoomDraft,
     readProjectDraft,
     type DrawWallSegment,
@@ -90,9 +91,9 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { isAuthEnabled } from "@/shared/config/runtime";
 import {
-    ROOM_KIND_FURNITURE,
     buildRegionSolverRoom,
     buildRoomInstances,
+    roomFurnitureSet,
     solvedToDrawFurniture,
 } from "./auto-layout";
 import type {
@@ -104,6 +105,13 @@ import { RECT_TEMPLATE_LIMITS, createRectTemplateRoom, roomToDrawingScene } from
 
 import ProjectTools, { DEFAULT_DRAWING_LAYERS } from "./ProjectTools";
 import { trackGoal } from "@/shared/lib/analytics";
+import {
+    CEILING_HEIGHT_MM,
+    getDoorHeight,
+    getWindowHeight,
+    getWindowSillHeight,
+} from "@/shared/lib/furniture-planner/opening-heights";
+import { OpeningHeightFields } from "./OpeningHeightFields";
 
 type Tool = "select" | "wall" | "door" | "window" | "radiator";
 type ToolGroup = "walls" | "openings" | "rooms" | "furniture" | "result";
@@ -190,16 +198,6 @@ type RenderedOpening =
           preview?: boolean;
           previewValid?: boolean;
       };
-type OpeningDimension = {
-    id: "width" | "before" | "after";
-    start: Point;
-    end: Point;
-    extensionStart: Point;
-    extensionEnd: Point;
-    label: Point;
-    value: string;
-    vertical: boolean;
-};
 
 type WallAnchorAttachment = "free" | "endpoint" | "side";
 type ContourWallGrab = "middle" | "start" | "end";
@@ -244,7 +242,7 @@ const WINDOW_WIDTH_MM = 1200;
 const WINDOW_MIN_WIDTH_MM = 400;
 const WINDOW_MAX_WIDTH_MM = 2400;
 const OPENING_END_CLEARANCE_MM = LEGACY_SNAP_MM;
-const ROOM_CEILING_HEIGHT_MM = 2700;
+const ROOM_CEILING_HEIGHT_MM = CEILING_HEIGHT_MM;
 // Room metadata is part of the drawing, so it uses fixed world-space metrics
 // and grows/shrinks together with the walls rather than remaining screen-size.
 const ROOM_LABEL_MIN_FONT_MM = 72;
@@ -1653,96 +1651,65 @@ const getOpeningCutPolygon = (
 
 const formatMillimeters = (value: number) => String(Math.round(value)) + " мм";
 
-/** Place door-only dimensions on the side without the drawn leaf/swing. */
-const getDoorDimensionNormal = (
-    segment: RoomBoundarySegment,
-    door: Pick<DoorOpening, "doorKind" | "swingDirection">,
-) =>
-    isHingedDoor(door) && (door.swingDirection ?? "inward") === "outward"
-        ? segment.inwardNormal
-        : { x: -segment.inwardNormal.x, y: -segment.inwardNormal.y };
+interface OpeningHeightTag {
+    id: string;
+    kind: OpeningKind;
+    point: Point;
+    vertical: boolean;
+    height: string;
+    sill: string | null;
+}
 
-const getDoorWidthLabelPoint = (
-    segment: RoomBoundarySegment,
-    origin: Point,
-    offset: number,
-    width: number,
-    door: Pick<DoorOpening, "doorKind" | "width" | "swingDirection">,
+/**
+ * The H=… mark of a measured plan. A door's sits in its room past the clear
+ * chain (a partition door's on the side it opens to); a window's sits
+ * outside past the outer chain, with its sill height beside it.
+ */
+const getOpeningHeightTag = (
+    opening: RenderedOpening,
+    thickness: number,
     millimetersPerPixel: number,
-    fontSize: number,
-    wallDimensions: PositionedDimension[],
-) => {
-    const line = openingLine(segment, origin, offset, width);
-    const normal = getDoorDimensionNormal(segment, door);
+): OpeningHeightTag => {
+    const line = openingLine(
+        opening.segment,
+        opening.origin,
+        opening.item.offset,
+        opening.item.width,
+    );
     const centre = { x: (line.start.x + line.end.x) / 2, y: (line.start.y + line.end.y) / 2 };
-    const halfWidth = (formatMillimeters(door.width).length * fontSize * 0.62) / 2;
-    const halfHeight = fontSize * 0.6;
-    // The preferred lane is also where an exterior wall's dimension chain
-    // runs; step outward past any wall dimension the label would sit on.
-    let distance = Math.max(180, millimetersPerPixel * 24);
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-        const point = { x: centre.x + normal.x * distance, y: centre.y + normal.y * distance };
-        const bounds = {
-            left: point.x - halfWidth,
-            right: point.x + halfWidth,
-            top: point.y - halfHeight,
-            bottom: point.y + halfHeight,
-        };
-        if (!wallDimensions.some((dimension) => dimensionIntersectsRect(dimension, bounds))) {
-            return point;
-        }
-        distance += fontSize * 1.4;
-    }
-    return { x: centre.x + normal.x * distance, y: centre.y + normal.y * distance };
-};
-
-const getOpeningLocalDimensions = (
-    segment: RoomBoundarySegment,
-    origin: Point,
-    offset: number,
-    width: number,
-    millimetersPerPixel: number,
-    door?: Pick<DoorOpening, "doorKind" | "swingDirection">,
-): OpeningDimension[] => {
-    const line = openingLine(segment, origin, offset, width);
-    const segmentStart = { x: origin.x + segment.start.x, y: origin.y + segment.start.y };
-    const segmentEnd = { x: origin.x + segment.end.x, y: origin.y + segment.end.y };
-    const outward = door
-        ? getDoorDimensionNormal(segment, door)
-        : { x: -segment.inwardNormal.x, y: -segment.inwardNormal.y };
-    const primaryLane = clamp(millimetersPerPixel * 34, 260, 480);
-    const secondaryLane = primaryLane + clamp(millimetersPerPixel * 20, 160, 300);
-    const create = (
-        id: OpeningDimension["id"],
-        from: Point,
-        to: Point,
-        lane: number,
-        value: number,
-    ): OpeningDimension => {
-        const start = { x: from.x + outward.x * lane, y: from.y + outward.y * lane };
-        const end = { x: to.x + outward.x * lane, y: to.y + outward.y * lane };
+    const labelHeight = Math.max(115, millimetersPerPixel * 18);
+    const inward = opening.segment.inwardNormal;
+    const vertical = opening.segment.orientation === "vertical";
+    const cm = (value: number) => String(Math.round(value / 10));
+    if (opening.kind === "window") {
+        const distance = thickness + Math.max(100, millimetersPerPixel * 15) + labelHeight * 1.8;
+        const sill = getWindowSillHeight(opening.item);
         return {
-            id,
-            start,
-            end,
-            extensionStart: from,
-            extensionEnd: to,
-            label: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 },
-            value: formatMillimeters(value),
-            vertical: segment.orientation === "vertical",
+            id: opening.item.id,
+            kind: "window",
+            point: { x: centre.x - inward.x * distance, y: centre.y - inward.y * distance },
+            vertical,
+            height: `H=${cm(getWindowHeight(opening.item))}`,
+            sill: opening.item.windowKind === "floor-to-ceiling" ? null : `Н под.=${cm(sill)}`,
         };
+    }
+    const partition = Boolean(opening.item.partitionId);
+    const normal =
+        partition && opening.item.swingDirection === "outward"
+            ? { x: -inward.x, y: -inward.y }
+            : inward;
+    const distance =
+        (partition ? thickness / 2 : 0) +
+        Math.max(80, millimetersPerPixel * 10) +
+        labelHeight * 1.9;
+    return {
+        id: opening.item.id,
+        kind: "door",
+        point: { x: centre.x + normal.x * distance, y: centre.y + normal.y * distance },
+        vertical,
+        height: `H=${cm(getDoorHeight(opening.item))}`,
+        sill: null,
     };
-    const dimensions: OpeningDimension[] = [
-        create("width", line.start, line.end, primaryLane, width),
-    ];
-    if (offset > OPENING_END_CLEARANCE_MM) {
-        dimensions.push(create("before", segmentStart, line.start, secondaryLane, offset));
-    }
-    const after = segment.length - offset - width;
-    if (after > OPENING_END_CLEARANCE_MM) {
-        dimensions.push(create("after", line.end, segmentEnd, secondaryLane, after));
-    }
-    return dimensions;
 };
 
 type WallUnionRect = { left: number; top: number; right: number; bottom: number };
@@ -2792,6 +2759,40 @@ const getDimensionLabelBounds = (dimension: PositionedDimension): ScreenRect => 
     };
 };
 
+/**
+ * Up close a long wall's midpoint leaves the screen while its dimension line
+ * is still visible. Slide the label along its own line into the visible
+ * stretch so the value stays readable while the wall is being edited.
+ */
+const keepDimensionLabelInView = <
+    T extends Pick<PositionedDimension, "dimensionStart" | "dimensionEnd" | "label" | "labelWidth">,
+>(
+    dimension: T,
+    view: CanvasViewBox,
+    margin: number,
+): T => {
+    const horizontal =
+        Math.abs(dimension.dimensionStart.y - dimension.dimensionEnd.y) <
+        Math.abs(dimension.dimensionStart.x - dimension.dimensionEnd.x);
+    const axis = horizontal ? "x" : "y";
+    const viewStart = horizontal ? view.x : view.y;
+    const viewEnd = viewStart + (horizontal ? view.width : view.height);
+    const halfLabel = dimension.labelWidth / 2 + margin;
+    const low =
+        Math.max(
+            Math.min(dimension.dimensionStart[axis], dimension.dimensionEnd[axis]),
+            viewStart,
+        ) + halfLabel;
+    const high =
+        Math.min(Math.max(dimension.dimensionStart[axis], dimension.dimensionEnd[axis]), viewEnd) -
+        halfLabel;
+    if (low > high) return dimension;
+    const current = dimension.label[axis];
+    const next = clamp(current, low, high);
+    if (next === current) return dimension;
+    return { ...dimension, label: { ...dimension.label, [axis]: next } };
+};
+
 const rectsOverlap = (first: ScreenRect, second: ScreenRect, padding = 0) =>
     first.left - padding < second.right &&
     first.right + padding > second.left &&
@@ -3508,6 +3509,79 @@ const getRoomRegionInnerDimensions = (
             ];
         }),
     );
+};
+
+/** An opening (or a single cursor point) on a wall, in world coordinates. */
+interface DimensionCut {
+    start: Point;
+    end: Point;
+}
+
+/**
+ * Breaks each wall value into the chain a measured plan shows: wall | opening
+ * | wall, on the room's clear face and on the outer face alike. A cut belongs
+ * to a dimension when it runs on the same wall, i.e. within the material
+ * thickness of the face that dimension measures. A piece too short to hold
+ * its value keeps its ticks and drops the label; its neighbours locate it.
+ */
+const splitDimensionsAtCuts = (
+    dimensions: ArchitecturalDimension[],
+    cuts: readonly DimensionCut[],
+    thickness: number,
+    millimetersPerPixel: number,
+): ArchitecturalDimension[] => {
+    if (!cuts.length) return dimensions;
+    return dimensions.flatMap((dimension) => {
+        const { vertical } = dimension;
+        const along = (point: Point) => (vertical ? point.y : point.x);
+        const across = (point: Point) => (vertical ? point.x : point.y);
+        const from = Math.min(along(dimension.extensionStart), along(dimension.extensionEnd));
+        const to = Math.max(along(dimension.extensionStart), along(dimension.extensionEnd));
+        const faceAcross = across(dimension.extensionStart);
+        const stops = cuts
+            .filter(
+                (cut) =>
+                    across(cut.start) === across(cut.end) &&
+                    Math.abs(across(cut.start) - faceAcross) <= thickness + 1,
+            )
+            .flatMap((cut) => [along(cut.start), along(cut.end)])
+            .filter((value) => value > from + 1 && value < to - 1);
+        if (!stops.length) return [dimension];
+        const points = Array.from(new Set([from, ...stops, to].map(Math.round))).sort(
+            (a, b) => a - b,
+        );
+        const forward = along(dimension.extensionEnd) >= along(dimension.extensionStart);
+        const at = (point: Point, value: number): Point =>
+            vertical ? { x: point.x, y: value } : { x: value, y: point.y };
+        return points.slice(0, -1).flatMap((pieceStart, index) => {
+            const pieceEnd = points[index + 1];
+            const length = pieceEnd - pieceStart;
+            if (length <= 0) return [];
+            const [a, b] = forward ? [pieceStart, pieceEnd] : [pieceEnd, pieceStart];
+            const dimensionStart = at(dimension.dimensionStart, a);
+            const dimensionEnd = at(dimension.dimensionEnd, b);
+            const value = formatWallLength(length);
+            const labelWidth = Math.max(
+                dimension.labelHeight * 1.2,
+                millimetersPerPixel * (value.length * 8.2 + 10),
+            );
+            return [
+                {
+                    ...dimension,
+                    id: `${dimension.id}-cut-${index}`,
+                    dimensionStart,
+                    dimensionEnd,
+                    extensionStart: at(dimension.extensionStart, a),
+                    extensionEnd: at(dimension.extensionEnd, b),
+                    tickStart: at(dimension.tickStart, a),
+                    tickEnd: at(dimension.tickEnd, b),
+                    label: at(dimension.label, (a + b) / 2),
+                    labelValue: length >= labelWidth ? value : "",
+                    labelWidth,
+                },
+            ];
+        });
+    });
 };
 
 interface ClosedBranchDimension extends LiveWallDimension {
@@ -4569,53 +4643,42 @@ const DrawRoom: React.FC = () => {
         }
         return entries;
     }, [openingDragPreview, openingDragSelection, preview, previews, scene.doors, scene.windows]);
-    const activeOpeningAnnotation = useMemo(() => {
-        if (openingPreview) return openingPreview;
-        if (!selectedOpening) return null;
-        const selected = renderedOpenings.find(
-            (opening) =>
-                opening.kind === selectedOpening.kind && opening.item.id === selectedOpening.id,
+    // Every door and window splits the values of its wall into a chain, so
+    // the drawing always says where each opening sits. The opening being
+    // placed or dragged takes part too: its chain follows the cursor. So does
+    // the wall tool's cursor resting on a wall, before a partition is started:
+    // its chain says how far the new wall would be from each corner.
+    const wallHoverCut =
+        tool === "wall" && hoverPoint && !wallDrawingAnchorPoint ? hoverPoint : null;
+    const openingChainDimensions = useMemo(() => {
+        const cuts: DimensionCut[] = renderedOpenings.map((opening) =>
+            openingLine(opening.segment, opening.origin, opening.item.offset, opening.item.width),
         );
-        return selected
-            ? {
-                  origin: selected.origin,
-                  kind: selected.kind,
-                  segment: selected.segment,
-                  offset: selected.item.offset,
-                  width: selected.item.width,
-                  valid: true,
-                  ...(selected.kind === "door"
-                      ? {
-                            doorKind: (selected.item as DoorOpening).doorKind ?? "room",
-                            swingDirection: (selected.item as DoorOpening).swingDirection,
-                        }
-                      : {}),
-              }
-            : null;
-    }, [openingPreview, renderedOpenings, selectedOpening]);
-    // While an opening is placed or selected, its own before/width/after
-    // chain is the measurement of that wall. The wall's persistent outer and
-    // clear totals sit in the same lanes and would print over it.
-    const openingFreeClosedRoomDimensions = useMemo(() => {
-        if (!activeOpeningAnnotation) return displayedClosedRoomDimensions;
-        const { segment, origin } = activeOpeningAnnotation;
-        const vertical = segment.orientation === "vertical";
-        const across = (point: Point) => (vertical ? point.x : point.y);
-        const along = (point: Point) => (vertical ? point.y : point.x);
-        const wallAcross = across(segment.start) + across(origin);
-        const wallFrom = Math.min(along(segment.start), along(segment.end)) + along(origin);
-        const wallTo = Math.max(along(segment.start), along(segment.end)) + along(origin);
-        const reach = clamp(annotationMillimetersPerPixel * 50, 700, 1500);
-        return displayedClosedRoomDimensions.filter((dimension) => {
-            if (dimension.vertical !== vertical) return true;
-            const from = Math.min(along(dimension.dimensionStart), along(dimension.dimensionEnd));
-            const to = Math.max(along(dimension.dimensionStart), along(dimension.dimensionEnd));
-            const sharesSpan = from < wallTo && to > wallFrom;
-            return !(
-                sharesSpan && Math.abs(across(dimension.dimensionStart) - wallAcross) <= reach
+        if (openingPreview) {
+            cuts.push(
+                openingLine(
+                    openingPreview.segment,
+                    openingPreview.origin,
+                    openingPreview.offset,
+                    openingPreview.width,
+                ),
             );
-        });
-    }, [activeOpeningAnnotation, annotationMillimetersPerPixel, displayedClosedRoomDimensions]);
+        }
+        if (wallHoverCut) cuts.push({ start: wallHoverCut, end: wallHoverCut });
+        return splitDimensionsAtCuts(
+            displayedClosedRoomDimensions,
+            cuts,
+            renderedWallThickness,
+            annotationMillimetersPerPixel,
+        );
+    }, [
+        annotationMillimetersPerPixel,
+        displayedClosedRoomDimensions,
+        openingPreview,
+        renderedOpenings,
+        renderedWallThickness,
+        wallHoverCut,
+    ]);
     // Keep the diagonal material legible at every zoom level: 8px between
     // hatches avoids the mobile aliasing that turned narrow vertical walls into
     // a solid fill while keeping the drafting texture restrained on desktop.
@@ -4623,6 +4686,12 @@ const DrawRoom: React.FC = () => {
         () => clamp(millimetersPerPixel * 8, 70, 520),
         [millimetersPerPixel],
     );
+    // Same perpendicular distance between lines as the former diagonal tile.
+    const hatchPitch = hatchSpacing / Math.SQRT2;
+
+    const labelInViewMargin = annotationMillimetersPerPixel * 16;
+    const inView = <T extends Parameters<typeof keepDimensionLabelInView>[0]>(dimension: T) =>
+        keepDimensionLabelInView(dimension, viewBox, labelInViewMargin);
 
     useEffect(() => {
         if (!canvasSize.width || !canvasSize.height) return;
@@ -7046,15 +7115,14 @@ const DrawRoom: React.FC = () => {
         [furnitureRegion],
     );
 
-    // «Подобрать расстановку»: a set per room, solved in a worker for that room alone.
-    const [autoLayoutSets, setAutoLayoutSets] = useState<Record<string, Record<string, number>>>(
-        {},
-    );
+    // «Авторасстановка»: the room's own pieces, solved in a worker for that room alone.
     const [autoLayoutSolving, setAutoLayoutSolving] = useState(false);
     const [autoLayoutStatus, setAutoLayoutStatus] = useState("");
     const [autoLayoutApplied, setAutoLayoutApplied] = useState<number | null>(null);
     const [autoLayoutVariants, setAutoLayoutVariants] = useState<{
         signature: string;
+        /** The pieces they were solved for; a piece added or removed makes them stale. */
+        setKey: string;
         variants: {
             summary: AutoLayoutVariantSummary;
             pieces: DrawFurniture[];
@@ -7094,9 +7162,24 @@ const DrawRoom: React.FC = () => {
     );
     const autoLayoutWorker = useRef<Worker | null>(null);
     useEffect(() => () => autoLayoutWorker.current?.terminate(), []);
-    const autoLayoutSet =
-        (furnitureRegion && autoLayoutSets[furnitureRegion.signature]) ??
-        ROOM_KIND_FURNITURE[furnitureRegion?.kind ?? "other"];
+    const autoLayoutPieces = useMemo(
+        () =>
+            furnitureRoom
+                ? (scene.furniture ?? []).filter((item) =>
+                      furnitureBelongsToRoom(item, furnitureRoom),
+                  )
+                : [],
+        [furnitureRoom, scene.furniture],
+    );
+    const autoLayoutSet = useMemo(() => roomFurnitureSet(autoLayoutPieces), [autoLayoutPieces]);
+    const autoLayoutSetKey = JSON.stringify(autoLayoutSet);
+    // The solver knows catalogue sizes only.
+    const autoLayoutResized = autoLayoutPieces.some((item) => {
+        const definition = furnitureDefinition(item.definitionId);
+        if (!definition || definition.mounting === "upper") return false;
+        const base = getRotatedGeometry(definition, 0);
+        return item.width !== base.width || item.depth !== base.depth;
+    });
     const autoLayoutTarget = useMemo(() => {
         if (!furnitureRegion || !furnitureRoom) return null;
         const owner = previews.find((item) => regionPrefix(item) === furnitureRegion.buildingId);
@@ -7114,7 +7197,12 @@ const DrawRoom: React.FC = () => {
         return {
             ...cut,
             offset: { x: owner.origin.x + cut.origin.x, y: owner.origin.y + cut.origin.y },
-            kept: items.filter((item) => !own.includes(item)),
+            // Upper units are not rearranged; they stay over the worktop.
+            kept: items.filter(
+                (item) =>
+                    !own.includes(item) ||
+                    furnitureDefinition(item.definitionId)?.mounting === "upper",
+            ),
         };
     }, [furnitureRegion, furnitureRoom, previews, scene.furniture]);
     const requestSolver = useCallback(
@@ -7182,7 +7270,15 @@ const DrawRoom: React.FC = () => {
                             {
                                 id: WORKING_CORE_OBSERVATION_ID,
                                 label: fallback.result.unplacedInstances.length
-                                    ? "Без части желательной мебели"
+                                    ? `Не поместилось: ${Array.from(
+                                          new Set(
+                                              fallback.result.unplacedInstances.map(
+                                                  (instance) =>
+                                                      furnitureDefinition(instance.definitionId)
+                                                          ?.label ?? instance.definitionId,
+                                              ),
+                                          ),
+                                      ).join(", ")}`
                                     : "Всё поместилось",
                                 placements: fallback.result.result.placements,
                                 exploredNodes: fallback.result.result.exploredNodes,
@@ -7244,6 +7340,7 @@ const DrawRoom: React.FC = () => {
             });
             setAutoLayoutVariants({
                 signature: furnitureRegion.signature,
+                setKey: autoLayoutSetKey,
                 variants: variants.map((variant) => ({
                     ...variant,
                     observation: observationRequests[variant.target.id],
@@ -7266,7 +7363,7 @@ const DrawRoom: React.FC = () => {
             setAutoLayoutStatus(
                 variants.length
                     ? "Выберите вариант — он заменит мебель этой комнаты. Отменить можно кнопкой «Отменить»."
-                    : "Не получилось расставить этот набор. Уберите часть мебели и попробуйте ещё раз.",
+                    : "Не получилось расставить эту мебель. Уберите часть предметов и попробуйте ещё раз.",
             );
             trackGoal(variants.length ? "layout_generated" : "layout_failed", {
                 source: "drawing",
@@ -7281,6 +7378,7 @@ const DrawRoom: React.FC = () => {
         }
     }, [
         autoLayoutSet,
+        autoLayoutSetKey,
         autoLayoutTarget,
         isAuthenticated,
         furnitureDoorObstacles,
@@ -7293,10 +7391,12 @@ const DrawRoom: React.FC = () => {
     ]);
     const currentAutoLayoutVariants = useMemo(
         () =>
-            autoLayoutVariants && autoLayoutVariants.signature === furnitureRegion?.signature
+            autoLayoutVariants &&
+            autoLayoutVariants.signature === furnitureRegion?.signature &&
+            autoLayoutVariants.setKey === autoLayoutSetKey
                 ? autoLayoutVariants.variants
                 : [],
-        [autoLayoutVariants, furnitureRegion?.signature],
+        [autoLayoutVariants, autoLayoutSetKey, furnitureRegion?.signature],
     );
     const applyAutoLayout = useCallback(
         (index: number) => {
@@ -8094,19 +8194,25 @@ const DrawRoom: React.FC = () => {
                                         className={styles.majorGrid}
                                     />
                                 </pattern>
+                                {/* A diagonal drawn corner-to-corner in a square tile
+                                    loses its stroke ends at every tile corner, which
+                                    shows up as broken, rounded-off hatches when zoomed
+                                    in. Rotating the tile instead lets one straight
+                                    line run edge to edge, so the tiles join seamlessly. */}
                                 <pattern
                                     id="wall-hatch"
-                                    width={hatchSpacing}
-                                    height={hatchSpacing}
+                                    width={hatchPitch}
+                                    height={hatchPitch}
                                     patternUnits="userSpaceOnUse"
+                                    patternTransform="rotate(45)"
                                 >
                                     <rect
-                                        width={hatchSpacing}
-                                        height={hatchSpacing}
+                                        width={hatchPitch}
+                                        height={hatchPitch}
                                         className={styles.wallHatchBase}
                                     />
                                     <path
-                                        d={`M 0 ${hatchSpacing} L ${hatchSpacing} 0`}
+                                        d={`M ${hatchPitch / 2} 0 V ${hatchPitch}`}
                                         className={styles.wallHatchLine}
                                     />
                                 </pattern>
@@ -8535,120 +8641,130 @@ const DrawRoom: React.FC = () => {
                                         }
                                         aria-hidden="true"
                                     >
-                                        {visiblePersistentWallDimensions.map((dimension) => (
-                                            <g
-                                                key={`dimension-${dimension.segmentId}-${dimension.id}`}
-                                                data-draw-room-persistent-wall={dimension.segmentId}
-                                                data-draw-room-persistent-dimension={dimension.id}
-                                                data-draw-room-dimension-chain="persistent"
-                                                data-draw-room-persistent-dimension-kind={
-                                                    dimension.dimensionKind
-                                                }
-                                            >
-                                                <line
-                                                    className={styles.persistentDimensionExtension}
-                                                    data-draw-room-persistent-dimension-extension="start"
-                                                    x1={dimension.extensionStart.x}
-                                                    y1={dimension.extensionStart.y}
-                                                    x2={dimension.dimensionStart.x}
-                                                    y2={dimension.dimensionStart.y}
-                                                />
-                                                <line
-                                                    className={styles.persistentDimensionExtension}
-                                                    data-draw-room-persistent-dimension-extension="end"
-                                                    x1={dimension.extensionEnd.x}
-                                                    y1={dimension.extensionEnd.y}
-                                                    x2={dimension.dimensionEnd.x}
-                                                    y2={dimension.dimensionEnd.y}
-                                                />
-                                                <line
-                                                    className={styles.persistentDimensionLine}
-                                                    data-draw-room-persistent-dimension-line="true"
-                                                    x1={dimension.dimensionStart.x}
-                                                    y1={dimension.dimensionStart.y}
-                                                    x2={dimension.dimensionEnd.x}
-                                                    y2={dimension.dimensionEnd.y}
-                                                />
-                                                <line
-                                                    className={styles.persistentDimensionTick}
-                                                    data-draw-room-persistent-dimension-tick="start"
-                                                    x1={dimension.tickStart.x}
-                                                    y1={dimension.tickStart.y}
-                                                    x2={
-                                                        dimension.tickStart.x +
-                                                        (dimension.vertical
-                                                            ? dimension.labelHeight * 0.3
-                                                            : 0)
-                                                    }
-                                                    y2={
-                                                        dimension.tickStart.y +
-                                                        (dimension.vertical
-                                                            ? 0
-                                                            : dimension.labelHeight * 0.3)
-                                                    }
-                                                />
-                                                <line
-                                                    className={styles.persistentDimensionTick}
-                                                    data-draw-room-persistent-dimension-tick="end"
-                                                    x1={dimension.tickEnd.x}
-                                                    y1={dimension.tickEnd.y}
-                                                    x2={
-                                                        dimension.tickEnd.x -
-                                                        (dimension.vertical
-                                                            ? dimension.labelHeight * 0.3
-                                                            : 0)
-                                                    }
-                                                    y2={
-                                                        dimension.tickEnd.y -
-                                                        (dimension.vertical
-                                                            ? 0
-                                                            : dimension.labelHeight * 0.3)
-                                                    }
-                                                />
+                                        {visiblePersistentWallDimensions
+                                            .map(inView)
+                                            .map((dimension) => (
                                                 <g
-                                                    transform={
-                                                        dimension.vertical
-                                                            ? `rotate(-90 ${dimension.label.x} ${dimension.label.y})`
-                                                            : undefined
+                                                    key={`dimension-${dimension.segmentId}-${dimension.id}`}
+                                                    data-draw-room-persistent-wall={
+                                                        dimension.segmentId
+                                                    }
+                                                    data-draw-room-persistent-dimension={
+                                                        dimension.id
+                                                    }
+                                                    data-draw-room-dimension-chain="persistent"
+                                                    data-draw-room-persistent-dimension-kind={
+                                                        dimension.dimensionKind
                                                     }
                                                 >
-                                                    <rect
+                                                    <line
                                                         className={
-                                                            styles.persistentDimensionKnockout
+                                                            styles.persistentDimensionExtension
                                                         }
-                                                        x={
-                                                            dimension.label.x -
-                                                            dimension.labelWidth / 2
-                                                        }
-                                                        y={
-                                                            dimension.label.y -
-                                                            dimension.labelHeight / 2
-                                                        }
-                                                        width={dimension.labelWidth}
-                                                        height={dimension.labelHeight}
-                                                        rx={dimension.labelHeight * 0.18}
+                                                        data-draw-room-persistent-dimension-extension="start"
+                                                        x1={dimension.extensionStart.x}
+                                                        y1={dimension.extensionStart.y}
+                                                        x2={dimension.dimensionStart.x}
+                                                        y2={dimension.dimensionStart.y}
                                                     />
-                                                    <text
+                                                    <line
                                                         className={
-                                                            styles.persistentWallDimensionLabel
+                                                            styles.persistentDimensionExtension
                                                         }
-                                                        data-draw-room-wall-dimension="persistent"
-                                                        data-draw-room-persistent-dimension-label={
-                                                            dimension.id
+                                                        data-draw-room-persistent-dimension-extension="end"
+                                                        x1={dimension.extensionEnd.x}
+                                                        y1={dimension.extensionEnd.y}
+                                                        x2={dimension.dimensionEnd.x}
+                                                        y2={dimension.dimensionEnd.y}
+                                                    />
+                                                    <line
+                                                        className={styles.persistentDimensionLine}
+                                                        data-draw-room-persistent-dimension-line="true"
+                                                        x1={dimension.dimensionStart.x}
+                                                        y1={dimension.dimensionStart.y}
+                                                        x2={dimension.dimensionEnd.x}
+                                                        y2={dimension.dimensionEnd.y}
+                                                    />
+                                                    <line
+                                                        className={styles.persistentDimensionTick}
+                                                        data-draw-room-persistent-dimension-tick="start"
+                                                        x1={dimension.tickStart.x}
+                                                        y1={dimension.tickStart.y}
+                                                        x2={
+                                                            dimension.tickStart.x +
+                                                            (dimension.vertical
+                                                                ? dimension.labelHeight * 0.3
+                                                                : 0)
                                                         }
-                                                        x={dimension.label.x}
-                                                        y={dimension.label.y}
-                                                        style={{
-                                                            fontSize: dimensionFontSize * 1.08,
-                                                        }}
-                                                        textAnchor="middle"
-                                                        dominantBaseline="middle"
+                                                        y2={
+                                                            dimension.tickStart.y +
+                                                            (dimension.vertical
+                                                                ? 0
+                                                                : dimension.labelHeight * 0.3)
+                                                        }
+                                                    />
+                                                    <line
+                                                        className={styles.persistentDimensionTick}
+                                                        data-draw-room-persistent-dimension-tick="end"
+                                                        x1={dimension.tickEnd.x}
+                                                        y1={dimension.tickEnd.y}
+                                                        x2={
+                                                            dimension.tickEnd.x -
+                                                            (dimension.vertical
+                                                                ? dimension.labelHeight * 0.3
+                                                                : 0)
+                                                        }
+                                                        y2={
+                                                            dimension.tickEnd.y -
+                                                            (dimension.vertical
+                                                                ? 0
+                                                                : dimension.labelHeight * 0.3)
+                                                        }
+                                                    />
+                                                    <g
+                                                        transform={
+                                                            dimension.vertical
+                                                                ? `rotate(-90 ${dimension.label.x} ${dimension.label.y})`
+                                                                : undefined
+                                                        }
                                                     >
-                                                        {dimension.labelValue}
-                                                    </text>
+                                                        <rect
+                                                            className={
+                                                                styles.persistentDimensionKnockout
+                                                            }
+                                                            x={
+                                                                dimension.label.x -
+                                                                dimension.labelWidth / 2
+                                                            }
+                                                            y={
+                                                                dimension.label.y -
+                                                                dimension.labelHeight / 2
+                                                            }
+                                                            width={dimension.labelWidth}
+                                                            height={dimension.labelHeight}
+                                                            rx={dimension.labelHeight * 0.18}
+                                                        />
+                                                        <text
+                                                            className={
+                                                                styles.persistentWallDimensionLabel
+                                                            }
+                                                            data-draw-room-wall-dimension="persistent"
+                                                            data-draw-room-persistent-dimension-label={
+                                                                dimension.id
+                                                            }
+                                                            x={dimension.label.x}
+                                                            y={dimension.label.y}
+                                                            style={{
+                                                                fontSize: dimensionFontSize * 1.08,
+                                                            }}
+                                                            textAnchor="middle"
+                                                            dominantBaseline="middle"
+                                                        >
+                                                            {dimension.labelValue}
+                                                        </text>
+                                                    </g>
                                                 </g>
-                                            </g>
-                                        ))}
+                                            ))}
                                     </g>
                                 )}
                             {preview &&
@@ -8660,7 +8776,7 @@ const DrawRoom: React.FC = () => {
                                         data-draw-room-architectural-dimensions="true"
                                         aria-hidden="true"
                                     >
-                                        {openingFreeClosedRoomDimensions.map((dimension) => (
+                                        {openingChainDimensions.map(inView).map((dimension) => (
                                             <g
                                                 key={dimension.id}
                                                 data-draw-room-dimension-chain={dimension.kind}
@@ -8722,42 +8838,44 @@ const DrawRoom: React.FC = () => {
                                                             : dimension.labelHeight * 0.32)
                                                     }
                                                 />
-                                                <g
-                                                    transform={
-                                                        dimension.vertical
-                                                            ? `rotate(-90 ${dimension.label.x} ${dimension.label.y})`
-                                                            : undefined
-                                                    }
-                                                >
-                                                    <rect
-                                                        className={styles.dimensionKnockout}
-                                                        x={
-                                                            dimension.label.x -
-                                                            dimension.labelWidth / 2
+                                                {dimension.labelValue && (
+                                                    <g
+                                                        transform={
+                                                            dimension.vertical
+                                                                ? `rotate(-90 ${dimension.label.x} ${dimension.label.y})`
+                                                                : undefined
                                                         }
-                                                        y={
-                                                            dimension.label.y -
-                                                            dimension.labelHeight / 2
-                                                        }
-                                                        width={dimension.labelWidth}
-                                                        height={dimension.labelHeight}
-                                                    />
-                                                    <text
-                                                        className={
-                                                            styles.architecturalDimensionLabel
-                                                        }
-                                                        data-draw-room-wall-dimension={
-                                                            dimension.kind
-                                                        }
-                                                        x={dimension.label.x}
-                                                        y={dimension.label.y}
-                                                        style={{ fontSize: dimensionFontSize }}
-                                                        textAnchor="middle"
-                                                        dominantBaseline="middle"
                                                     >
-                                                        {dimension.labelValue}
-                                                    </text>
-                                                </g>
+                                                        <rect
+                                                            className={styles.dimensionKnockout}
+                                                            x={
+                                                                dimension.label.x -
+                                                                dimension.labelWidth / 2
+                                                            }
+                                                            y={
+                                                                dimension.label.y -
+                                                                dimension.labelHeight / 2
+                                                            }
+                                                            width={dimension.labelWidth}
+                                                            height={dimension.labelHeight}
+                                                        />
+                                                        <text
+                                                            className={
+                                                                styles.architecturalDimensionLabel
+                                                            }
+                                                            data-draw-room-wall-dimension={
+                                                                dimension.kind
+                                                            }
+                                                            x={dimension.label.x}
+                                                            y={dimension.label.y}
+                                                            style={{ fontSize: dimensionFontSize }}
+                                                            textAnchor="middle"
+                                                            dominantBaseline="middle"
+                                                        >
+                                                            {dimension.labelValue}
+                                                        </text>
+                                                    </g>
+                                                )}
                                             </g>
                                         ))}
                                     </g>
@@ -8771,7 +8889,7 @@ const DrawRoom: React.FC = () => {
                                         data-draw-room-branch-dimensions="true"
                                         aria-hidden="true"
                                     >
-                                        {closedBranchDimensions.map((dimension) => (
+                                        {closedBranchDimensions.map(inView).map((dimension) => (
                                             <g
                                                 key={`branch-dimension-${dimension.segmentId}-${dimension.dimensionId}`}
                                                 data-draw-room-branch-dimension={
@@ -9011,7 +9129,7 @@ const DrawRoom: React.FC = () => {
                                             data-draw-room-live-layout={liveDimensionLayout}
                                             aria-hidden="true"
                                         >
-                                            {liveWallDimensions.map((dimension) => (
+                                            {liveWallDimensions.map(inView).map((dimension) => (
                                                 <g
                                                     key={dimension.id}
                                                     data-draw-room-live-dimension={dimension.id}
@@ -9171,109 +9289,6 @@ const DrawRoom: React.FC = () => {
                                     </g>
                                 </g>
                             )}
-                            {preview && activeOpeningAnnotation && showCommittedDimensions && (
-                                <g
-                                    className={styles.openingDimensions}
-                                    data-draw-room-opening-dimensions={activeOpeningAnnotation.kind}
-                                    aria-hidden="true"
-                                >
-                                    {getOpeningLocalDimensions(
-                                        activeOpeningAnnotation.segment,
-                                        activeOpeningAnnotation.origin,
-                                        activeOpeningAnnotation.offset,
-                                        activeOpeningAnnotation.width,
-                                        annotationMillimetersPerPixel,
-                                        activeOpeningAnnotation.kind === "door"
-                                            ? {
-                                                  doorKind:
-                                                      activeOpeningAnnotation.doorKind ?? "room",
-                                                  swingDirection:
-                                                      activeOpeningAnnotation.swingDirection,
-                                              }
-                                            : undefined,
-                                    ).map((dimension) => {
-                                        const tick = dimension.vertical
-                                            ? { x: annotationMillimetersPerPixel * 4, y: 0 }
-                                            : { x: 0, y: annotationMillimetersPerPixel * 4 };
-                                        const labelWidth = Math.max(
-                                            annotationMillimetersPerPixel * 42,
-                                            dimension.value.length *
-                                                annotationMillimetersPerPixel *
-                                                8.5,
-                                        );
-                                        const labelHeight = annotationMillimetersPerPixel * 22;
-                                        return (
-                                            <g
-                                                key={dimension.id}
-                                                data-draw-room-opening-dimension={dimension.id}
-                                            >
-                                                <line
-                                                    className={styles.openingDimensionExtension}
-                                                    x1={dimension.extensionStart.x}
-                                                    y1={dimension.extensionStart.y}
-                                                    x2={dimension.start.x}
-                                                    y2={dimension.start.y}
-                                                />
-                                                <line
-                                                    className={styles.openingDimensionExtension}
-                                                    x1={dimension.extensionEnd.x}
-                                                    y1={dimension.extensionEnd.y}
-                                                    x2={dimension.end.x}
-                                                    y2={dimension.end.y}
-                                                />
-                                                <line
-                                                    className={styles.openingDimensionLine}
-                                                    x1={dimension.start.x}
-                                                    y1={dimension.start.y}
-                                                    x2={dimension.end.x}
-                                                    y2={dimension.end.y}
-                                                />
-                                                <line
-                                                    className={styles.openingDimensionTick}
-                                                    x1={dimension.start.x - tick.x}
-                                                    y1={dimension.start.y - tick.y}
-                                                    x2={dimension.start.x + tick.x}
-                                                    y2={dimension.start.y + tick.y}
-                                                />
-                                                <line
-                                                    className={styles.openingDimensionTick}
-                                                    x1={dimension.end.x - tick.x}
-                                                    y1={dimension.end.y - tick.y}
-                                                    x2={dimension.end.x + tick.x}
-                                                    y2={dimension.end.y + tick.y}
-                                                />
-                                                <g
-                                                    transform={
-                                                        dimension.vertical
-                                                            ? `rotate(-90 ${dimension.label.x} ${dimension.label.y})`
-                                                            : undefined
-                                                    }
-                                                >
-                                                    <rect
-                                                        className={styles.openingDimensionKnockout}
-                                                        x={dimension.label.x - labelWidth / 2}
-                                                        y={dimension.label.y - labelHeight / 2}
-                                                        width={labelWidth}
-                                                        height={labelHeight}
-                                                    />
-                                                    <text
-                                                        className={styles.openingDimensionText}
-                                                        x={dimension.label.x}
-                                                        y={dimension.label.y}
-                                                        textAnchor="middle"
-                                                        dominantBaseline="middle"
-                                                        style={{
-                                                            fontSize: dimensionFontSize * 0.82,
-                                                        }}
-                                                    >
-                                                        {dimension.value}
-                                                    </text>
-                                                </g>
-                                            </g>
-                                        );
-                                    })}
-                                </g>
-                            )}
                             {preview &&
                                 renderedOpenings.map((opening) => {
                                     const line = openingLine(
@@ -9285,10 +9300,6 @@ const DrawRoom: React.FC = () => {
                                     const selected =
                                         selectedOpening?.kind === opening.kind &&
                                         selectedOpening.id === opening.item.id;
-                                    const labelPoint = {
-                                        x: (line.start.x + line.end.x) / 2,
-                                        y: (line.start.y + line.end.y) / 2,
-                                    };
                                     if (opening.kind === "window") {
                                         return (
                                             <g
@@ -9335,20 +9346,6 @@ const DrawRoom: React.FC = () => {
                                                     x2={line.end.x}
                                                     y2={line.end.y}
                                                 />
-                                                {selected && (
-                                                    <text
-                                                        className={styles.openingDimensionLabel}
-                                                        x={labelPoint.x}
-                                                        y={labelPoint.y}
-                                                        textAnchor="middle"
-                                                        dominantBaseline="middle"
-                                                        style={{
-                                                            fontSize: dimensionFontSize * 0.9,
-                                                        }}
-                                                    >
-                                                        {formatWallLength(opening.item.width)}
-                                                    </text>
-                                                )}
                                             </g>
                                         );
                                     }
@@ -9396,18 +9393,6 @@ const DrawRoom: React.FC = () => {
                                         x: freePoint.x + swingNormal.x * leafDepth,
                                         y: freePoint.y + swingNormal.y * leafDepth,
                                     };
-                                    const widthLabelPoint = getDoorWidthLabelPoint(
-                                        opening.segment,
-                                        opening.origin,
-                                        door.offset,
-                                        door.width,
-                                        door,
-                                        annotationMillimetersPerPixel,
-                                        dimensionFontSize * 0.78,
-                                        showCommittedDimensions && !ghost
-                                            ? openingFreeClosedRoomDimensions
-                                            : [],
-                                    );
                                     return (
                                         <g
                                             key={door.id}
@@ -9504,22 +9489,66 @@ const DrawRoom: React.FC = () => {
                                                     thickness={renderedWallThickness}
                                                 />
                                             )}
-                                            {!selected && (
-                                                <text
-                                                    className={styles.doorWidthLabel}
-                                                    data-draw-room-door-width-label={door.id}
-                                                    x={widthLabelPoint.x}
-                                                    y={widthLabelPoint.y}
-                                                    textAnchor="middle"
-                                                    dominantBaseline="middle"
-                                                    style={{ fontSize: dimensionFontSize * 0.78 }}
-                                                >
-                                                    {formatMillimeters(door.width)}
-                                                </text>
-                                            )}
                                         </g>
                                     );
                                 })}
+                            {preview && showCommittedDimensions && !ghost && (
+                                <g
+                                    className={styles.openingHeightTags}
+                                    data-draw-room-opening-heights="true"
+                                    aria-hidden="true"
+                                >
+                                    {renderedOpenings.map((opening) => {
+                                        const tag = getOpeningHeightTag(
+                                            opening,
+                                            renderedWallThickness,
+                                            annotationMillimetersPerPixel,
+                                        );
+                                        const fontSize = dimensionFontSize * 0.86;
+                                        const characters =
+                                            tag.height.length +
+                                            (tag.sill ? tag.sill.length + 2 : 0);
+                                        const width = fontSize * (characters * 0.6 + 1.3);
+                                        const height = fontSize * 1.7;
+                                        return (
+                                            <g
+                                                key={`${tag.kind}-${tag.id}`}
+                                                data-draw-room-opening-height={tag.id}
+                                                transform={
+                                                    tag.vertical
+                                                        ? `rotate(-90 ${tag.point.x} ${tag.point.y})`
+                                                        : undefined
+                                                }
+                                            >
+                                                <rect
+                                                    x={tag.point.x - width / 2}
+                                                    y={tag.point.y - height / 2}
+                                                    width={width}
+                                                    height={height}
+                                                    rx={height * 0.22}
+                                                />
+                                                <text
+                                                    x={tag.point.x}
+                                                    y={tag.point.y}
+                                                    textAnchor="middle"
+                                                    dominantBaseline="middle"
+                                                    style={{ fontSize }}
+                                                >
+                                                    <tspan>{tag.height}</tspan>
+                                                    {tag.sill && (
+                                                        <tspan
+                                                            className={styles.openingSillValue}
+                                                            dx={fontSize * 0.7}
+                                                        >
+                                                            {tag.sill}
+                                                        </tspan>
+                                                    )}
+                                                </text>
+                                            </g>
+                                        );
+                                    })}
+                                </g>
+                            )}
                             {preview && openingPreview && (
                                 <g
                                     className={`${styles.openingGhost} ${openingPreview.valid ? styles.openingValid : styles.openingInvalid}`}
@@ -9551,31 +9580,6 @@ const DrawRoom: React.FC = () => {
                                                         className={styles.windowPreviewMullion}
                                                         d={`M ${label.x} ${label.y - annotationMillimetersPerPixel * 11} V ${label.y + annotationMillimetersPerPixel * 11}`}
                                                     />
-                                                    <rect
-                                                        className={styles.openingPreviewKnockout}
-                                                        x={
-                                                            label.x -
-                                                            annotationMillimetersPerPixel * 28
-                                                        }
-                                                        y={
-                                                            label.y -
-                                                            annotationMillimetersPerPixel * 11
-                                                        }
-                                                        width={annotationMillimetersPerPixel * 56}
-                                                        height={annotationMillimetersPerPixel * 22}
-                                                    />
-                                                    <text
-                                                        className={styles.openingPreviewText}
-                                                        x={label.x}
-                                                        y={label.y}
-                                                        textAnchor="middle"
-                                                        dominantBaseline="middle"
-                                                        style={{
-                                                            fontSize: dimensionFontSize * 0.82,
-                                                        }}
-                                                    >
-                                                        {formatMillimeters(openingPreview.width)}
-                                                    </text>
                                                 </>
                                             );
                                         }
@@ -9668,23 +9672,6 @@ const DrawRoom: React.FC = () => {
                                                         thickness={renderedWallThickness}
                                                     />
                                                 )}
-                                                <rect
-                                                    className={styles.openingPreviewKnockout}
-                                                    x={label.x - annotationMillimetersPerPixel * 28}
-                                                    y={label.y - annotationMillimetersPerPixel * 11}
-                                                    width={annotationMillimetersPerPixel * 56}
-                                                    height={annotationMillimetersPerPixel * 22}
-                                                />
-                                                <text
-                                                    className={styles.openingPreviewText}
-                                                    x={label.x}
-                                                    y={label.y}
-                                                    textAnchor="middle"
-                                                    dominantBaseline="middle"
-                                                    style={{ fontSize: dimensionFontSize * 0.82 }}
-                                                >
-                                                    {formatMillimeters(openingPreview.width)}
-                                                </text>
                                             </>
                                         );
                                     })()}
@@ -10074,15 +10061,16 @@ const DrawRoom: React.FC = () => {
                                     <AutoLayoutPanel
                                         key={furnitureRegion.signature}
                                         set={autoLayoutSet}
-                                        onSetChange={(set) =>
-                                            setAutoLayoutSets((current) => ({
-                                                ...current,
-                                                [furnitureRegion.signature]: set,
-                                            }))
-                                        }
+                                        resized={autoLayoutResized}
                                         onSolve={() => void solveAutoLayout()}
                                         solving={autoLayoutSolving}
-                                        status={autoLayoutStatus}
+                                        status={
+                                            // A result for other pieces than now is stale.
+                                            autoLayoutSolving ||
+                                            autoLayoutVariants?.setKey === autoLayoutSetKey
+                                                ? autoLayoutStatus
+                                                : ""
+                                        }
                                         variants={currentAutoLayoutVariants.map(
                                             (variant) => variant.summary,
                                         )}
@@ -10491,6 +10479,14 @@ const DrawRoom: React.FC = () => {
                                               : "снизу"}
                                     </small>
                                 </label>
+                                <OpeningHeightFields
+                                    key={`${selectedOpeningData.kind}-${selectedOpeningData.item.id}`}
+                                    kind={selectedOpeningData.kind}
+                                    item={selectedOpeningData.item}
+                                    step={sceneSnapMm}
+                                    onChange={updateSelectedOpening}
+                                    onReject={setNotice}
+                                />
                                 {selectedOpeningError && (
                                     <p role="alert" className={styles.openingInspectorNote}>
                                         {selectedOpeningError}
@@ -10652,7 +10648,13 @@ const DrawRoom: React.FC = () => {
                                                             windowKind
                                                         }
                                                         onClick={() =>
-                                                            updateSelectedOpening({ windowKind })
+                                                            // Heights fall back to the new
+                                                            // kind's own standard values.
+                                                            updateSelectedOpening({
+                                                                windowKind,
+                                                                height: undefined,
+                                                                sillHeight: undefined,
+                                                            })
                                                         }
                                                     >
                                                         {label}
@@ -10744,7 +10746,7 @@ const DrawRoom: React.FC = () => {
                     </span>
                     <span data-draw-room-status="coordinates">
                         {cursorPoint
-                            ? `X ${cursorPoint.x} · Y ${cursorPoint.y} мм`
+                            ? `X ${Math.round(cursorPoint.x)} · Y ${Math.round(cursorPoint.y)} мм`
                             : "Наведите курсор на поле"}
                     </span>
                 </footer>

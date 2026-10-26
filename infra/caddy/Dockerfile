@@ -21,10 +21,11 @@ FROM caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f43
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 
 # The base image's brotli-libs 1.2.0-r0 has CVE-2026-111497 (out-of-bounds
-# write in the decoder); take the fixed Alpine package until upstream does.
+# write in the decoder) and its curl 8.22.0-r0 has CVE-2026-92392 (HTTP/2
+# upload use-after-free); take the fixed Alpine packages until upstream does.
 # COPY drops file capabilities; restore the one upstream sets so the
 # non-root user can still bind 80/443.
-RUN apk add --no-cache --upgrade "brotli-libs>=1.2.1-r0" \
+RUN apk add --no-cache --upgrade "brotli-libs>=1.2.1-r0" "curl>=8.23.0-r0" "libcurl>=8.23.0-r0" \
     && setcap cap_net_bind_service=+ep /usr/bin/caddy \
     && addgroup -S -g 10001 caddy \
     && adduser -S -D -h /home/caddy -s /sbin/nologin -u 10001 -G caddy caddy \

@@ -112,7 +112,7 @@ docker compose --env-file .env.server -f docker-compose.yml --profile tools run 
 `ADMIN_ROLE_GRANTED userId=…`; второй завершает все сессии аккаунта. Вход администратора идёт в два шага: пароль, затем шестизначный код
 из письма (живёт 10 минут, 5 попыток, новый вход отменяет прежний код). Без
 кода сессия не создаётся; если письмо не ушло, вход отвечает 503. Сессия
-администратора короче обычной: 12 часов без активности и не дольше суток.
+администратора короче обычной: 7 дней без активности и не дольше 30 дней.
 Ссылка сброса пароля администратора меняет пароль, но не открывает сессию —
 после неё нужен обычный вход с кодом. Закрытые API (`/api/admin/*`) принимают
 только сессию, прошедшую код.
@@ -125,7 +125,7 @@ docker compose --env-file .env.server -f docker-compose.yml --profile tools run 
 PostgreSQL получает только admin-переменные. One-off сервис
 `db-roles` создаёт отдельного владельца миграций и runtime-роль без права менять
 схему. Сервис `nest` получает только runtime-реквизиты, `migrate` — только
-миграционные. Runtime-роль получает DML для таблиц `user`, `user_session`, `email_token`, `login_challenge` и `project`, `SELECT`, `INSERT`
+миграционные. Runtime-роль получает DML для таблиц `user`, `user_session`, `email_token`, `login_challenge`, `trusted_device` и `project`, `SELECT`, `INSERT`
 и `UPDATE` для `planner_observations` и `USAGE` только для `user_id_seq` и
 `planner_observations_id_seq`; доступ к migration history, созданию временных объектов
 и остальным sequence отсутствует. Все роли должны иметь разные имена и пароли.

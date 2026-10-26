@@ -893,53 +893,23 @@
     vector-effect: non-scaling-stroke;
     stroke-dasharray: 7 5;
 }
-.openingDimensionLabel {
+.openingHeightTags {
+    pointer-events: none;
+}
+.openingHeightTags rect {
+    fill: rgba(255, 253, 250, 0.95);
+    stroke: #87969a;
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+.openingHeightTags text {
     fill: #26343a;
     font-family: var(--font-primary);
     font-weight: 800;
-    paint-order: stroke;
-    stroke: #fffdfa;
-    stroke-width: 7px;
-    stroke-linejoin: round;
-    pointer-events: none;
-}
-.doorWidthLabel {
-    fill: #6b3f27;
-    font-family: var(--font-primary);
-    font-weight: 840;
-    paint-order: stroke;
-    stroke: #fffdfa;
-    stroke-width: 7px;
-    stroke-linejoin: round;
-    pointer-events: none;
-}
-.openingDimensions {
-    pointer-events: none;
-}
-.openingDimensionExtension,
-.openingDimensionLine,
-.openingDimensionTick {
-    fill: none;
-    stroke: #52636a;
-    vector-effect: non-scaling-stroke;
-    shape-rendering: geometricPrecision;
-}
-.openingDimensionExtension {
-    stroke-width: 0.85;
-    stroke-opacity: 0.82;
-}
-.openingDimensionLine,
-.openingDimensionTick {
-    stroke-width: 1.18;
-}
-.openingDimensionKnockout {
-    fill: rgba(255, 253, 250, 0.98);
-}
-.openingDimensionText {
-    fill: #26343a;
-    font-family: var(--font-primary);
-    font-weight: 820;
     letter-spacing: -0.025em;
+}
+.openingHeightTags .openingSillValue {
+    fill: #236ca6;
 }
 .openingGhost {
     pointer-events: none;
@@ -981,16 +951,6 @@
     stroke-width: 3.5;
     stroke-dasharray: 7 4;
     vector-effect: non-scaling-stroke;
-}
-.openingPreviewKnockout {
-    fill: rgba(255, 253, 250, 0.98);
-    stroke: none;
-}
-.openingPreviewText {
-    fill: #26343a;
-    font-family: var(--font-primary);
-    font-weight: 850;
-    letter-spacing: -0.025em;
 }
 .openingGhost.openingInvalid {
     opacity: 0.72;
@@ -2178,9 +2138,7 @@
     .architecturalDimensions,
     .closedBranchDimensions,
     .liveWallDimensions,
-    .openingDimensions,
-    .openingDimensionLabel,
-    .doorWidthLabel {
+    .openingHeightTags {
         display: none;
     }
 }

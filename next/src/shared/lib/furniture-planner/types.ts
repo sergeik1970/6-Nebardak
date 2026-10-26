@@ -189,6 +189,17 @@ export interface FurnitureDefinition {
      * the footprint of base units and only meet walls and each other.
      */
     mounting?: "upper";
+    /**
+     * Standard sizes from the designer's drawings, offered as presets when the
+     * piece is edited by hand. The body stays the default size.
+     */
+    sizes?: FurnitureSize[];
+}
+
+/** Overall plan size in the unrotated furniture frame, in millimetres. */
+export interface FurnitureSize {
+    width: number;
+    depth: number;
 }
 
 export interface FurnitureInstance {
@@ -261,6 +272,8 @@ export interface DoorOpening {
     doorKind?: DoorKind;
     slidingMount?: "inward" | "outward" | "pocket";
     slidingDirection?: "start" | "end";
+    /** Height of the aperture, mm; missing means the standard 2100. */
+    height?: number;
 }
 
 export type DoorKind = "room" | "balcony" | "swing-double" | "sliding-single" | "sliding-double";
@@ -276,6 +289,10 @@ export interface WindowOpening {
     width: number;
     /** Missing in an older draft means an ordinary window with a sill. */
     windowKind?: "standard" | "floor-to-ceiling";
+    /** Height of the aperture, mm; missing means the default for its kind. */
+    height?: number;
+    /** Floor to the bottom of the aperture, mm; a panoramic window has none. */
+    sillHeight?: number;
 }
 
 export interface RadiatorObstacle {

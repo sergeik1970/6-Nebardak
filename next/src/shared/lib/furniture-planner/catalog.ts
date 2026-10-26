@@ -8,6 +8,7 @@ import {
     FurnitureInstance,
     FurnitureSelection,
     FurnitureShape,
+    FurnitureSize,
     RelationTemplate,
     Rotation,
     SchematicFurnitureCatalogSource,
@@ -199,6 +200,13 @@ const schematicSource = (): SchematicFurnitureCatalogSource => ({
     note: "Типовой размер для подбора габаритов; перед покупкой требуется сверка с фактической моделью.",
 });
 
+/**
+ * Standard sizes from the designer's AutoCAD sheets of 2026-10-25: Гардероб.pdf
+ * (dfa0e959…), Диваны.pdf (ce28c6a9…), Кровати.pdf (00f0c983…), Столы
+ * обеденные.pdf (0d345a09…) and Туалетные и рабочие столы.pdf (e68bde22…).
+ */
+const size = (width: number, depth: number): FurnitureSize => ({ width, depth });
+
 export const isSchematicFurnitureSource = (
     source: FurnitureDefinition["source"],
 ): source is SchematicFurnitureCatalogSource =>
@@ -211,7 +219,11 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         shortLabel: "Кровать 1-местная",
         category: "sleep",
         body: rectShape(900, 2000),
-        clearanceZones: [bedSideZone(900, 700, 2000, "Проход у кровати")],
+        // Reached from either long side; the other may stand against a wall.
+        clearanceZones: [
+            bedSideZone(-700, 700, 2000, "Левый проход", "one-of"),
+            bedSideZone(900, 700, 2000, "Правый проход", "one-of"),
+        ],
         rotations: [0, 90, 180, 270],
         equivalentRotationGroups: NO_EQUIVALENT_ROTATIONS,
         placement: wallPlacement(false, true, ["back", "front", "left"], "allowed"),
@@ -220,6 +232,7 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         removalPriority: 90,
         assetKey: "single-bed",
         visualKind: "fabric",
+        sizes: [size(900, 2000), size(1000, 1800)],
         source: designerSource(),
     },
     {
@@ -248,6 +261,7 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         removalPriority: 95,
         assetKey: "double-bed",
         visualKind: "fabric",
+        sizes: [size(1400, 2000), size(1600, 2000), size(1800, 2000)],
         source: designerSource(),
     },
     {
@@ -306,7 +320,7 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
     {
         id: "wardrobe-small",
         label: "Шкаф для одежды, малый",
-        shortLabel: "Шкаф 700 мм",
+        shortLabel: "Шкаф малый",
         category: "storage",
         body: rectShape(700, 500),
         clearanceZones: [frontZone(700, 500, 800), preferredFrontExtension(700, 500, 800, 1000)],
@@ -318,12 +332,13 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         removalPriority: 80,
         assetKey: "wardrobe-small",
         visualKind: "wood",
+        sizes: [size(600, 450), size(700, 500)],
         source: designerSource(),
     },
     {
         id: "wardrobe-medium",
         label: "Шкаф для одежды, средний",
-        shortLabel: "Шкаф 1500 мм",
+        shortLabel: "Шкаф средний",
         category: "storage",
         body: rectShape(1500, 600),
         clearanceZones: [frontZone(1500, 600, 800), preferredFrontExtension(1500, 600, 800, 1000)],
@@ -335,12 +350,13 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         removalPriority: 82,
         assetKey: "wardrobe-medium",
         visualKind: "wood",
+        sizes: [size(900, 600), size(1350, 600), size(1500, 600)],
         source: designerSource(),
     },
     {
         id: "wardrobe-large",
         label: "Шкаф для одежды, большой",
-        shortLabel: "Шкаф 2000 мм",
+        shortLabel: "Шкаф большой",
         category: "storage",
         body: rectShape(2000, 600),
         clearanceZones: [frontZone(2000, 600, 800), preferredFrontExtension(2000, 600, 800, 1000)],
@@ -430,6 +446,7 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         removalPriority: 30,
         assetKey: "dresser",
         visualKind: "wood",
+        sizes: [size(600, 400), size(900, 400)],
         source: designerSource(),
     },
     {
@@ -499,6 +516,7 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         removalPriority: 70,
         assetKey: "sofa-two",
         visualKind: "fabric",
+        sizes: [size(1600, 950), size(1800, 1000), size(2000, 1000)],
         source: designerSource(),
     },
     {
@@ -516,6 +534,7 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         removalPriority: 72,
         assetKey: "sofa-three",
         visualKind: "fabric",
+        sizes: [size(2200, 950), size(2500, 1200), size(2700, 1200)],
         source: designerSource(),
     },
     {
@@ -587,6 +606,7 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         maxCount: 2,
         removalPriority: 55,
         visualKind: "fabric",
+        sizes: [size(800, 790), size(1000, 950)],
         source: schematicSource(),
     },
     {
@@ -603,6 +623,7 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         maxCount: 1,
         removalPriority: 35,
         visualKind: "wood",
+        sizes: [925, 1165, 1325, 1435, 1655, 1875].map((width) => size(width, 400)),
         source: schematicSource(),
     },
     {
@@ -623,34 +644,37 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
     },
 ];
 
-/** Supplied images have no measurements: these envelopes are editable planning defaults. */
+/**
+ * Editable planning defaults. Dining groups include their chairs: the envelopes
+ * are the designer's dashed outlines, measured at the sheet's scale.
+ */
 export const ADDITIONAL_FURNITURE_CATALOG: FurnitureDefinition[] = [
     {
         id: "dining-square-four",
         label: "Квадратный стол и 4 стула",
-        width: 2000,
-        depth: 2000,
+        width: 2340,
+        depth: 2340,
         category: "living" as const,
     },
     {
         id: "dining-round-four",
         label: "Круглый стол и 4 стула",
-        width: 2100,
-        depth: 2100,
+        width: 2260,
+        depth: 2260,
         category: "living" as const,
     },
     {
         id: "dining-oval-six",
         label: "Овальный стол и 6 стульев",
-        width: 2800,
-        depth: 1900,
+        width: 2960,
+        depth: 2090,
         category: "living" as const,
     },
     {
         id: "dining-rect-six",
         label: "Прямоугольный стол и 6 стульев",
-        width: 2800,
-        depth: 1900,
+        width: 3000,
+        depth: 2200,
         category: "living" as const,
     },
     {
@@ -688,7 +712,25 @@ export const ADDITIONAL_FURNITURE_CATALOG: FurnitureDefinition[] = [
         depth: 1600,
         category: "children" as const,
     },
-].map(({ id, label, width, depth, category }) => ({
+    {
+        id: "dressing-table",
+        label: "Туалетный столик",
+        width: 900,
+        depth: 400,
+        category: "work" as const,
+        sizes: [size(900, 350), size(900, 400), size(950, 450), size(1100, 450)],
+    },
+    {
+        id: "sofa-bed",
+        label: "Диван-кровать",
+        width: 2000,
+        depth: 1000,
+        category: "living" as const,
+        sizes: [size(1400, 1000), size(2000, 1000)],
+        // The designer drew the unfolded berth as deep as the sofa itself.
+        frontZone: { depth: 1000, label: "Зона раскладывания" },
+    },
+].map(({ id, label, width, depth, category, sizes, frontZone: front }) => ({
     id,
     label,
     shortLabel: label,
@@ -697,15 +739,20 @@ export const ADDITIONAL_FURNITURE_CATALOG: FurnitureDefinition[] = [
     // Dining dimensions include the chairs; reserve space outside the entire group.
     clearanceZones: id.startsWith("dining-")
         ? allSidesAccessZones(width, depth, 600)
-        : [frontZone(width, depth, 600)],
+        : [
+              front
+                  ? { ...frontZone(width, depth, front.depth), label: front.label }
+                  : frontZone(width, depth, 600),
+          ],
     rotations: [0, 90, 180, 270],
     equivalentRotationGroups: [],
     placement: wallPlacement(true, false, ["back", "right", "left"], "forbidden"),
     relations: [],
     maxCount: id === "child-bed" ? 2 : 1,
     removalPriority: id === "child-bed" ? 80 : 25,
-    visualKind: id === "child-bed" || id === "pet-bed" ? "fabric" : "wood",
+    visualKind: ["child-bed", "pet-bed", "sofa-bed"].includes(id) ? "fabric" : "wood",
     source: schematicSource(),
+    ...(sizes ? { sizes } : {}),
 }));
 
 FURNITURE_CATALOG.push(...ADDITIONAL_FURNITURE_CATALOG);

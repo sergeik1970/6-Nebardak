@@ -1,44 +1,39 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-    FURNITURE_CATALOG,
     getRotatedGeometry,
     type DrawWallSegment,
-    type FurnitureCategory,
+    type FurnitureDefinition,
     type Rotation,
     type Rect,
 } from "@/shared/lib/furniture-planner";
 import {
     furnitureBelongsToRoom,
-    furnitureCategoryOrder,
     furnitureDefinition,
     furnitureError,
     furnitureConflicts,
     furnitureWallDistances,
     furnitureGeometry,
+    furniturePassages,
+    passageBlocked,
     rotatedFurnitureCandidates,
     snapFurnitureToWalls,
     type DrawFurniture,
     type FurnitureRoom,
 } from "./furniture";
-import styles from "./furniture.module.scss";
-import FurniturePhoto from "@/shared/components/FurniturePhoto";
 import {
-    getFurniturePhoto,
-    getFurniturePhotos,
-} from "@/shared/lib/furniture-planner/furniture-photos";
+    FURNITURE_MENU,
+    furnitureMenuOrder,
+    menuGroupDefinitions,
+    searchFurnitureMenu,
+} from "./catalog-menu";
+import styles from "./furniture.module.scss";
+import FurnitureSymbol, { FurnitureThumbnail } from "./FurnitureSymbol";
 import { isSchematicFurnitureSource } from "@/shared/lib/furniture-planner/catalog";
 
-const categories: Record<FurnitureCategory, string> = {
-    sleep: "Кровати",
-    living: "Гостиная",
-    storage: "Хранение",
-    work: "Рабочее место",
-    media: "ТВ",
-    children: "Детская",
-    kitchen: "Кухня",
-};
 const snap = (n: number) => Math.round(n / 10) * 10;
+/** The rail's last row: arranging what already stands in the room. */
+const AUTO_LAYOUT = "auto-layout";
 export default function FurnitureEditor({
     boardRef,
     active,
@@ -64,7 +59,7 @@ export default function FurnitureEditor({
     radiatorObstacles: readonly Rect[];
     /** The result step shows every piece at full strength, read-only. */
     presented?: boolean;
-    /** «Подобрать расстановку» for the room, shown while nothing is in hand. */
+    /** «Авторасстановка» for the room, the catalogue rail's last row. */
     autoLayout?: React.ReactNode;
     /** Pieces are placed in this room only; others' furniture stays a quiet layer. */
     room: FurnitureRoom | null;
@@ -76,6 +71,7 @@ export default function FurnitureEditor({
     const [reposition, setReposition] = useState<DrawFurniture | null>(null);
     const [preview, setPreview] = useState<DrawFurniture | null>(null);
     const [query, setQuery] = useState("");
+    const [section, setSection] = useState<string | null>(null);
     const [message, setMessage] = useState("");
     const drag = useRef<{ initial: DrawFurniture; start: DOMPoint; last: DrawFurniture } | null>(
         null,
@@ -96,6 +92,7 @@ export default function FurnitureEditor({
             setPending(null);
             setPreview(null);
             setMessage("");
+            setSection(null);
             drag.current = null;
         }
     }, [active]);
@@ -215,6 +212,7 @@ export default function FurnitureEditor({
             if (event.key === "Escape") {
                 event.stopImmediatePropagation();
                 drag.current = null;
+                setSection(null);
                 setPreview(null);
                 setPending(null);
                 setSelectedId(null);
@@ -278,7 +276,6 @@ export default function FurnitureEditor({
     const symbol = (item: DrawFurniture, ghost = false) => {
         const geometry = furnitureGeometry(item);
         const definition = furnitureDefinition(item.definitionId)!;
-        const photo = getFurniturePhoto(item.definitionId, item.photoId);
         const own = ghost || inRoom(item);
         // Another room's furniture is judged on its own ground, not this room's.
         const invalid = Boolean(
@@ -389,85 +386,13 @@ export default function FurnitureEditor({
                     {definition.label} · {item.width} × {item.depth} мм
                 </title>
                 <g transform={transform}>
-                    {baseGeometry.bodyRects.map((rect, i) => (
-                        <g key={i}>
-                            <rect
-                                x={rect.x}
-                                y={rect.y}
-                                width={rect.width}
-                                height={rect.depth}
-                                rx={20}
-                            />
-                            {!photo &&
-                                (definition.category === "sleep" ||
-                                    definition.category === "living") && (
-                                    <rect
-                                        x={rect.x + rect.width * 0.12}
-                                        y={rect.y + rect.depth * 0.1}
-                                        width={rect.width * 0.76}
-                                        height={rect.depth * 0.2}
-                                        rx={30}
-                                        className={styles.detail}
-                                    />
-                                )}
-                            {!photo && definition.id === "kitchen-sink" && (
-                                <rect
-                                    x={rect.x + rect.width * 0.15}
-                                    y={rect.y + rect.depth * 0.2}
-                                    width={rect.width * 0.7}
-                                    height={rect.depth * 0.55}
-                                    rx={60}
-                                    className={styles.detail}
-                                />
-                            )}
-                            {!photo &&
-                                definition.id === "kitchen-cooker" &&
-                                [0.3, 0.7].flatMap((fx) =>
-                                    [0.3, 0.7].map((fy) => (
-                                        <circle
-                                            key={`${fx}-${fy}`}
-                                            cx={rect.x + rect.width * fx}
-                                            cy={rect.y + rect.depth * fy}
-                                            r={Math.min(rect.width, rect.depth) * 0.13}
-                                            className={styles.detail}
-                                        />
-                                    )),
-                                )}
-                            {!photo &&
-                                (definition.mounting === "upper" ||
-                                    [
-                                        "kitchen-fridge",
-                                        "kitchen-fridge-wide",
-                                        "kitchen-tall",
-                                    ].includes(definition.id)) && (
-                                    // Tall and upper units are crossed, as on a kitchen plan.
-                                    <path
-                                        d={`M ${rect.x} ${rect.y} L ${rect.x + rect.width} ${rect.y + rect.depth} M ${rect.x + rect.width} ${rect.y} L ${rect.x} ${rect.y + rect.depth}`}
-                                    />
-                                )}
-                            {!photo && definition.category === "storage" && (
-                                <path
-                                    d={`M ${rect.x + rect.width / 2} ${rect.y} v ${rect.depth}`}
-                                />
-                            )}
-                        </g>
-                    ))}
-                    {photo && (
-                        <svg width={item.width} height={item.depth} overflow="visible">
-                            <FurniturePhoto photo={photo} />
-                        </svg>
-                    )}
+                    <FurnitureSymbol
+                        definitionId={item.definitionId}
+                        rects={baseGeometry.bodyRects}
+                        width={baseGeometry.width}
+                        depth={baseGeometry.depth}
+                    />
                 </g>
-                {(!photo || (active && selectedId === item.id)) && (
-                    <text
-                        x={geometry.width / 2}
-                        y={geometry.depth * 0.62}
-                        fontSize={Math.min(120, geometry.width / 9, geometry.depth / 5)}
-                        textAnchor="middle"
-                    >
-                        {definition.shortLabel}
-                    </text>
-                )}
                 {active &&
                     own &&
                     // Upper units overlie base units: their sizes show when selected.
@@ -506,6 +431,39 @@ export default function FurnitureEditor({
               radiatorObstacles,
           )
         : [];
+    // What stands on the plan right now, the piece being moved where it is moved to.
+    const shown = [
+        ...items.map((item) =>
+            preview?.id === item.id && !pending
+                ? preview
+                : reposition?.id === item.id && selectedId === item.id
+                  ? reposition
+                  : item,
+        ),
+        ...(pending && preview ? [preview] : []),
+    ];
+    // Passages are a warning, not a ban: shown for the room's every piece.
+    const passages = active ? furniturePassages(shown.filter(inRoom), walls, thickness) : [];
+    const passageWarnings = inspected
+        ? passages
+              .filter(passageBlocked)
+              .filter(
+                  (passage) =>
+                      passage.itemId === inspected.id ||
+                      furnitureGeometry(inspected).bodyRects.some(
+                          (body) =>
+                              body.x + inspected.x < passage.rect.x + passage.rect.width &&
+                              body.x + inspected.x + body.width > passage.rect.x &&
+                              body.y + inspected.y < passage.rect.y + passage.rect.depth &&
+                              body.y + inspected.y + body.depth > passage.rect.y,
+                      ),
+              )
+              .map((passage) => {
+                  const owner = shown.find((item) => item.id === passage.itemId);
+                  const name = owner ? furnitureDefinition(owner.definitionId)?.label : "";
+                  return `${passage.label}${passage.itemId === inspected.id ? "" : ` у «${name}»`}: свободно ${Math.round(passage.free / 10)} см из ${Math.round(passage.need / 10)}.`;
+              })
+        : [];
     const distances =
         selected && !pending && !preview && !reposition
             ? furnitureWallDistances(selected, walls, thickness)
@@ -514,11 +472,72 @@ export default function FurnitureEditor({
     const screenUnit = 1 / (board?.getScreenCTM()?.a || 0.1);
     const layerHost =
         board?.querySelector<SVGGElement>("[data-draw-furniture-host='true']") ?? board;
+    const openSection = FURNITURE_MENU.find((menuSection) => menuSection.id === section);
+    const autoLayoutOpen = section === AUTO_LAYOUT && Boolean(autoLayout);
+    const flyoutOpen = Boolean(query.trim() || openSection || autoLayoutOpen);
+    const furnitureButton = (definition: FurnitureDefinition) => {
+        const geometry = getRotatedGeometry(definition, 0);
+        return (
+            <button
+                key={definition.id}
+                type="button"
+                className={styles.railButton}
+                data-add-furniture={definition.id}
+                aria-pressed={pending?.definitionId === definition.id}
+                onClick={() => {
+                    setPending({
+                        id: "pending",
+                        definitionId: definition.id,
+                        x: 0,
+                        y: 0,
+                        width: geometry.width,
+                        depth: geometry.depth,
+                        rotation: 0,
+                    });
+                    setSelectedId(null);
+                    setReposition(null);
+                    setPreview(null);
+                    setMessage("");
+                    // The menu and the search step aside once a piece is chosen, as in Remplanner.
+                    setSection(null);
+                    setQuery("");
+                }}
+            >
+                <FurnitureThumbnail definition={definition} />
+                <span className={styles.railCopy}>
+                    <b>{definition.label}</b>
+                    <small>
+                        {geometry.width} × {geometry.depth} мм
+                    </small>
+                </span>
+            </button>
+        );
+    };
     return (
         <>
             {layerHost &&
                 createPortal(
                     <g data-draw-furniture-layer="true">
+                        <g pointerEvents="none" aria-hidden="true" data-furniture-passages="true">
+                            {passages.map((passage, index) => {
+                                const blocked = passageBlocked(passage);
+                                return (
+                                    <g
+                                        key={`${passage.itemId}-${index}`}
+                                        className={styles.passage}
+                                        data-furniture-passage={passage.itemId}
+                                        data-passage-blocked={blocked}
+                                    >
+                                        <rect
+                                            x={passage.rect.x}
+                                            y={passage.rect.y}
+                                            width={passage.rect.width}
+                                            height={passage.rect.depth}
+                                        />
+                                    </g>
+                                );
+                            })}
+                        </g>
                         {[...items]
                             .sort(
                                 (first, second) =>
@@ -541,6 +560,23 @@ export default function FurnitureEditor({
                                 ),
                             )}
                         {pending && preview && symbol(preview, true)}
+                        {/* What is left of a blocked passage reads over the pieces in it. */}
+                        <g pointerEvents="none" aria-hidden="true" className={styles.passage}>
+                            {passages.filter(passageBlocked).map((passage, index) => (
+                                <text
+                                    key={`${passage.itemId}-${index}`}
+                                    data-furniture-passage-free={passage.itemId}
+                                    x={passage.rect.x + passage.rect.width / 2}
+                                    y={passage.rect.y + passage.rect.depth / 2}
+                                    fontSize={11 * screenUnit}
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                >
+                                    {Math.round(passage.free / 10)} из{" "}
+                                    {Math.round(passage.need / 10)} см
+                                </text>
+                            ))}
+                        </g>
                         <g pointerEvents="none" aria-hidden="true" data-furniture-conflicts="true">
                             {conflicts.map((conflict, index) => (
                                 <rect
@@ -593,153 +629,265 @@ export default function FurnitureEditor({
                 )}
             {active && (
                 <aside
-                    className={styles.panel}
+                    className={styles.furniture}
                     aria-label="Мебель на чертеже"
                     data-editing={Boolean(editing)}
+                    data-flyout-open={flyoutOpen}
+                    data-section-open={Boolean((openSection || autoLayoutOpen) && !query.trim())}
+                    data-searching={Boolean(query.trim())}
                     onPointerDown={(event) => event.stopPropagation()}
                 >
-                    <header>
-                        <b>{room ? room.name : "Мебель"}</b>
-                        {editing ? (
+                    {/* Sections in a dark rail, like the doors and windows step. */}
+                    <nav
+                        className={styles.rail}
+                        aria-label="Разделы каталога"
+                        data-open={Boolean(openSection || autoLayoutOpen || query.trim())}
+                    >
+                        <span className={styles.railIntro} data-furniture-room>
+                            {room ? room.name : "Каталог мебели"}
+                        </span>
+                        {/* The magnifier shows in the folded rail; the field opens with it. */}
+                        <label className={styles.railSearch}>
+                            <svg
+                                className={styles.thumbnail}
+                                viewBox="0 0 26 26"
+                                aria-hidden="true"
+                            >
+                                <circle cx="11" cy="11" r="7" />
+                                <path d="m16 16 6 6" />
+                            </svg>
+                            <input
+                                aria-label="Поиск мебели"
+                                placeholder="Найти мебель"
+                                value={query}
+                                onChange={(event) => {
+                                    setQuery(event.target.value);
+                                    setSection(null);
+                                }}
+                            />
+                        </label>
+                        {furnitureMenuOrder(room?.kind).map((menuSection) => (
                             <button
+                                key={menuSection.id}
                                 type="button"
+                                className={styles.railButton}
+                                data-furniture-section={menuSection.id}
+                                data-furniture-section-items={menuSection.groups
+                                    .flatMap((group) => group.ids)
+                                    .join(" ")}
+                                aria-expanded={openSection?.id === menuSection.id}
                                 onClick={() => {
-                                    setPending(null);
-                                    setSelectedId(null);
-                                    setReposition(null);
-                                    setPreview(null);
-                                    setMessage("");
+                                    setQuery("");
+                                    setSection(
+                                        openSection?.id === menuSection.id ? null : menuSection.id,
+                                    );
                                 }}
                             >
-                                Каталог
+                                <FurnitureThumbnail
+                                    definition={furnitureDefinition(menuSection.icon)!}
+                                />
+                                <span className={styles.railCopy}>
+                                    <b>{menuSection.label}</b>
+                                    <small>
+                                        {menuSection.groups.map((group) => group.label).join(", ")}
+                                    </small>
+                                </span>
                             </button>
-                        ) : (
-                            <span>{items.filter(inRoom).length} в комнате</span>
+                        ))}
+                        {autoLayout && (
+                            <button
+                                type="button"
+                                className={styles.railButton}
+                                data-furniture-auto-layout
+                                aria-expanded={autoLayoutOpen}
+                                onClick={() => {
+                                    setQuery("");
+                                    setSection(autoLayoutOpen ? null : AUTO_LAYOUT);
+                                }}
+                            >
+                                <svg
+                                    className={styles.thumbnail}
+                                    viewBox="0 0 26 26"
+                                    aria-hidden="true"
+                                >
+                                    <path d="M4 22 16 10M14 8l4 4" />
+                                    <path d="M19 2.5v4M17 4.5h4M22.5 10v3M21 11.5h3M9.5 3v3M8 4.5h3" />
+                                </svg>
+                                <span className={styles.railCopy}>
+                                    <b>Авторасстановка</b>
+                                    <small>Переставить мебель этой комнаты</small>
+                                </span>
+                            </button>
                         )}
-                    </header>
-                    {!editing && autoLayout}
-                    {editing && (
-                        <section className={styles.properties}>
-                            <b>{furnitureDefinition(editing.definitionId)?.label}</b>
-                            {isSchematicFurnitureSource(
-                                furnitureDefinition(editing.definitionId)!.source,
-                            ) && (
-                                <small>
-                                    Типовые габариты. Уточните размеры вашего предмета
-                                    {editing.definitionId.startsWith("dining-")
-                                        ? ": вместе со стульями"
-                                        : ""}
-                                    .
-                                </small>
-                            )}
-                            {getFurniturePhotos(editing.definitionId).length > 0 && (
-                                <div className={styles.variants} aria-label="Варианты изображения">
-                                    {getFurniturePhotos(editing.definitionId).map(
-                                        (photo, index) => (
-                                            <button
-                                                key={photo.id}
-                                                type="button"
-                                                aria-label={`Вариант ${index + 1}`}
-                                                disabled={Boolean(editing.locked)}
-                                                aria-pressed={
-                                                    getFurniturePhoto(
-                                                        editing.definitionId,
-                                                        editing.photoId,
-                                                    )?.id === photo.id
-                                                }
-                                                onClick={() => {
-                                                    const next = { ...editing, photoId: photo.id };
-                                                    if (pending) {
-                                                        setPending(next);
-                                                        setPreview(null);
-                                                    } else update(next);
-                                                }}
-                                            >
-                                                <FurniturePhoto photo={photo} fit />
-                                            </button>
-                                        ),
-                                    )}
-                                </div>
-                            )}
-                            <div className={styles.sizes}>
-                                {(["width", "depth"] as const).map((field) => (
-                                    <label key={`${editing.id}-${field}`}>
-                                        {field === "width" ? "Ширина, мм" : "Глубина, мм"}
-                                        <input
-                                            key={`${editing.id}-${editing[field]}`}
-                                            type="number"
-                                            min={10}
-                                            max={10000}
-                                            step={10}
-                                            disabled={Boolean(editing.locked)}
-                                            defaultValue={editing[field]}
-                                            onBlur={(event) => {
-                                                const value = Number(event.target.value);
-                                                if (
-                                                    !Number.isFinite(value) ||
-                                                    value < 10 ||
-                                                    value > 10000
-                                                ) {
-                                                    event.target.value = String(editing[field]);
-                                                    return;
-                                                }
-                                                const next = { ...editing, [field]: value };
-                                                if (pending) {
-                                                    setPending(next);
-                                                    setPreview(null);
-                                                } else {
-                                                    update(next);
-                                                    if (error(next))
-                                                        event.target.value = String(editing[field]);
-                                                }
-                                            }}
-                                            onKeyDown={(event) => {
-                                                if (event.key === "Enter")
-                                                    event.currentTarget.blur();
-                                            }}
-                                        />
-                                    </label>
+                    </nav>
+                    {query.trim() ? (
+                        <div
+                            className={styles.flyout}
+                            role="region"
+                            aria-label="Найденная мебель"
+                            data-furniture-search
+                        >
+                            <header>
+                                <b>Поиск</b>
+                                <button
+                                    type="button"
+                                    aria-label="Закрыть поиск"
+                                    onClick={() => setQuery("")}
+                                >
+                                    ×
+                                </button>
+                            </header>
+                            {searchFurnitureMenu(query).map(furnitureButton)}
+                            {searchFurnitureMenu(query).length === 0 && <p>Ничего не найдено.</p>}
+                        </div>
+                    ) : autoLayoutOpen ? (
+                        <div
+                            className={styles.flyout}
+                            role="region"
+                            aria-label="Авторасстановка"
+                            data-furniture-flyout={AUTO_LAYOUT}
+                        >
+                            <header>
+                                <b>Авторасстановка</b>
+                                <button
+                                    type="button"
+                                    aria-label="Закрыть раздел"
+                                    onClick={() => setSection(null)}
+                                >
+                                    ×
+                                </button>
+                            </header>
+                            {autoLayout}
+                        </div>
+                    ) : (
+                        openSection && (
+                            // Like Remplanner: the section's groups open beside the rail.
+                            <div
+                                className={styles.flyout}
+                                role="region"
+                                aria-label={openSection.label}
+                                data-furniture-flyout={openSection.id}
+                            >
+                                <header>
+                                    <b>{openSection.label}</b>
+                                    <button
+                                        type="button"
+                                        aria-label="Закрыть раздел"
+                                        onClick={() => setSection(null)}
+                                    >
+                                        ×
+                                    </button>
+                                </header>
+                                {openSection.groups.map((group) => (
+                                    <section key={group.label}>
+                                        <h3>{group.label}</h3>
+                                        {menuGroupDefinitions(group).map(furnitureButton)}
+                                    </section>
                                 ))}
                             </div>
-                            {distances.length > 0 && (
-                                <fieldset className={styles.distances}>
-                                    <legend>До стен, мм</legend>
+                        )
+                    )}
+                    {/* The piece's parameters, as Remplanner shows them: only while one is chosen. */}
+                    {editing ? (
+                        <div className={styles.panel}>
+                            <header>
+                                <b>{furnitureDefinition(editing.definitionId)?.label}</b>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setPending(null);
+                                        setSelectedId(null);
+                                        setReposition(null);
+                                        setPreview(null);
+                                        setMessage("");
+                                    }}
+                                >
+                                    Каталог
+                                </button>
+                            </header>
+                            {editing && (
+                                <section className={styles.properties}>
+                                    {isSchematicFurnitureSource(
+                                        furnitureDefinition(editing.definitionId)!.source,
+                                    ) && (
+                                        <small>
+                                            Типовые габариты. Уточните размеры вашего предмета
+                                            {editing.definitionId.startsWith("dining-")
+                                                ? ": вместе со стульями"
+                                                : ""}
+                                            .
+                                        </small>
+                                    )}
+                                    {furnitureDefinition(editing.definitionId)?.sizes && (
+                                        <div
+                                            className={styles.presets}
+                                            role="group"
+                                            aria-label="Типовые размеры"
+                                        >
+                                            {furnitureDefinition(editing.definitionId)!.sizes!.map(
+                                                ({ width, depth }) => (
+                                                    <button
+                                                        key={`${width}x${depth}`}
+                                                        type="button"
+                                                        data-furniture-preset={`${width}x${depth}`}
+                                                        disabled={Boolean(editing.locked)}
+                                                        aria-pressed={
+                                                            editing.width === width &&
+                                                            editing.depth === depth
+                                                        }
+                                                        onClick={() => {
+                                                            const next = {
+                                                                ...editing,
+                                                                width,
+                                                                depth,
+                                                            };
+                                                            if (pending) {
+                                                                setPending(next);
+                                                                setPreview(null);
+                                                            } else update(next);
+                                                        }}
+                                                    >
+                                                        {width} × {depth}
+                                                    </button>
+                                                ),
+                                            )}
+                                        </div>
+                                    )}
                                     <div className={styles.sizes}>
-                                        {distances.map((entry) => (
-                                            <label key={entry.side}>
-                                                {sideLabels[entry.side]}
+                                        {(["width", "depth"] as const).map((field) => (
+                                            <label key={`${editing.id}-${field}`}>
+                                                {field === "width" ? "Ширина, мм" : "Глубина, мм"}
                                                 <input
-                                                    aria-label={`До стены ${sideLabels[entry.side].toLowerCase()}, мм`}
-                                                    key={`${selected!.id}-${entry.distance}-${entry.side}`}
+                                                    key={`${editing.id}-${editing[field]}`}
                                                     type="number"
-                                                    disabled={Boolean(editing.locked)}
-                                                    min={0}
+                                                    min={10}
+                                                    max={10000}
                                                     step={10}
-                                                    defaultValue={Math.round(entry.distance)}
+                                                    disabled={Boolean(editing.locked)}
+                                                    defaultValue={editing[field]}
                                                     onBlur={(event) => {
                                                         const value = Number(event.target.value);
                                                         if (
-                                                            !event.target.value.trim() ||
                                                             !Number.isFinite(value) ||
-                                                            value < 0
+                                                            value < 10 ||
+                                                            value > 10000
                                                         ) {
                                                             event.target.value = String(
-                                                                Math.round(entry.distance),
+                                                                editing[field],
                                                             );
                                                             return;
                                                         }
-                                                        const next = {
-                                                            ...selected!,
-                                                            [entry.axis]:
-                                                                selected![entry.axis] +
-                                                                entry.direction *
-                                                                    (value - entry.distance),
-                                                        };
-                                                        update(next);
-                                                        if (error(next))
-                                                            event.target.value = String(
-                                                                Math.round(entry.distance),
-                                                            );
+                                                        const next = { ...editing, [field]: value };
+                                                        if (pending) {
+                                                            setPending(next);
+                                                            setPreview(null);
+                                                        } else {
+                                                            update(next);
+                                                            if (error(next))
+                                                                event.target.value = String(
+                                                                    editing[field],
+                                                                );
+                                                        }
                                                     }}
                                                     onKeyDown={(event) => {
                                                         if (event.key === "Enter")
@@ -749,148 +897,151 @@ export default function FurnitureEditor({
                                             </label>
                                         ))}
                                     </div>
-                                </fieldset>
-                            )}
-                            <div className={styles.actions}>
-                                <button onClick={rotate} disabled={Boolean(editing.locked)}>
-                                    Повернуть ↻
-                                </button>
-                                <button
-                                    disabled={Boolean(editing.locked)}
-                                    onClick={() => {
-                                        if (pending) setPending(null);
-                                        else
-                                            onChange(
-                                                items.filter((item) => item.id !== selectedId),
-                                            );
-                                        setSelectedId(null);
-                                        setReposition(null);
-                                        setPreview(null);
-                                    }}
-                                >
-                                    {pending ? "Отменить" : "Удалить"}
-                                </button>
-                            </div>
-                            {!pending && (
-                                <div className={styles.actions}>
-                                    <button
-                                        onClick={() => {
-                                            setPending({
-                                                ...editing,
-                                                id: "pending-copy",
-                                                locked: false,
-                                            });
-                                            setSelectedId(null);
-                                            setReposition(null);
-                                            setPreview(null);
-                                            setMessage(
-                                                "Копия готова. Укажите свободное место на плане. Esc — отмена.",
-                                            );
-                                        }}
-                                    >
-                                        Копировать
-                                    </button>
-                                    <button
-                                        aria-pressed={Boolean(editing.locked)}
-                                        disabled={Boolean(reposition)}
-                                        onClick={() => {
-                                            onChange(
-                                                items.map((item) =>
-                                                    item.id === editing.id
-                                                        ? { ...item, locked: !item.locked }
-                                                        : item,
-                                                ),
-                                            );
-                                            setMessage(
-                                                editing.locked
-                                                    ? "Предмет разблокирован."
-                                                    : "Предмет закреплён. Его нельзя случайно сдвинуть или удалить.",
-                                            );
-                                        }}
-                                    >
-                                        {editing.locked ? "Разблокировать" : "Закрепить"}
-                                    </button>
-                                </div>
-                            )}
-                        </section>
-                    )}
-                    <p role="status">
-                        {message ||
-                            (pending
-                                ? "Щёлкните по свободному месту. У стены предмет прилипнет к ней. R — поворот, Shift — несколько, Esc — отмена."
-                                : room
-                                  ? "Выберите предмет и укажите место в комнате. Shift — поставить несколько. Другая комната — нажмите на неё на плане."
-                                  : "Выберите предмет и укажите место на плане. Мебель можно перетаскивать мышью.")}
-                    </p>
-                    <input
-                        aria-label="Поиск мебели"
-                        placeholder="Найти мебель"
-                        value={query}
-                        onChange={(event) => setQuery(event.target.value)}
-                    />
-                    <div className={styles.catalog}>
-                        {furnitureCategoryOrder(
-                            Object.keys(categories) as FurnitureCategory[],
-                            room?.kind,
-                        ).map((category) => {
-                            const label = categories[category];
-                            const definitions = FURNITURE_CATALOG.filter(
-                                (item) =>
-                                    item.category === category &&
-                                    item.label.toLowerCase().includes(query.toLowerCase()),
-                            );
-                            return definitions.length ? (
-                                <section key={category}>
-                                    <h3>{label}</h3>
-                                    {definitions.map((definition) => {
-                                        const geometry = getRotatedGeometry(definition, 0);
-                                        return (
+                                    {distances.length > 0 && (
+                                        <fieldset className={styles.distances}>
+                                            <legend>До стен, мм</legend>
+                                            <div className={styles.sizes}>
+                                                {distances.map((entry) => (
+                                                    <label key={entry.side}>
+                                                        {sideLabels[entry.side]}
+                                                        <input
+                                                            aria-label={`До стены ${sideLabels[entry.side].toLowerCase()}, мм`}
+                                                            key={`${selected!.id}-${entry.distance}-${entry.side}`}
+                                                            type="number"
+                                                            disabled={Boolean(editing.locked)}
+                                                            min={0}
+                                                            step={10}
+                                                            defaultValue={Math.round(
+                                                                entry.distance,
+                                                            )}
+                                                            onBlur={(event) => {
+                                                                const value = Number(
+                                                                    event.target.value,
+                                                                );
+                                                                if (
+                                                                    !event.target.value.trim() ||
+                                                                    !Number.isFinite(value) ||
+                                                                    value < 0
+                                                                ) {
+                                                                    event.target.value = String(
+                                                                        Math.round(entry.distance),
+                                                                    );
+                                                                    return;
+                                                                }
+                                                                const next = {
+                                                                    ...selected!,
+                                                                    [entry.axis]:
+                                                                        selected![entry.axis] +
+                                                                        entry.direction *
+                                                                            (value -
+                                                                                entry.distance),
+                                                                };
+                                                                update(next);
+                                                                if (error(next))
+                                                                    event.target.value = String(
+                                                                        Math.round(entry.distance),
+                                                                    );
+                                                            }}
+                                                            onKeyDown={(event) => {
+                                                                if (event.key === "Enter")
+                                                                    event.currentTarget.blur();
+                                                            }}
+                                                        />
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </fieldset>
+                                    )}
+                                    <div className={styles.actions}>
+                                        <button onClick={rotate} disabled={Boolean(editing.locked)}>
+                                            Повернуть ↻
+                                        </button>
+                                        <button
+                                            disabled={Boolean(editing.locked)}
+                                            onClick={() => {
+                                                if (pending) setPending(null);
+                                                else
+                                                    onChange(
+                                                        items.filter(
+                                                            (item) => item.id !== selectedId,
+                                                        ),
+                                                    );
+                                                setSelectedId(null);
+                                                setReposition(null);
+                                                setPreview(null);
+                                            }}
+                                        >
+                                            {pending ? "Отменить" : "Удалить"}
+                                        </button>
+                                    </div>
+                                    {!pending && (
+                                        <div className={styles.actions}>
                                             <button
-                                                key={definition.id}
-                                                data-add-furniture={definition.id}
-                                                aria-pressed={
-                                                    pending?.definitionId === definition.id
-                                                }
                                                 onClick={() => {
                                                     setPending({
-                                                        id: "pending",
-                                                        definitionId: definition.id,
-                                                        x: 0,
-                                                        y: 0,
-                                                        width: geometry.width,
-                                                        depth: geometry.depth,
-                                                        rotation: 0,
+                                                        ...editing,
+                                                        id: "pending-copy",
+                                                        locked: false,
                                                     });
                                                     setSelectedId(null);
                                                     setReposition(null);
                                                     setPreview(null);
-                                                    setMessage("");
+                                                    setMessage(
+                                                        "Копия готова. Укажите свободное место на плане. Esc — отмена.",
+                                                    );
                                                 }}
                                             >
-                                                {getFurniturePhoto(definition.id) && (
-                                                    <span className={styles.thumbnail}>
-                                                        <FurniturePhoto
-                                                            photo={
-                                                                getFurniturePhoto(definition.id)!
-                                                            }
-                                                            fit
-                                                        />
-                                                    </span>
-                                                )}
-                                                <span>{definition.label}</span>
-                                                <small>
-                                                    {geometry.width} × {geometry.depth} мм
-                                                    {isSchematicFurnitureSource(definition.source)
-                                                        ? " · типовые"
-                                                        : ""}
-                                                </small>
+                                                Копировать
                                             </button>
-                                        );
-                                    })}
+                                            <button
+                                                aria-pressed={Boolean(editing.locked)}
+                                                disabled={Boolean(reposition)}
+                                                onClick={() => {
+                                                    onChange(
+                                                        items.map((item) =>
+                                                            item.id === editing.id
+                                                                ? { ...item, locked: !item.locked }
+                                                                : item,
+                                                        ),
+                                                    );
+                                                    setMessage(
+                                                        editing.locked
+                                                            ? "Предмет разблокирован."
+                                                            : "Предмет закреплён. Его нельзя случайно сдвинуть или удалить.",
+                                                    );
+                                                }}
+                                            >
+                                                {editing.locked ? "Разблокировать" : "Закрепить"}
+                                            </button>
+                                        </div>
+                                    )}
                                 </section>
-                            ) : null;
-                        })}
-                    </div>
+                            )}
+                            {passageWarnings.length > 0 && (
+                                <ul
+                                    className={styles.passageWarnings}
+                                    data-furniture-passage-warning
+                                >
+                                    {passageWarnings.map((warning) => (
+                                        <li key={warning}>{warning}</li>
+                                    ))}
+                                </ul>
+                            )}
+                            <p role="status">
+                                {message ||
+                                    (pending
+                                        ? "Щёлкните по свободному месту. У стены предмет прилипнет к ней. R — поворот, Shift — несколько, Esc — отмена."
+                                        : "Потяните предмет, чтобы переместить. Delete — удалить, R — повернуть.")}
+                            </p>
+                        </div>
+                    ) : (
+                        // Nothing chosen: a note such as «вне комнаты» shows over the drawing.
+                        message && (
+                            <p role="status" className={styles.toast}>
+                                {message}
+                            </p>
+                        )
+                    )}
                 </aside>
             )}
         </>

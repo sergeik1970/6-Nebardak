@@ -1,10 +1,12 @@
+// The chosen piece's parameters, on the right as in Remplanner.
 .panel {
     position: absolute;
-    z-index: 5;
-    top: 100px;
-    left: 82px;
-    bottom: 32px;
-    width: 250px;
+    z-index: 1;
+    top: 102px;
+    right: 14px;
+    max-height: calc(100% - 132px);
+    width: 260px;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -13,6 +15,7 @@
     border: 1px solid #c8cfce;
     border-radius: 8px;
     box-shadow: 0 6px 24px #26343220;
+    overflow-y: auto;
     color: #273738;
     font-size: 13px;
     header {
@@ -57,24 +60,8 @@
     }
     button:hover,
     button[aria-pressed="true"] {
-        background: #e5f2ec;
-        border-color: #378064;
-    }
-}
-.catalog {
-    overflow-y: auto;
-    min-height: 60px;
-    flex: 1;
-    h3 {
-        font-size: 12px;
-        margin: 14px 0 6px;
-    }
-    button {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        width: 100%;
-        margin-bottom: 5px;
+        background: #fff0da;
+        border-color: var(--draw-orange);
     }
 }
 .properties {
@@ -110,18 +97,27 @@
     font-weight: 850;
     pointer-events: none;
 }
+// Plan symbols in lines on white, as on a drawing.
 .item {
     cursor: grab;
-    fill: #ede7db;
-    stroke: #626e68;
-    stroke-width: 1.5;
+    fill: #fffefb;
+    stroke: #3e4b47;
+    stroke-width: 1;
+    stroke-linejoin: round;
     touch-action: none;
     rect,
-    path {
+    path,
+    circle,
+    ellipse,
+    polygon {
         vector-effect: non-scaling-stroke;
     }
     path {
         fill: none;
+    }
+    [data-symbol-hit] {
+        fill: transparent;
+        stroke: none;
     }
     text {
         fill: #394c45;
@@ -142,52 +138,18 @@
         stroke-dasharray: 6 4;
     }
 }
-.detail {
-    fill: #fffdf7;
-}
-.thumbnail {
-    display: block;
-    width: 100%;
-    height: 86px;
-}
-.variants {
+// Standard sizes from the designer's drawings, one tap each.
+.presets {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
     button {
-        flex: 1;
-        min-width: 0;
-        height: 68px;
-        padding: 4px;
+        min-height: 32px;
+        padding: 4px 8px;
+        font-size: 12px;
     }
 }
 @media (max-width: 700px) {
-    .panel {
-        top: auto;
-        bottom: 44px;
-        left: 8px;
-        right: 8px;
-        width: auto;
-        max-height: 38%;
-        padding: 10px;
-        gap: 8px;
-    }
-    .catalog {
-        min-height: 45px;
-    }
-    .properties {
-        gap: 6px;
-    }
-}
-
-@media (max-width: 700px) {
-    .panel[data-editing="true"] {
-        max-height: 46%;
-        overflow-y: auto;
-    }
-    .panel[data-editing="true"] .catalog,
-    .panel[data-editing="true"] > input {
-        display: none;
-    }
     .panel header button {
         min-height: 32px;
         padding: 5px 8px;
@@ -217,68 +179,59 @@
     cursor: not-allowed;
 }
 
+// «Авторасстановка» in the graphite column beside the catalogue rail.
 .autoLayout {
-    border: 1px solid #d9cdbb;
-    border-radius: 6px;
-    background: #fffaf2;
-}
-.autoLayoutToggle {
-    width: 100%;
-    min-height: 36px;
-    border: 0;
-    background: transparent;
-    color: #8a4900;
-    font-weight: 760;
-    text-align: left;
-    cursor: pointer;
-    padding: 0 10px;
-}
-.autoLayoutBody {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-    padding: 0 10px 10px;
+    gap: 10px;
+    padding: 12px 15px;
     font-size: 12px;
+    line-height: 1.45;
+    p {
+        margin: 0;
+        padding: 0;
+        color: #c9d3d5;
+    }
     ul {
         display: grid;
-        gap: 4px;
+        gap: 2px;
         margin: 0;
         padding: 0;
         list-style: none;
     }
     li {
-        display: grid;
-        grid-template-columns: 1fr 28px 20px 28px;
-        align-items: center;
-        gap: 4px;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        border-bottom: 1px solid #34424a;
+        padding: 6px 0;
+        color: #edf2f1;
     }
     li b {
-        text-align: center;
+        color: #aebcc0;
+        white-space: nowrap;
     }
-    li button {
-        min-height: 26px;
-        padding: 0;
-        text-align: center;
-    }
-    li span {
-        min-width: 0;
-    }
-    select {
-        width: 100%;
-        min-width: 0;
-        min-height: 30px;
-    }
-    p {
-        margin: 0;
-        color: #56666d;
+    button,
+    select,
+    textarea {
+        font: inherit;
     }
 }
 .autoLayoutSolve {
-    min-height: 34px;
-    border: 1px solid #ad5000 !important;
-    color: #fff;
-    background: #ad5000 !important;
+    min-height: 40px;
+    border: 0;
+    color: #fffdf8;
+    background: var(--draw-orange-strong);
     font-weight: 760;
+    cursor: pointer;
+}
+.autoLayoutSolve:hover:not(:disabled),
+.autoLayoutSolve:focus-visible {
+    background: #c25b00;
+}
+.autoLayoutSolve:disabled {
+    opacity: 0.6;
+    cursor: progress;
 }
 .autoLayoutVariants {
     display: grid;
@@ -286,29 +239,414 @@
     button {
         display: grid;
         gap: 2px;
+        border: 1px solid #46525a;
+        padding: 8px 10px;
+        color: #edf2f1;
+        background: #2b3740;
         text-align: left;
-        padding: 6px 8px;
+        cursor: pointer;
+    }
+    button:hover,
+    button:focus-visible {
+        background: #3a474f;
     }
     button[aria-pressed="true"] {
-        border-color: #e97800;
-        background: #fff0da;
+        border-color: #ffc36e;
+        background: var(--draw-orange-strong);
     }
     small {
-        color: #6a7b80;
+        color: #b9c5c8;
+    }
+    button[aria-pressed="true"] small {
+        color: #edf7fb;
     }
 }
-
 .autoLayoutReview {
     display: grid;
     gap: 6px;
-    border-top: 1px solid #e3d8c7;
-    padding-top: 8px;
+    border-top: 1px solid #4a5860;
+    padding-top: 10px;
+    select,
+    textarea {
+        border: 1px solid #56646c;
+        border-radius: 4px;
+        padding: 6px;
+        color: #edf2f1;
+        background: #1d252c;
+    }
     textarea {
         min-height: 56px;
         resize: vertical;
-        border: 1px solid #bbc6c4;
-        border-radius: 4px;
-        padding: 6px;
-        font: inherit;
     }
+    button {
+        min-height: 34px;
+        border: 1px solid #56646c;
+        color: #edf2f1;
+        background: #2b3740;
+        cursor: pointer;
+    }
+    button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+}
+
+// The step's layer over the drawing: the catalogue rail, its open section and
+// the room card. Only the surfaces themselves catch the pointer.
+.furniture {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    > * {
+        pointer-events: auto;
+    }
+}
+// A note with nothing chosen, e.g. a piece dropped outside the room.
+.toast {
+    position: absolute;
+    z-index: 4;
+    top: 102px;
+    left: 50%;
+    max-width: min(440px, calc(100% - 180px));
+    margin: 0;
+    padding: 9px 14px;
+    transform: translateX(-50%);
+    color: #fffdf8;
+    background: var(--draw-graphite);
+    box-shadow: 0 8px 22px rgba(20, 29, 34, 0.24);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+// The catalogue as the doors and windows step has its tools: a graphite rail
+// of icons that unfolds to names, the chosen one in brand orange.
+.rail {
+    position: absolute;
+    z-index: 3;
+    top: 102px;
+    bottom: 28px;
+    left: 14px;
+    width: 58px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+    border: 1px solid #46525a;
+    color: #f7f5f0;
+    background: var(--draw-graphite);
+    box-shadow: 0 12px 30px rgba(20, 29, 34, 0.24);
+    transition:
+        width 170ms ease,
+        box-shadow 170ms ease;
+}
+.rail:hover,
+.rail:focus-within,
+.rail[data-open="true"] {
+    width: 260px;
+    box-shadow: 0 15px 36px rgba(20, 29, 34, 0.3);
+}
+.railIntro {
+    height: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    padding: 0 15px;
+    color: #aebcc0;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+    opacity: 0;
+    transition:
+        height 170ms ease,
+        opacity 120ms ease;
+}
+.rail:hover .railIntro,
+.rail:focus-within .railIntro,
+.rail[data-open="true"] .railIntro {
+    height: 35px;
+    border-bottom: 1px solid #4a5860;
+    opacity: 1;
+}
+// Search as the rail's first row: the magnifier while folded, the field unfolded.
+.railSearch {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 1px solid #4a5860;
+    padding: 6px 15px;
+    color: #edf2f1;
+    cursor: text;
+    input {
+        min-width: 0;
+        flex: 1;
+        border: 1px solid #56646c;
+        border-radius: 4px;
+        padding: 8px;
+        color: #edf2f1;
+        background: #1d252c;
+        font: inherit;
+        font-size: 13px;
+        transition: opacity 120ms ease;
+    }
+    input::placeholder {
+        color: #8d9ca1;
+    }
+}
+.rail:not(:hover):not(:focus-within):not([data-open="true"]) .railSearch input {
+    opacity: 0;
+}
+.railButton {
+    width: 100%;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border: 0;
+    padding: 6px 15px;
+    color: #edf2f1;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        background 120ms ease,
+        color 120ms ease;
+}
+.railButton:hover,
+.railButton:focus-visible {
+    color: #fff;
+    background: #3a474f;
+    outline-offset: -3px;
+}
+.railButton[aria-expanded="true"] {
+    color: #fff;
+    background: #3a474f;
+    box-shadow: inset 3px 0 0 var(--draw-orange);
+}
+.railButton[aria-pressed="true"] {
+    color: #fffdf8;
+    background: var(--draw-orange-strong);
+    box-shadow: inset 3px 0 0 #ffc36e;
+}
+.railCopy {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+    b {
+        font-size: 13px;
+        line-height: 1.15;
+    }
+    small {
+        overflow: hidden;
+        color: #b9c5c8;
+        font-size: 10px;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+    }
+}
+.railButton[aria-pressed="true"] .railCopy small {
+    color: #edf7fb;
+}
+// Plan symbols drawn in light lines on graphite.
+.thumbnail {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.1;
+    stroke-linejoin: round;
+    * {
+        vector-effect: non-scaling-stroke;
+    }
+    [data-symbol-hit] {
+        stroke: none;
+    }
+}
+.flyout {
+    position: absolute;
+    z-index: 2;
+    top: 102px;
+    bottom: 28px;
+    left: 282px;
+    width: 300px;
+    overflow-y: auto;
+    border: 1px solid #46525a;
+    padding-bottom: 8px;
+    color: #edf2f1;
+    background: #222d34;
+    box-shadow: 0 15px 36px rgba(20, 29, 34, 0.3);
+    header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 44px;
+        border-bottom: 1px solid #4a5860;
+        padding: 0 6px 0 15px;
+        background: #222d34;
+    }
+    header b {
+        font-size: 14px;
+    }
+    header button {
+        width: 36px;
+        height: 36px;
+        border: 0;
+        color: #c9d3d5;
+        background: transparent;
+        font-size: 22px;
+        line-height: 1;
+        cursor: pointer;
+    }
+    header button:hover,
+    header button:focus-visible {
+        color: #fff;
+        background: #3a474f;
+    }
+    h3 {
+        margin: 0;
+        padding: 12px 15px 4px;
+        color: #aebcc0;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    p {
+        margin: 0;
+        padding: 12px 15px;
+        color: #b9c5c8;
+    }
+    .thumbnail {
+        width: 38px;
+        height: 38px;
+        flex-basis: 38px;
+    }
+    .railButton {
+        white-space: normal;
+    }
+    .autoLayout p {
+        padding: 0;
+    }
+}
+
+@media (max-width: 700px) {
+    // One bottom sheet: the card's head, then the graphite catalogue below it.
+    .furniture {
+        inset: auto 8px 44px;
+        max-height: 46%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid #c8cfce;
+        border-radius: 8px;
+        pointer-events: auto;
+        background: #fffdf9;
+        box-shadow: 0 6px 24px #26343220;
+    }
+    .panel {
+        position: static;
+        flex: 0 0 auto;
+        width: auto;
+        min-height: 0;
+        overflow-y: auto;
+        border: 0;
+        border-radius: 0;
+        padding: 10px;
+        gap: 8px;
+        box-shadow: none;
+    }
+    .rail,
+    .flyout {
+        position: static;
+        order: 1;
+        flex: 1 1 auto;
+        width: auto;
+        min-height: 120px;
+        border: 0;
+        box-shadow: none;
+    }
+    .rail:hover,
+    .rail:focus-within,
+    .rail[data-open="true"] {
+        width: auto;
+    }
+    .railIntro,
+    .rail:hover .railIntro,
+    .rail:focus-within .railIntro,
+    .rail[data-open="true"] .railIntro {
+        height: 35px;
+        border-bottom: 1px solid #4a5860;
+        opacity: 1;
+    }
+    // The phone's list is never folded: the field always shows.
+    .rail:not(:hover):not(:focus-within):not([data-open="true"]) .railSearch input {
+        opacity: 1;
+    }
+    .furniture[data-flyout-open="true"] .rail,
+    .furniture[data-editing="true"] .rail,
+    .furniture[data-editing="true"] .flyout {
+        display: none;
+    }
+    // While searching the field stays above its results.
+    .furniture[data-searching="true"][data-editing="false"] .rail {
+        display: block;
+        flex: 0 0 auto;
+        min-height: 0;
+        > :not(.railSearch) {
+            display: none;
+        }
+    }
+    .furniture[data-editing="true"] .panel {
+        flex: 1 1 auto;
+        max-height: none;
+    }
+    .toast {
+        position: static;
+        order: 0;
+        max-width: none;
+        transform: none;
+        box-shadow: none;
+    }
+}
+
+// Passages from the catalogue's clearance zones: a quiet dashed outline, red
+// with how much is left when another piece or a wall stands in the way.
+.passage rect {
+    fill: rgba(62, 137, 173, 0.06);
+    stroke: #6f9db3;
+    stroke-width: 1;
+    stroke-dasharray: 5 4;
+    vector-effect: non-scaling-stroke;
+}
+.passage[data-passage-blocked="true"] rect {
+    fill: rgba(209, 60, 41, 0.12);
+    stroke: #bd3424;
+}
+.passage text {
+    fill: #9e2a1d;
+    stroke: #fffdfa;
+    stroke-width: 0.3em;
+    stroke-linejoin: round;
+    paint-order: stroke;
+    font-weight: 800;
+}
+.passageWarnings {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    border-left: 3px solid #bd3424;
+    padding: 6px 8px 6px 10px;
+    list-style: none;
+    color: #8f271c;
+    background: #fbece8;
+    font-size: 12px;
+    line-height: 1.4;
 }
