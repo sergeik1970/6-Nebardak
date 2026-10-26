@@ -87,7 +87,10 @@ describe("SessionService", () => {
         expect(repository.save.mock.calls[1][0].secondFactorAt).toEqual(now);
     });
 
-    it("gives administrators a short idle and absolute lifetime", async () => {
+    it("gives administrators a week idle and a month absolute lifetime", async () => {
+        const day = 24 * 60 * 60_000;
+        expect(ADMIN_SESSION_IDLE_TTL_MS).toBe(7 * day);
+        expect(ADMIN_SESSION_ABSOLUTE_TTL_MS).toBe(30 * day);
         const repository = makeRepository();
         const admin = { ...user, role: "admin" } as User;
         const service = new SessionService(repository);
