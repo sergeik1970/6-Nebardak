@@ -1,4 +1,4 @@
-import { buildRectRoom } from "../e2e/project-flow";
+import { buildRectRoom, openAutoLayoutWithBed } from "../e2e/project-flow";
 import { expect, registerByApi, test } from "./support";
 
 test("a signed-in person sends a solved variant to the designer review queue", async ({ page }) => {
@@ -9,8 +9,7 @@ test("a signed-in person sends a solved variant to the designer review queue", a
     await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
     await page.locator("[data-draw-room-step='furniture']").click();
 
-    const auto = page.locator("[data-draw-room-auto-layout='true']");
-    await auto.getByRole("button", { name: "Подобрать расстановку" }).click();
+    const auto = await openAutoLayoutWithBed(page);
     // Each offered variant is saved for the review queue as it is solved.
     const saved = page.waitForResponse(
         (response) =>

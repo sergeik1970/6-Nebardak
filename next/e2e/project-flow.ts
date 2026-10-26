@@ -19,3 +19,20 @@ export const buildRectRoom = async (page: Page, width = "6", depth = "4,6") => {
     await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
     await expect(page.getByRole("button", { name: "К итогу" })).toBeEnabled();
 };
+
+/**
+ * «Авторасстановка» arranges what stands in the room: put a double bed in the
+ * middle of the drawing by hand, then open the rail's last row.
+ */
+export const openAutoLayoutWithBed = async (page: Page) => {
+    await page.locator("[data-furniture-section-items~='double-bed']").click();
+    await page.locator("[data-add-furniture='double-bed']").click();
+    const room = await page.locator("[data-draw-room-preview='true']").boundingBox();
+    if (!room) throw new Error("The room is not drawn");
+    await page.mouse.move(room.x + room.width / 2, room.y + room.height / 2);
+    await page.mouse.click(room.x + room.width / 2, room.y + room.height / 2);
+    await expect(page.locator("[data-draw-furniture^='furniture-']")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await page.locator("[data-furniture-auto-layout]").click();
+    return page.locator("[data-draw-room-auto-layout='true']");
+};

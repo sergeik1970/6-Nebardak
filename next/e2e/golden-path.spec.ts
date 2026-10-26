@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { buildRectRoom } from "./project-flow";
+import { buildRectRoom, openAutoLayoutWithBed } from "./project-flow";
 
 test("preference first screen keeps its image preload budget", async ({ page }) => {
     await page.goto("/test", { waitUntil: "networkidle" });
@@ -78,15 +78,7 @@ test("desktop golden path reaches an editable and exportable plan", async ({ pag
 
     // A bed is put in by hand, then «Авторасстановка» finds it a better place.
     await page.locator("[data-draw-room-step='furniture']").click();
-    await page.locator("[data-furniture-section-items~='double-bed']").click();
-    await page.locator("[data-add-furniture='double-bed']").click();
-    const room = await page.locator("[data-draw-room-preview='true']").boundingBox();
-    if (!room) throw new Error("The room is not drawn");
-    await page.mouse.move(room.x + room.width / 2, room.y + room.height / 2);
-    await page.mouse.click(room.x + room.width / 2, room.y + room.height / 2);
-    await page.keyboard.press("Escape");
-    await page.locator("[data-furniture-auto-layout]").click();
-    const auto = page.locator("[data-draw-room-auto-layout='true']");
+    const auto = await openAutoLayoutWithBed(page);
     await auto.getByRole("button", { name: "Подобрать", exact: true }).click();
     await auto.locator("[data-auto-layout-variant='0']").click({ timeout: 60_000 });
     const pieces = page.locator("[data-draw-furniture^='furniture-']");
