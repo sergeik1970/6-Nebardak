@@ -70,7 +70,7 @@ const placementAtWall = (
 };
 
 describe("rotated composite geometry", () => {
-    it("rotates the corrected corner-sofa L shape without adding a rectangular clearance", () => {
+    it("rotates the corner-sofa L shape with its seats' front passage", () => {
         const geometry = getRotatedGeometry(getFurniture("sofa-four-left"), 90);
 
         expect(geometry.width).toBe(1500);
@@ -79,16 +79,36 @@ describe("rotated composite geometry", () => {
             { x: 550, y: 0, width: 950, depth: 2200 },
             { x: 0, y: 0, width: 550, depth: 730 },
         ]);
-        expect(geometry.clearanceRects).toEqual([]);
+        // In front of the seats beside the chaise, now facing left.
+        expect(geometry.clearanceRects).toEqual([
+            expect.objectContaining({ x: -150, y: 730, width: 700, depth: 1470 }),
+        ]);
     });
 
-    it("keeps the inside corner free for other furniture", () => {
+    it("lets a coffee table into the inside corner, but not a wardrobe", () => {
         const result = validateLayout(EMPTY_ROOM, [
             placement("sofa", "sofa-four-left", 0, 0),
             placement("coffee", "coffee-table", 1000, 1000),
         ]);
 
         expect(result).toEqual({ valid: true, issues: [] });
+        const blocked = validateLayout(EMPTY_ROOM, [
+            placement("sofa", "sofa-four-left", 0, 0),
+            placement("wardrobe", "wardrobe-small", 1000, 1000),
+        ]);
+        expect(blocked.issues.map((issue) => issue.code)).toContain("clearance-blocked");
+    });
+
+    it("keeps a sofa's front passage for a coffee table or a pouf only", () => {
+        const sofa = placement("sofa", "sofa-two", 0, 0);
+        const inFront = (id: string, definitionId: string) =>
+            validateLayout(EMPTY_ROOM, [sofa, placement(id, definitionId, 550, 1350)]);
+
+        expect(inFront("pouf", "pouf").valid).toBe(true);
+        expect(inFront("table", "coffee-table").valid).toBe(true);
+        expect(inFront("dresser", "dresser").issues.map((issue) => issue.code)).toContain(
+            "clearance-blocked",
+        );
     });
 });
 

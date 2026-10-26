@@ -48,7 +48,6 @@ const preferredFrontExtension = (
 });
 
 const NIGHTSTAND_HEAD_POCKET = 350;
-const COFFEE_TABLE_POCKET = 600;
 
 const bedSideZone = (
     x: number,
@@ -65,28 +64,22 @@ const bedSideZone = (
     requirement,
 });
 
-const sofaAccessZones = (width: number, bodyDepth: number): ClearanceZone[] => {
-    const sideWidth = (width - COFFEE_TABLE_POCKET) / 2;
+/** What may stand in a sofa's front passage: a coffee table or a pouf, nothing else. */
+const SOFA_FRONT_PIECES = ["coffee-table", "coffee-table-rect", "pouf"];
 
-    return [
-        {
-            x: 0,
-            y: bodyDepth,
-            width: sideWidth,
-            depth: 700,
-            label: "Боковой проход",
-            requirement: "hard",
-        },
-        {
-            x: sideWidth + COFFEE_TABLE_POCKET,
-            y: bodyDepth,
-            width: sideWidth,
-            depth: 700,
-            label: "Боковой проход",
-            requirement: "hard",
-        },
-    ];
-};
+const sofaFrontZone = (x: number, y: number, width: number): ClearanceZone => ({
+    x,
+    y,
+    width,
+    depth: 700,
+    label: "Проход перед диваном",
+    requirement: "hard",
+    allows: SOFA_FRONT_PIECES,
+});
+
+const sofaAccessZones = (width: number, bodyDepth: number): ClearanceZone[] => [
+    sofaFrontZone(0, bodyDepth, width),
+];
 
 /** Keeps an independently standing table usable from every side. */
 const allSidesAccessZones = (width: number, depth: number, clearance: number): ClearanceZone[] => [
@@ -125,12 +118,10 @@ const allSidesAccessZones = (width: number, depth: number, clearance: number): C
 ];
 
 /**
- * The chaise already makes the sofa a real L-shaped body. Do not turn its
- * concave corner into a hidden rectangular clearance: that space is part of
- * the room and the user may use it for any other item. General body gaps and
- * the connected-passage check still apply to furniture placed there.
+ * The chaise already makes the sofa a real L-shaped body; the passage runs in
+ * front of the seats beside it, where only a coffee table or a pouf belongs.
  */
-const cornerSofaAccessZones = (): ClearanceZone[] => [];
+const cornerSofaAccessZones = (): ClearanceZone[] => [sofaFrontZone(730, 950, 1470)];
 
 const relation = (
     kind: RelationTemplate["kind"],

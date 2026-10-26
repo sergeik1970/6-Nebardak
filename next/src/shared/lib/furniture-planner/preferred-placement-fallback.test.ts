@@ -89,7 +89,8 @@ describe("preferred placement fallback", () => {
             tv: { count: 1, priority: "required", required: true },
             cradle: { count: 1, priority: "required", required: true },
         };
-        const denseRoom = createDefaultRoom(7200, 5200);
+        // Deep enough that the strict search runs out before it finds every piece a place.
+        const denseRoom = createDefaultRoom(7200, 5400);
         const denseInstances = buildFurnitureInstances(selection);
         const preferences = { tvTargetCategory: "sleep" as const };
 

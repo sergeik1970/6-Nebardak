@@ -159,6 +159,7 @@ const computeRotatedGeometry = (
             y: rotated.y + shiftY,
             label: zone.label,
             requirement: zone.requirement,
+            ...(zone.allows ? { allows: zone.allows } : {}),
         };
     });
     const bodyBounds = getBounds(bodyRects);

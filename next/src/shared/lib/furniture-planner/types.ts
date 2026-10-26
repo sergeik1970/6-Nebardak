@@ -97,6 +97,8 @@ export interface ClearanceZone extends Rect {
      * affect ranking and notes only.
      */
     requirement: ClearanceRequirement;
+    /** Pieces that belong inside the zone, e.g. a coffee table in front of a sofa. */
+    allows?: string[];
 }
 
 export type RelationKind = "front-gap" | "adjacent" | "aligned-side" | "faces";
