@@ -6,11 +6,14 @@ import {
     type Room,
 } from "@/shared/lib/furniture-planner";
 import {
-    ROOM_KIND_FURNITURE,
     buildRegionSolverRoom,
     buildRoomInstances,
+    roomFurnitureSet,
     solvedToDrawFurniture,
 } from "./auto-layout";
+import type { DrawFurniture } from "./furniture";
+
+const BEDROOM = { "double-bed": 1, "bedside-table": 2, "wardrobe-medium": 1 };
 
 // Two rooms side by side: 3,0 + 0,1 + 2,9 m by 4,0 m, a door in the partition.
 const building: Room = {
@@ -72,12 +75,7 @@ describe("auto layout in one room of the drawing", () => {
     it("lets the solver furnish the cut-out bedroom", () => {
         const result = buildRegionSolverRoom(building, left);
         if (result.status !== "ready") throw new Error(result.message);
-        const solved = solveRoomVariants(
-            result.room,
-            buildRoomInstances(ROOM_KIND_FURNITURE.bedroom),
-            {},
-            3,
-        );
+        const solved = solveRoomVariants(result.room, buildRoomInstances(BEDROOM), {}, 3);
         expect(solved.status).toBe("success");
         expect(solved.variants.length).toBeGreaterThan(0);
         expect(solved.variants[0].placements.map((item) => item.definitionId)).toContain(
@@ -107,7 +105,7 @@ describe("auto layout in one room of the drawing", () => {
     });
 
     it("makes the first piece of a room set required and the rest optional", () => {
-        const instances = buildRoomInstances(ROOM_KIND_FURNITURE.bedroom);
+        const instances = buildRoomInstances(BEDROOM);
         expect(instances.map((instance) => instance.priority)).toEqual([
             "required",
             "preferred",
@@ -128,9 +126,26 @@ describe("auto layout in one room of the drawing", () => {
         expect(piece.depth).toBeGreaterThan(0);
     });
 
-    it("offers only catalogue pieces in every room set", () => {
-        for (const set of Object.values(ROOM_KIND_FURNITURE)) {
-            expect(() => buildRoomInstances(set)).not.toThrow();
-        }
+    it("arranges the pieces standing in the room, the largest first", () => {
+        const piece = (id: string, definitionId: string): DrawFurniture => ({
+            id,
+            definitionId,
+            x: 0,
+            y: 0,
+            width: 500,
+            depth: 500,
+            rotation: 0,
+        });
+        const set = roomFurnitureSet([
+            piece("a", "bedside-table"),
+            piece("b", "double-bed"),
+            piece("c", "bedside-table"),
+            piece("d", "kitchen-upper-600"),
+        ]);
+        // Upper units stay over the worktop and are not rearranged.
+        expect(set).toEqual({ "double-bed": 1, "bedside-table": 2 });
+        expect(Object.keys(set)[0]).toBe("double-bed");
+        expect(buildRoomInstances(set)[0].priority).toBe("required");
+        expect(roomFurnitureSet([])).toEqual({});
     });
 });

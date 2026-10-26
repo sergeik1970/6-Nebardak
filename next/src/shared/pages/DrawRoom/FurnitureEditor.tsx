@@ -30,6 +30,8 @@ import FurnitureSymbol, { FurnitureThumbnail } from "./FurnitureSymbol";
 import { isSchematicFurnitureSource } from "@/shared/lib/furniture-planner/catalog";
 
 const snap = (n: number) => Math.round(n / 10) * 10;
+/** The rail's last row: arranging what already stands in the room. */
+const AUTO_LAYOUT = "auto-layout";
 export default function FurnitureEditor({
     boardRef,
     active,
@@ -55,7 +57,7 @@ export default function FurnitureEditor({
     radiatorObstacles: readonly Rect[];
     /** The result step shows every piece at full strength, read-only. */
     presented?: boolean;
-    /** «Подобрать расстановку» for the room, shown while nothing is in hand. */
+    /** «Авторасстановка» for the room, the catalogue rail's last row. */
     autoLayout?: React.ReactNode;
     /** Pieces are placed in this room only; others' furniture stays a quiet layer. */
     room: FurnitureRoom | null;
@@ -436,7 +438,8 @@ export default function FurnitureEditor({
     const layerHost =
         board?.querySelector<SVGGElement>("[data-draw-furniture-host='true']") ?? board;
     const openSection = FURNITURE_MENU.find((menuSection) => menuSection.id === section);
-    const flyoutOpen = Boolean(query.trim() || openSection);
+    const autoLayoutOpen = section === AUTO_LAYOUT && Boolean(autoLayout);
+    const flyoutOpen = Boolean(query.trim() || openSection || autoLayoutOpen);
     const furnitureButton = (definition: FurnitureDefinition) => {
         const geometry = getRotatedGeometry(definition, 0);
         return (
@@ -557,14 +560,14 @@ export default function FurnitureEditor({
                     aria-label="Мебель на чертеже"
                     data-editing={Boolean(editing)}
                     data-flyout-open={flyoutOpen}
-                    data-section-open={Boolean(openSection && !query.trim())}
+                    data-section-open={Boolean((openSection || autoLayoutOpen) && !query.trim())}
                     onPointerDown={(event) => event.stopPropagation()}
                 >
                     {/* Sections in a dark rail, like the doors and windows step. */}
                     <nav
                         className={styles.rail}
                         aria-label="Разделы каталога"
-                        data-open={Boolean(openSection)}
+                        data-open={Boolean(openSection || autoLayoutOpen)}
                     >
                         <span className={styles.railIntro}>КАТАЛОГ МЕБЕЛИ</span>
                         {furnitureMenuOrder(room?.kind).map((menuSection) => (
@@ -595,6 +598,31 @@ export default function FurnitureEditor({
                                 </span>
                             </button>
                         ))}
+                        {autoLayout && (
+                            <button
+                                type="button"
+                                className={styles.railButton}
+                                data-furniture-auto-layout
+                                aria-expanded={autoLayoutOpen}
+                                onClick={() => {
+                                    setQuery("");
+                                    setSection(autoLayoutOpen ? null : AUTO_LAYOUT);
+                                }}
+                            >
+                                <svg
+                                    className={styles.thumbnail}
+                                    viewBox="0 0 26 26"
+                                    aria-hidden="true"
+                                >
+                                    <path d="M4 22 16 10M14 8l4 4" />
+                                    <path d="M19 2.5v4M17 4.5h4M22.5 10v3M21 11.5h3M9.5 3v3M8 4.5h3" />
+                                </svg>
+                                <span className={styles.railCopy}>
+                                    <b>Авторасстановка</b>
+                                    <small>Переставить мебель этой комнаты</small>
+                                </span>
+                            </button>
+                        )}
                     </nav>
                     {query.trim() ? (
                         <div
@@ -615,6 +643,25 @@ export default function FurnitureEditor({
                             </header>
                             {searchFurnitureMenu(query).map(furnitureButton)}
                             {searchFurnitureMenu(query).length === 0 && <p>Ничего не найдено.</p>}
+                        </div>
+                    ) : autoLayoutOpen ? (
+                        <div
+                            className={styles.flyout}
+                            role="region"
+                            aria-label="Авторасстановка"
+                            data-furniture-flyout={AUTO_LAYOUT}
+                        >
+                            <header>
+                                <b>Авторасстановка</b>
+                                <button
+                                    type="button"
+                                    aria-label="Закрыть раздел"
+                                    onClick={() => setSection(null)}
+                                >
+                                    ×
+                                </button>
+                            </header>
+                            {autoLayout}
                         </div>
                     ) : (
                         openSection && (
@@ -664,7 +711,6 @@ export default function FurnitureEditor({
                                 <span>{items.filter(inRoom).length} в комнате</span>
                             )}
                         </header>
-                        {!editing && autoLayout}
                         {editing && (
                             <section className={styles.properties}>
                                 <b>{furnitureDefinition(editing.definitionId)?.label}</b>

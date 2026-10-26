@@ -76,10 +76,17 @@ test("desktop golden path reaches an editable and exportable plan", async ({ pag
     await page.locator("[data-draw-room-step='rooms']").click();
     await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
 
-    // The bedroom is furnished by the room's own set, then stays editable by hand.
+    // A bed is put in by hand, then «Авторасстановка» finds it a better place.
     await page.locator("[data-draw-room-step='furniture']").click();
+    await page.locator("[data-furniture-section-items~='double-bed']").click();
+    await page.locator("[data-add-furniture='double-bed']").click();
+    const room = await page.locator("[data-draw-room-preview='true']").boundingBox();
+    if (!room) throw new Error("The room is not drawn");
+    await page.mouse.move(room.x + room.width / 2, room.y + room.height / 2);
+    await page.mouse.click(room.x + room.width / 2, room.y + room.height / 2);
+    await page.keyboard.press("Escape");
+    await page.locator("[data-furniture-auto-layout]").click();
     const auto = page.locator("[data-draw-room-auto-layout='true']");
-    await auto.getByRole("button", { name: "Подобрать расстановку" }).click();
     await auto.getByRole("button", { name: "Подобрать", exact: true }).click();
     await auto.locator("[data-auto-layout-variant='0']").click({ timeout: 60_000 });
     const pieces = page.locator("[data-draw-furniture^='furniture-']");
