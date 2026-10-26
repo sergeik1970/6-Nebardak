@@ -1,7 +1,12 @@
 // Shapes are built as plain lists and keyed by position when rendered.
 /* eslint-disable react/jsx-key */
 import React from "react";
-import type { Rect } from "@/shared/lib/furniture-planner";
+import {
+    getRotatedGeometry,
+    type FurnitureDefinition,
+    type Rect,
+} from "@/shared/lib/furniture-planner";
+import styles from "./furniture.module.scss";
 
 /**
  * Plan symbols drawn in lines from above, after the designer's AutoCAD
@@ -440,5 +445,26 @@ export default function FurnitureSymbol({
                 React.cloneElement(shape, { key }),
             )}
         </g>
+    );
+}
+
+/** A catalogue's small picture of a piece: its plan symbol at the default size. */
+export function FurnitureThumbnail({ definition }: { definition: FurnitureDefinition }) {
+    const geometry = getRotatedGeometry(definition, 0);
+    const pad = Math.max(geometry.width, geometry.depth) * 0.06;
+    return (
+        <svg
+            className={styles.thumbnail}
+            viewBox={`${-pad} ${-pad} ${geometry.width + 2 * pad} ${geometry.depth + 2 * pad}`}
+            aria-hidden="true"
+            focusable="false"
+        >
+            <FurnitureSymbol
+                definitionId={definition.id}
+                rects={geometry.bodyRects}
+                width={geometry.width}
+                depth={geometry.depth}
+            />
+        </svg>
     );
 }

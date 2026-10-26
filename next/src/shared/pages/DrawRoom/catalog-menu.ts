@@ -12,6 +12,8 @@ export interface FurnitureMenuGroup {
 export interface FurnitureMenuSection {
     id: string;
     label: string;
+    /** The piece whose symbol stands for the section in the catalogue rail. */
+    icon: string;
     groups: FurnitureMenuGroup[];
 }
 
@@ -24,6 +26,7 @@ export const FURNITURE_MENU: FurnitureMenuSection[] = [
     {
         id: "living-bedroom",
         label: "Гостиная и спальня",
+        icon: "double-bed",
         groups: [
             { label: "Кровати", ids: ["single-bed", "double-bed"] },
             { label: "Диваны", ids: ["sofa-two", "sofa-three", "sofa-four-left", "sofa-bed"] },
@@ -35,6 +38,7 @@ export const FURNITURE_MENU: FurnitureMenuSection[] = [
     {
         id: "kitchen-dining",
         label: "Кухня и столовая",
+        icon: "dining-round-four",
         groups: [
             {
                 label: "Напольные шкафы",
@@ -62,6 +66,7 @@ export const FURNITURE_MENU: FurnitureMenuSection[] = [
     {
         id: "appliances",
         label: "Бытовая техника",
+        icon: "kitchen-cooker",
         groups: [
             { label: "Холодильники", ids: ["kitchen-fridge", "kitchen-fridge-wide"] },
             { label: "Плиты", ids: ["kitchen-cooker"] },
@@ -72,6 +77,7 @@ export const FURNITURE_MENU: FurnitureMenuSection[] = [
     {
         id: "wardrobe-hallway",
         label: "Гардероб и прихожая",
+        icon: "wardrobe-medium",
         groups: [
             {
                 label: "Шкафы для одежды",
@@ -82,11 +88,13 @@ export const FURNITURE_MENU: FurnitureMenuSection[] = [
     {
         id: "children",
         label: "Детская",
+        icon: "cradle",
         groups: [{ label: "Кровати", ids: ["child-bed", "cradle"] }],
     },
     {
         id: "office",
         label: "Кабинет и офис",
+        icon: "desk",
         groups: [
             { label: "Столы", ids: ["desk"] },
             { label: "Стеллажи", ids: ["bookcase"] },
@@ -95,6 +103,7 @@ export const FURNITURE_MENU: FurnitureMenuSection[] = [
     {
         id: "pets",
         label: "Для питомцев",
+        icon: "pet-bed",
         groups: [{ label: "Питомцы и аквариумы", ids: ["pet-bed", "litter-box", "aquarium"] }],
     },
 ];

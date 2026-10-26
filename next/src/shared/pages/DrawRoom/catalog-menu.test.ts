@@ -8,6 +8,11 @@ describe("furniture catalogue menu", () => {
         expect([...ids].sort()).toEqual(FURNITURE_CATALOG.map((d) => d.id).sort());
     });
 
+    it("pictures each section with one of its own pieces", () => {
+        for (const section of FURNITURE_MENU)
+            expect(section.groups.flatMap((g) => g.ids)).toContain(section.icon);
+    });
+
     it("offers the sections that suit the room kind first", () => {
         const order = (kind?: Parameters<typeof furnitureMenuOrder>[0]) =>
             furnitureMenuOrder(kind).map((section) => section.id);

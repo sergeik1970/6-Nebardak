@@ -3136,8 +3136,11 @@ test("the furniture catalogue opens by sections like Remplanner", async ({ page 
 
     // Search looks through every section at once.
     await panel.getByLabel("Поиск мебели").fill("холодильник");
-    await expect(panel.locator("[data-furniture-search] [data-add-furniture]")).toHaveCount(2);
-    await expect(sections).toHaveCount(0);
+    const results = panel.locator("[data-furniture-search]");
+    await expect(results.locator("[data-add-furniture]")).toHaveCount(2);
+    await results.getByRole("button", { name: "Закрыть поиск" }).click();
+    await expect(results).toHaveCount(0);
+    await expect(panel.getByLabel("Поиск мебели")).toHaveValue("");
 });
 
 test("a piece takes a standard size from the designer's drawings", async ({ page }, testInfo) => {
