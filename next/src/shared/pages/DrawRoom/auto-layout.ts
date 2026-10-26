@@ -11,7 +11,9 @@ import {
     type FurnitureInstance,
     type FurniturePriority,
     type FurnitureSelection,
+    type LayoutSuccess,
     type Placement,
+    type PreferredPlacementFallbackResult,
     type RadiatorObstacle,
     type Rect,
     type Room,
@@ -43,6 +45,100 @@ export const roomFurnitureSet = (pieces: readonly DrawFurniture[]): Record<strin
         Object.entries(set).sort(([first], [second]) => area(second) - area(first)),
     );
 };
+
+/**
+ * Pieces that stay where they stand, in the solver room's frame: their
+ * bodies are obstacles and their own passages stay free.
+ */
+export const solverFixedFurniture = (
+    pieces: readonly DrawFurniture[],
+    offset: Point,
+): NonNullable<Room["fixedFurniture"]> => {
+    const floor = pieces.filter((item) => getFurniture(item.definitionId).mounting !== "upper");
+    const local = (rect: Rect, item: DrawFurniture): Rect => ({
+        x: rect.x + item.x - offset.x,
+        y: rect.y + item.y - offset.y,
+        width: rect.width,
+        depth: rect.depth,
+    });
+    const geometry = (item: DrawFurniture) =>
+        getRotatedGeometry(getFurniture(item.definitionId), item.rotation, item);
+    return {
+        bodies: floor.flatMap((item) => geometry(item).bodyRects.map((rect) => local(rect, item))),
+        passages: floor.flatMap((item) =>
+            geometry(item).hardClearanceRects.map((rect) => local(rect, item)),
+        ),
+    };
+};
+
+/** The solver room with more pieces held in place. */
+export const withFixedFurniture = (room: Room, extra: NonNullable<Room["fixedFurniture"]>): Room =>
+    extra.bodies.length
+        ? {
+              ...room,
+              fixedFurniture: {
+                  bodies: [...(room.fixedFurniture?.bodies ?? []), ...extra.bodies],
+                  passages: [...(room.fixedFurniture?.passages ?? []), ...extra.passages],
+              },
+          }
+        : room;
+
+/** Why the solver may find no spot for a piece, in the catalogue's own rules. */
+export const placementRules = (definitionId: string): string[] => {
+    const definition = getFurniture(definitionId);
+    const { placement } = definition;
+    const geometry = getRotatedGeometry(definition, 0);
+    const front = Math.max(
+        0,
+        ...geometry.hardClearanceRects
+            .filter((zone) => zone.y >= geometry.depth - 1)
+            .map((zone) => zone.depth),
+    );
+    const backOnly =
+        placement.allowedWallContactEdges.length === 1 &&
+        placement.allowedWallContactEdges[0] === "back";
+    return [
+        ...(placement.requiredWallContact
+            ? [backOnly ? "спиной к стене" : "вплотную к стене"]
+            : !placement.centerAllowed
+              ? ["у стены"]
+              : []),
+        ...(front ? [`${Math.round(front / 10)} см спереди`] : []),
+        ...(placement.windowPolicy === "forbidden" ? ["не у окна"] : []),
+    ];
+};
+
+/** One fallback solve: what it placed and what it could not. */
+export type FallbackSolve = (
+    room: Room,
+    instances: FurnitureInstance[],
+) => Promise<PreferredPlacementFallbackResult | null>;
+
+/**
+ * Solves what fits; then, if something found no spot, leaves those pieces
+ * where the person put them and arranges the rest around them. The second
+ * pass is taken only when it places all the rest.
+ */
+export async function arrangeAroundLeftovers(
+    room: Room,
+    instances: FurnitureInstance[],
+    standingFor: (unplacedIds: string[]) => NonNullable<Room["fixedFurniture"]>,
+    solve: FallbackSolve,
+): Promise<{ core: LayoutSuccess; unplaced: FurnitureInstance[]; around: boolean } | null> {
+    const first = await solve(room, instances);
+    if (!first || first.result.status !== "success") return null;
+    const unplaced = first.unplacedInstances;
+    const rest = instances.filter(
+        (instance) => !unplaced.some((item) => item.instanceId === instance.instanceId),
+    );
+    if (unplaced.length && rest.length) {
+        const ids = unplaced.map((item) => item.instanceId);
+        const second = await solve(withFixedFurniture(room, standingFor(ids)), rest);
+        if (second?.result.status === "success" && second.unplacedInstances.length === 0)
+            return { core: second.result, unplaced, around: true };
+    }
+    return { core: first.result, unplaced, around: false };
+}
 
 /** The first piece of a set is what the room is for; the rest may give way. */
 export const buildRoomInstances = (set: Record<string, number>): FurnitureInstance[] => {
