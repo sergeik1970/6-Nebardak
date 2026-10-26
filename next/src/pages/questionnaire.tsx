@@ -1,4 +1,4 @@
 import PlannerRedirect from "@/shared/components/PlannerRedirect";
 
-/** The questionnaire is part of «Подобрать расстановку» in the planner now. */
+/** The questionnaire is gone; the planner's «Авторасстановка» arranges the room's own pieces. */
 export default PlannerRedirect;

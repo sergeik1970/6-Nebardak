@@ -1,19 +1,19 @@
-import { buildRectRoom } from "../e2e/project-flow";
+import { buildRectRoom, openAutoLayoutWithBed } from "../e2e/project-flow";
 import { expect, expectSaved, loginByUi, projectBar, registerByUi, test } from "./support";
 
 test("a guest's finished project moves into the new account and opens on another device", async ({
     page,
     browser,
 }) => {
-    // A room drawn and furnished in the planner, all as a guest.
+    // A room drawn and furnished in the planner, all as a guest: a bed put in
+    // by hand, then arranged automatically.
     await page.goto("/planner", { waitUntil: "networkidle" });
     await expect(projectBar(page)).toContainText("Хранится только в этом браузере");
     await buildRectRoom(page, "5", "4");
     await page.locator("[data-draw-room-step='rooms']").click();
     await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
     await page.locator("[data-draw-room-step='furniture']").click();
-    const auto = page.locator("[data-draw-room-auto-layout='true']");
-    await auto.getByRole("button", { name: "Подобрать расстановку" }).click();
+    const auto = await openAutoLayoutWithBed(page);
     await auto.getByRole("button", { name: "Подобрать", exact: true }).click();
     await auto.locator("[data-auto-layout-variant='0']").click({ timeout: 60_000 });
     const pieces = page.locator("[data-draw-furniture^='furniture-']");
