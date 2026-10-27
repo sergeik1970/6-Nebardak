@@ -11,7 +11,6 @@ import {
 } from "@/shared/lib/furniture-planner/project-draft";
 import {
     STYLE_PROFILES,
-    VISUAL_TEST_TOTAL_STEPS,
     answerVisualTest,
     clearVisualTestSession,
     createVisualTestSession,
@@ -19,6 +18,8 @@ import {
     getReachableNextImageUrls,
     getVisualImagePath,
     getVisualTestStep,
+    getVisualTestTotalSteps,
+    isTieBreakRound,
     persistVisualTestSession,
     undoVisualTest,
     type TestResponse,
@@ -260,6 +261,7 @@ const Test: React.FC = () => {
 
     useEffect(() => {
         if (!session || session.phase !== "playing") return;
+        const tieBreak = isTieBreakRound(session);
 
         const handleKeyboard = (event: KeyboardEvent) => {
             if (event.altKey || event.ctrlKey || event.metaKey) return;
@@ -272,10 +274,16 @@ const Test: React.FC = () => {
             } else if (event.key === "ArrowRight" || event.key === "2") {
                 event.preventDefault();
                 answer({ kind: "choose", key: session.slots[1].key });
-            } else if (event.key.toLowerCase() === "b" || event.key.toLowerCase() === "и") {
+            } else if (
+                !tieBreak &&
+                (event.key.toLowerCase() === "b" || event.key.toLowerCase() === "и")
+            ) {
                 event.preventDefault();
                 answer({ kind: "both" });
-            } else if (event.key.toLowerCase() === "n" || event.key.toLowerCase() === "т") {
+            } else if (
+                !tieBreak &&
+                (event.key.toLowerCase() === "n" || event.key.toLowerCase() === "т")
+            ) {
                 event.preventDefault();
                 answer({ kind: "neither" });
             } else if (event.key === "Backspace" && session.history.length > 0) {
@@ -435,7 +443,9 @@ const Test: React.FC = () => {
     }
 
     const step = getVisualTestStep(session);
-    const progress = Math.round((session.answers.length / VISUAL_TEST_TOTAL_STEPS) * 100);
+    const totalSteps = getVisualTestTotalSteps(session);
+    const progress = Math.round((session.answers.length / totalSteps) * 100);
+    const tieBreak = isTieBreakRound(session);
 
     return (
         <div className={styles.test}>
@@ -458,7 +468,7 @@ const Test: React.FC = () => {
                 <section className={styles.testCard} aria-label="Сравнение изображений">
                     <div className={styles.progressRow}>
                         <p className={styles.progressText} aria-live="polite" aria-atomic="true">
-                            Сравнение {step} из {VISUAL_TEST_TOTAL_STEPS}
+                            {tieBreak ? "Решающее сравнение" : "Сравнение"} {step} из {totalSteps}
                         </p>
                         <span>{progress}% пройдено</span>
                     </div>
@@ -466,7 +476,7 @@ const Test: React.FC = () => {
                         className={styles.progressTrack}
                         role="progressbar"
                         aria-valuemin={0}
-                        aria-valuemax={VISUAL_TEST_TOTAL_STEPS}
+                        aria-valuemax={totalSteps}
                         aria-valuenow={session.answers.length}
                         aria-label="Прогресс теста"
                     >
@@ -502,22 +512,29 @@ const Test: React.FC = () => {
                         })}
                     </div>
 
-                    <div className={styles.choiceControls}>
-                        <button
-                            type="button"
-                            className={styles.neutralButton}
-                            onClick={() => answer({ kind: "both" })}
-                        >
-                            Нравятся оба
-                        </button>
-                        <button
-                            type="button"
-                            className={styles.neutralButton}
-                            onClick={() => answer({ kind: "neither" })}
-                        >
-                            Не нравится ни один
-                        </button>
-                    </div>
+                    {tieBreak ? (
+                        <p className={styles.tieBreakNote}>
+                            Эти направления набрали поровну. Выберите то, что ближе, — этот выбор
+                            решит ничью.
+                        </p>
+                    ) : (
+                        <div className={styles.choiceControls}>
+                            <button
+                                type="button"
+                                className={styles.neutralButton}
+                                onClick={() => answer({ kind: "both" })}
+                            >
+                                Нравятся оба
+                            </button>
+                            <button
+                                type="button"
+                                className={styles.neutralButton}
+                                onClick={() => answer({ kind: "neither" })}
+                            >
+                                Не нравится ни один
+                            </button>
+                        </div>
+                    )}
                 </section>
             </main>
             <Footer />

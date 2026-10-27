@@ -43,9 +43,19 @@ test("desktop golden path reaches an editable and exportable plan", async ({ pag
 
     await page.goto("/test", { waitUntil: "networkidle" });
 
-    for (let step = 1; step <= 18; step += 1) {
-        await expect(page.getByText(new RegExp(`Сравнение ${step} из 18`))).toBeVisible();
+    // Sides alternate, so always picking the left photo splits the root 2:2 and
+    // step 5 is a forced tie-break; later ties add steps too, up to 22 in all.
+    const resultOverline = page.getByText("Основное направление", { exact: true });
+    for (let step = 1; step <= 22; step += 1) {
+        const comparison = page.getByText(new RegExp(`[Сс]равнение ${step} из \\d+`));
+        await expect(comparison.or(resultOverline)).toBeVisible();
+        if (await resultOverline.isVisible()) break;
+        if (step === 5) {
+            await expect(page.getByText("Решающее сравнение 5 из 19")).toBeVisible();
+            await expect(page.getByRole("button", { name: "Нравятся оба" })).toHaveCount(0);
+        }
         await page.getByRole("button", { name: "Выбрать левое изображение" }).click();
+        await expect(comparison).toHaveCount(0);
     }
 
     await expect(page.getByRole("heading", { name: /Основное направление/i })).toHaveCount(0);
