@@ -17,6 +17,7 @@ import {
     getRoomPartitionSegments,
     getRoomSegment,
     isHingedDoor,
+    isKitchenRunUnit,
     materializeRoomRegionsState,
     isGeneratedRoomName,
     roomKindLabel,
@@ -95,11 +96,14 @@ import {
     buildRegionSolverRoom,
     buildRoomInstances,
     arrangeAroundLeftovers,
+    hasKitchenRun,
     placementRules,
     roomFurnitureSet,
+    solveKitchenVariants,
     solvedToDrawFurniture,
     solverFixedFurniture,
     withFixedFurniture,
+    type FallbackSolve,
 } from "./auto-layout";
 import type {
     SolverWorkerRequest,
@@ -7127,6 +7131,8 @@ const DrawRoom: React.FC = () => {
             pieces: DrawFurniture[];
             /** What did not fit, left where the person had put it. */
             leftover: DrawFurniture[];
+            /** Furniture the variant leaves as it is: other rooms, pinned pieces. */
+            kept: DrawFurniture[];
             /** The rest was solved around the leftover. */
             around: boolean;
             observation?: PlannerObservationCreateInput;
@@ -7180,7 +7186,12 @@ const DrawRoom: React.FC = () => {
         () => autoLayoutPieces.filter((item) => !item.locked),
         [autoLayoutPieces],
     );
-    const autoLayoutSet = useMemo(() => roomFurnitureSet(autoLayoutMovable), [autoLayoutMovable]);
+    // A kitchen run rearranges its upper units too, so they are listed.
+    const autoLayoutKitchen = hasKitchenRun(autoLayoutMovable);
+    const autoLayoutSet = useMemo(
+        () => roomFurnitureSet(autoLayoutMovable, hasKitchenRun(autoLayoutMovable)),
+        [autoLayoutMovable],
+    );
     const autoLayoutSetKey = JSON.stringify(autoLayoutSet);
     // The solver knows catalogue sizes only.
     const autoLayoutResized = autoLayoutMovable.some((item) => {
@@ -7239,7 +7250,12 @@ const DrawRoom: React.FC = () => {
         setAutoLayoutApplied(null);
         try {
             // `around`: what found no spot stayed put and the rest was solved around it.
-            let solved: (PlannerObservationTarget & { label: string; around?: boolean })[] = [];
+            // `leftover`: a kitchen names its leftover pieces itself.
+            let solved: (PlannerObservationTarget & {
+                label: string;
+                around?: boolean;
+                leftover?: DrawFurniture[];
+            })[] = [];
             const nameOf = (definitionId: string) =>
                 furnitureDefinition(definitionId)?.label ?? definitionId;
             // The hand-placed pieces standing for unplaced instances, one per instance.
@@ -7253,14 +7269,46 @@ const DrawRoom: React.FC = () => {
                     return index === -1 ? [] : remaining.splice(index, 1);
                 });
             };
-            const response = await requestSolver({
-                action: "solve-variants",
-                room: target.room,
-                instances,
-                preferences: {},
-                limit: 3,
-            });
-            if (response.ok && response.action === "solve-variants") {
+            const fallbackSolve: FallbackSolve = async (room, pieces) => {
+                const response = await requestSolver({
+                    action: "solve-preferred-fallback",
+                    room,
+                    instances: pieces,
+                    preferences: {},
+                });
+                return response.ok && response.action === "solve-preferred-fallback"
+                    ? response.result
+                    : null;
+            };
+            if (autoLayoutKitchen) {
+                const kitchen = await solveKitchenVariants(
+                    target.room,
+                    autoLayoutMovable,
+                    fallbackSolve,
+                );
+                solved = kitchen.map((variant, index) => ({
+                    id: `kitchen-${index + 1}`,
+                    label: variant.label,
+                    placements: variant.placements,
+                    exploredNodes: 0,
+                    score: variant.score,
+                    notes: [],
+                    solverStatus: variant.leftover.length
+                        ? ("partial" as const)
+                        : ("success" as const),
+                    leftover: variant.leftover,
+                }));
+            }
+            const response = autoLayoutKitchen
+                ? null
+                : await requestSolver({
+                      action: "solve-variants",
+                      room: target.room,
+                      instances,
+                      preferences: {},
+                      limit: 3,
+                  });
+            if (response?.ok && response.action === "solve-variants") {
                 if (response.result.status === "success") {
                     solved = response.result.variants.map((variant) => ({
                         id: variant.variantId,
@@ -7279,17 +7327,7 @@ const DrawRoom: React.FC = () => {
                         target.room,
                         instances,
                         (ids) => solverFixedFurniture(leftoverFor(ids), target.offset),
-                        async (room, pieces) => {
-                            const response = await requestSolver({
-                                action: "solve-preferred-fallback",
-                                room,
-                                instances: pieces,
-                                preferences: {},
-                            });
-                            return response.ok && response.action === "solve-preferred-fallback"
-                                ? response.result
-                                : null;
-                        },
+                        fallbackSolve,
                     );
                     if (arranged) {
                         const { core, unplaced, around } = arranged;
@@ -7321,6 +7359,10 @@ const DrawRoom: React.FC = () => {
                     }
                 }
             }
+            // A kitchen moves its upper units as well; the rest of `kept` stays.
+            const kept = autoLayoutKitchen
+                ? target.kept.filter((item) => !autoLayoutMovable.includes(item))
+                : target.kept;
             // A variant must also hold in the whole apartment, as hand-placed pieces do.
             const variants = solved.flatMap((variant, index) => {
                 const pieces = solvedToDrawFurniture(
@@ -7328,7 +7370,7 @@ const DrawRoom: React.FC = () => {
                     target.offset,
                     `furniture-auto-${Date.now()}-${index + 1}`,
                 );
-                const all = [...target.kept, ...pieces];
+                const all = [...kept, ...pieces];
                 const fits = pieces.every(
                     (piece) =>
                         !furnitureError(
@@ -7342,13 +7384,15 @@ const DrawRoom: React.FC = () => {
                         ),
                 );
                 // Pieces that did not fit stay where the person had put them.
-                const leftover = leftoverFor(variant.workingCore?.unplacedInstanceIds ?? []);
+                const leftover =
+                    variant.leftover ?? leftoverFor(variant.workingCore?.unplacedInstanceIds ?? []);
                 return fits && pieces.length
                     ? [
                           {
                               summary: { label: variant.label, count: pieces.length },
                               pieces,
                               leftover,
+                              kept,
                               around: Boolean(variant.around),
                               target: variant,
                           },
@@ -7407,6 +7451,7 @@ const DrawRoom: React.FC = () => {
             setAutoLayoutSolving(false);
         }
     }, [
+        autoLayoutKitchen,
         autoLayoutMovable,
         autoLayoutSet,
         autoLayoutSetKey,
@@ -7435,15 +7480,17 @@ const DrawRoom: React.FC = () => {
             if (!variant || autoLayoutTarget?.status !== "ready") return;
             commitScene({
                 ...scene,
-                furniture: [...autoLayoutTarget.kept, ...variant.pieces, ...variant.leftover],
+                furniture: [...variant.kept, ...variant.pieces, ...variant.leftover],
             });
             setAutoLayoutApplied(index);
             // Say why each leftover found no spot, in the catalogue's own rules.
             const missed = Array.from(
                 new Set(variant.leftover.map((item) => item.definitionId)),
             ).map((definitionId) => {
+                const name = furnitureDefinition(definitionId)?.label ?? definitionId;
+                if (isKitchenRunUnit(definitionId)) return `${name}: не хватило места в кухне`;
                 const rules = placementRules(definitionId);
-                return `${furnitureDefinition(definitionId)?.label ?? definitionId}: нет подходящего места${rules.length ? ` (нужно ${rules.join(", ")})` : ""}`;
+                return `${name}: нет подходящего места${rules.length ? ` (нужно ${rules.join(", ")})` : ""}`;
             });
             const applied = missed.length
                 ? `Вариант ${index + 1} расставлен. ${missed.join("; ")} — ${

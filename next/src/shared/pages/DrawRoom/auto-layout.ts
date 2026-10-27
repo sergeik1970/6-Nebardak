@@ -1,10 +1,14 @@
 import {
+    arrangeKitchen,
     buildFurnitureInstances,
     getDoorFurnitureObstacles,
     getFurniture,
     getRoomBoundarySegments,
     getRoomSegment,
     getRotatedGeometry,
+    isKitchenFloorUnit,
+    isKitchenRunUnit,
+    kitchenFixedFurniture,
     validateRoomGeometry,
     type DoorOpening,
     type DrawRoomRegion,
@@ -30,16 +34,19 @@ const SOLVER_GRID_MM = 50;
 /**
  * What «Авторасстановка» arranges: the pieces already standing in the room,
  * counted by kind, the largest first. Upper units hang over the worktop and
- * stay where they are.
+ * stay where they are, unless the room is laid out as a kitchen (`withUpper`).
  */
-export const roomFurnitureSet = (pieces: readonly DrawFurniture[]): Record<string, number> => {
+export const roomFurnitureSet = (
+    pieces: readonly DrawFurniture[],
+    withUpper = false,
+): Record<string, number> => {
     const area = (id: string) => {
         const geometry = getRotatedGeometry(getFurniture(id), 0);
         return geometry.width * geometry.depth;
     };
     const set: Record<string, number> = {};
     for (const piece of pieces)
-        if (getFurniture(piece.definitionId).mounting !== "upper")
+        if (withUpper || getFurniture(piece.definitionId).mounting !== "upper")
             set[piece.definitionId] = (set[piece.definitionId] ?? 0) + 1;
     return Object.fromEntries(
         Object.entries(set).sort(([first], [second]) => area(second) - area(first)),
@@ -400,3 +407,66 @@ export const solvedToDrawFurniture = (
             ...(placement.photoId ? { photoId: placement.photoId } : {}),
         };
     });
+
+/** With a floor unit of a kitchen in the room, the room is laid out as a kitchen. */
+export const hasKitchenRun = (pieces: readonly DrawFurniture[]): boolean =>
+    pieces.some((piece) => isKitchenFloorUnit(piece.definitionId));
+
+export interface KitchenVariant {
+    label: string;
+    /** In the solver room's frame: the kitchen, then the rest of the room. */
+    placements: Placement[];
+    /** Pieces with no place in this variant; they stay where they stand. */
+    leftover: DrawFurniture[];
+    score: number;
+}
+
+/**
+ * A kitchen room: the worktop run is laid by the kitchen rules, then the
+ * rest of the room (a table, chairs, an island) is solved around it.
+ */
+export async function solveKitchenVariants(
+    room: Room,
+    pieces: readonly DrawFurniture[],
+    solveRest: FallbackSolve,
+    limit = 3,
+): Promise<KitchenVariant[]> {
+    const kitchen = pieces.filter((piece) => isKitchenRunUnit(piece.definitionId));
+    const rest = pieces.filter((piece) => !isKitchenRunUnit(piece.definitionId));
+    const layouts = arrangeKitchen(
+        room,
+        kitchen.map((piece) => ({ instanceId: piece.id, definitionId: piece.definitionId })),
+        limit,
+    );
+    const variants: KitchenVariant[] = [];
+    for (const layout of layouts) {
+        const left = kitchen.filter((piece) => layout.unplacedInstanceIds.includes(piece.id));
+        let around: Placement[] = [];
+        let restLeft = [...rest];
+        if (rest.length) {
+            const instances = buildRoomInstances(roomFurnitureSet(rest));
+            const solved = await solveRest(
+                withFixedFurniture(room, kitchenFixedFurniture(layout.placements)),
+                instances,
+            );
+            if (solved?.result.status === "success") {
+                around = solved.result.placements;
+                // The pieces standing for what found no spot, one per instance.
+                const remaining = [...rest];
+                restLeft = solved.unplacedInstances.flatMap((instance) => {
+                    const index = remaining.findIndex(
+                        (piece) => piece.definitionId === instance.definitionId,
+                    );
+                    return index === -1 ? [] : remaining.splice(index, 1);
+                });
+            }
+        }
+        variants.push({
+            label: layout.label,
+            placements: [...layout.placements, ...around],
+            leftover: [...left, ...restLeft],
+            score: layout.score,
+        });
+    }
+    return variants;
+}

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
     createDefaultRoom,
     getDrawRoomRegions,
+    getFurniture,
+    getRotatedGeometry,
+    getWorldHardClearanceRects,
     getRoomSegment,
     solveRoomVariants,
     solveWithPreferredPlacementFallback,
@@ -11,8 +14,10 @@ import {
     arrangeAroundLeftovers,
     buildRegionSolverRoom,
     buildRoomInstances,
+    hasKitchenRun,
     placementRules,
     roomFurnitureSet,
+    solveKitchenVariants,
     solvedToDrawFurniture,
     solverFixedFurniture,
 } from "./auto-layout";
@@ -208,5 +213,73 @@ describe("auto layout in one room of the drawing", () => {
                 pouf.y < clear.y + clear.depth &&
                 pouf.y + 500 > clear.y,
         ).toBe(false);
+    });
+
+    it("lays a kitchen by its own rules and solves the table around it", async () => {
+        const base = createDefaultRoom(3600, 3600);
+        const room: Room = {
+            ...base,
+            doors: [{ ...base.doors[0], wall: "bottom", offset: 2600, width: 800 }],
+            windows: [{ id: "window", wall: "top", offset: 1200, width: 1200 }],
+        };
+        const piece = (definitionId: string, index: number): DrawFurniture => {
+            const geometry = getRotatedGeometry(getFurniture(definitionId), 0);
+            return {
+                id: `piece-${index}`,
+                definitionId,
+                x: 0,
+                y: 0,
+                width: geometry.width,
+                depth: geometry.depth,
+                rotation: 0,
+            };
+        };
+        const pieces = [
+            "kitchen-fridge",
+            "kitchen-sink",
+            "kitchen-cooker",
+            "kitchen-dishwasher",
+            "kitchen-base-600",
+            "kitchen-upper-600",
+            "kitchen-hood",
+            "dining-table",
+        ].map(piece);
+
+        expect(hasKitchenRun(pieces)).toBe(true);
+        expect(hasKitchenRun(pieces.filter((item) => item.definitionId.includes("upper")))).toBe(
+            false,
+        );
+        expect(roomFurnitureSet(pieces, true)).toHaveProperty("kitchen-upper-600", 1);
+        const variants = await solveKitchenVariants(room, pieces, async (target, instances) =>
+            solveWithPreferredPlacementFallback(target, instances, {}),
+        );
+
+        expect(variants.length).toBeGreaterThan(0);
+        const [best] = variants;
+        expect(best.leftover).toEqual([]);
+        const table = best.placements.find(
+            (placement) => placement.definitionId === "dining-table",
+        )!;
+        expect(table).toBeDefined();
+        const tableGeometry = getRotatedGeometry(getFurniture(table.definitionId), table.rotation);
+        const tableBody = {
+            x: table.x,
+            y: table.y,
+            width: tableGeometry.width,
+            depth: tableGeometry.depth,
+        };
+        const meets = (a: typeof tableBody, b: typeof tableBody) =>
+            a.x < b.x + b.width &&
+            b.x < a.x + a.width &&
+            a.y < b.y + b.depth &&
+            b.y < a.y + a.depth;
+        // The table keeps out of every worktop unit and of the space to work at it.
+        for (const placement of best.placements.filter(
+            (item) =>
+                item.definitionId.startsWith("kitchen-") &&
+                getFurniture(item.definitionId).mounting !== "upper",
+        ))
+            for (const zone of getWorldHardClearanceRects(placement))
+                expect(meets(tableBody, zone)).toBe(false);
     });
 });
