@@ -13,6 +13,9 @@ import {
     furnitureWallDistances,
     furnitureGeometry,
     furniturePassages,
+    placeFurniture,
+    snapFurnitureToNeighbours,
+    turnToNearestWall,
     passageBlocked,
     rotatedFurnitureCandidates,
     readFurniture,
@@ -409,5 +412,97 @@ describe("passages around placed furniture", () => {
             y: 800,
         };
         expect(front([wardrobe, pouf])).toMatchObject({ free: 300, need: 800 });
+    });
+});
+
+describe("placing like Remplanner", () => {
+    // A 4 × 3 m room, walls on the centre lines with 100 mm thickness.
+    const walls = [
+        { id: "top", start: { x: 0, y: 0 }, end: { x: 4000, y: 0 } },
+        { id: "right", start: { x: 4000, y: 0 }, end: { x: 4000, y: 3000 } },
+        { id: "bottom", start: { x: 4000, y: 3000 }, end: { x: 0, y: 3000 } },
+        { id: "left", start: { x: 0, y: 3000 }, end: { x: 0, y: 0 } },
+    ];
+    const sofa: DrawFurniture = {
+        id: "sofa",
+        definitionId: "sofa-three",
+        x: 900,
+        y: 1000,
+        width: 2200,
+        depth: 950,
+        rotation: 0,
+    };
+
+    it("turns a sofa's back to the wall it is carried to", () => {
+        // Its centre 300 mm from the right wall's face, facing up.
+        const near = { ...sofa, x: 3650 - 1100, y: 1500 - 475 };
+        const turned = turnToNearestWall(near, walls, 100);
+        expect(turned).toMatchObject({ rotation: 90, x: 3950 - 950, y: 1500 - 1100 });
+        const flush = placeFurniture(near, [], walls, 100, { magnets: true, turn: true });
+        expect(flush).toMatchObject({ rotation: 90, x: 3950 - 950 });
+    });
+
+    it("keeps a bed's long side along the wall", () => {
+        const bed: DrawFurniture = {
+            id: "bed",
+            definitionId: "single-bed",
+            x: 3950 - 900,
+            y: 500,
+            width: 900,
+            depth: 2000,
+            rotation: 0,
+        };
+        expect(turnToNearestWall(bed, walls, 100)).toEqual(bed);
+        // Its foot towards the top wall, it turns to stand head to the wall.
+        expect(
+            turnToNearestWall({ ...bed, x: 1500, y: 150, rotation: 180 }, walls, 100).rotation,
+        ).toBe(0);
+    });
+
+    it("keeps the turn of a coffee table and of a piece in the middle", () => {
+        const table = { ...sofa, definitionId: "coffee-table", width: 900, depth: 600 };
+        expect(turnToNearestWall({ ...table, x: 3000, y: 100 }, walls, 100).rotation).toBe(0);
+        expect(turnToNearestWall({ ...sofa, x: 900, y: 1000 }, walls, 100).rotation).toBe(0);
+    });
+
+    it("pulls a piece against its neighbour and lines up their fronts", () => {
+        const armchair: DrawFurniture = {
+            id: "armchair",
+            definitionId: "armchair",
+            x: 3170,
+            y: 1010,
+            width: 900,
+            depth: 900,
+            rotation: 0,
+        };
+        // 70 mm right of the sofa and 10 mm lower: pulled flush and lined up at the back.
+        expect(snapFurnitureToNeighbours(armchair, [sofa, armchair])).toMatchObject({
+            x: 3100,
+            y: 1000,
+        });
+        // Alt carries it with no magnets.
+        expect(
+            placeFurniture(armchair, [sofa], walls, 100, { magnets: false, turn: true }),
+        ).toEqual(armchair);
+    });
+
+    it("mirrors a corner sofa's chaise and its passage to the other side", () => {
+        const corner: DrawFurniture = {
+            id: "corner",
+            definitionId: "sofa-four-left",
+            x: 0,
+            y: 0,
+            width: 2200,
+            depth: 1500,
+            rotation: 0,
+        };
+        const chaise = (item: DrawFurniture) =>
+            furnitureGeometry(item).bodyRects.find((rect) => rect.depth === 550)!;
+        expect(chaise(corner).x).toBe(0);
+        expect(chaise({ ...corner, mirrored: true }).x).toBe(2200 - 730);
+        const passage = (item: DrawFurniture) =>
+            furniturePassages([item], [], 100).find((entry) => entry.itemId === "corner")!;
+        expect(passage(corner).rect.x).toBe(730);
+        expect(passage({ ...corner, mirrored: true }).rect.x).toBe(0);
     });
 });
