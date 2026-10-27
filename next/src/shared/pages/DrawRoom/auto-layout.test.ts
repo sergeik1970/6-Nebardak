@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+    createDefaultRoom,
     getDrawRoomRegions,
     getRoomSegment,
     solveRoomVariants,
+    solveWithPreferredPlacementFallback,
     type Room,
 } from "@/shared/lib/furniture-planner";
 import {
+    arrangeAroundLeftovers,
     buildRegionSolverRoom,
     buildRoomInstances,
+    placementRules,
     roomFurnitureSet,
     solvedToDrawFurniture,
+    solverFixedFurniture,
 } from "./auto-layout";
 import type { DrawFurniture } from "./furniture";
 
@@ -147,5 +152,61 @@ describe("auto layout in one room of the drawing", () => {
         expect(Object.keys(set)[0]).toBe("double-bed");
         expect(buildRoomInstances(set)[0].priority).toBe("required");
         expect(roomFurnitureSet([])).toEqual({});
+    });
+
+    it("names the rules a piece needs, for a note when it finds no spot", () => {
+        expect(placementRules("kitchen-fridge-wide")).toEqual([
+            "спиной к стене",
+            "90 см спереди",
+            "не у окна",
+        ]);
+        expect(placementRules("pouf")).toEqual(["не у окна"]);
+    });
+
+    it("leaves a piece with no spot where it stands and arranges the rest around it", async () => {
+        // Every wall is lined with pinned storage, so a fridge cannot stand back to a wall.
+        const strips = [
+            { x: 0, y: 0, width: 3000, depth: 300 },
+            { x: 0, y: 2700, width: 3000, depth: 300 },
+            { x: 0, y: 300, width: 300, depth: 2400 },
+            { x: 2700, y: 300, width: 300, depth: 2400 },
+        ];
+        const room: Room = {
+            ...createDefaultRoom(3000, 3000),
+            doors: [],
+            windows: [],
+            fixedFurniture: { bodies: strips, passages: [] },
+        };
+        const fridge = {
+            id: "fridge",
+            definitionId: "kitchen-fridge-wide",
+            x: 1050,
+            y: 1000,
+            width: 900,
+            depth: 700,
+            rotation: 0 as const,
+        };
+        const instances = buildRoomInstances({ "kitchen-fridge-wide": 1, pouf: 1 });
+        const arranged = await arrangeAroundLeftovers(
+            room,
+            instances,
+            () => solverFixedFurniture([fridge], { x: 0, y: 0 }),
+            async (target, pieces) => solveWithPreferredPlacementFallback(target, pieces, {}),
+        );
+
+        expect(arranged?.unplaced.map((item) => item.definitionId)).toEqual([
+            "kitchen-fridge-wide",
+        ]);
+        expect(arranged?.around).toBe(true);
+        // The pouf stays clear of the fridge and of the space to open its doors.
+        const [pouf] = arranged!.core.placements;
+        expect(pouf.definitionId).toBe("pouf");
+        const clear = { x: 1050, y: 1000, width: 900, depth: 1600 };
+        expect(
+            pouf.x < clear.x + clear.width &&
+                pouf.x + 500 > clear.x &&
+                pouf.y < clear.y + clear.depth &&
+                pouf.y + 500 > clear.y,
+        ).toBe(false);
     });
 });

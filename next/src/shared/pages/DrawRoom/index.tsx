@@ -94,8 +94,12 @@ import { isAuthEnabled } from "@/shared/config/runtime";
 import {
     buildRegionSolverRoom,
     buildRoomInstances,
+    arrangeAroundLeftovers,
+    placementRules,
     roomFurnitureSet,
     solvedToDrawFurniture,
+    solverFixedFurniture,
+    withFixedFurniture,
 } from "./auto-layout";
 import type {
     SolverWorkerRequest,
@@ -7123,6 +7127,8 @@ const DrawRoom: React.FC = () => {
             pieces: DrawFurniture[];
             /** What did not fit, left where the person had put it. */
             leftover: DrawFurniture[];
+            /** The rest was solved around the leftover. */
+            around: boolean;
             observation?: PlannerObservationCreateInput;
         }[];
     } | null>(null);
@@ -7195,28 +7201,10 @@ const DrawRoom: React.FC = () => {
         const upper = (item: DrawFurniture) =>
             furnitureDefinition(item.definitionId)?.mounting === "upper";
         // A pinned floor piece is a fixed obstacle for the solver, passages included.
-        const pinned = own.filter((item) => item.locked && !upper(item));
-        const local = (rect: Rect, item: DrawFurniture) => ({
-            x: rect.x + item.x - offset.x,
-            y: rect.y + item.y - offset.y,
-            width: rect.width,
-            depth: rect.depth,
-        });
-        const fixedFurniture = {
-            bodies: pinned.flatMap((item) =>
-                furnitureGeometry(item).bodyRects.map((rect) => local(rect, item)),
-            ),
-            passages: pinned.flatMap((item) =>
-                getRotatedGeometry(
-                    furnitureDefinition(item.definitionId)!,
-                    item.rotation,
-                    item,
-                ).hardClearanceRects.map((rect) => local(rect, item)),
-            ),
-        };
+        const pinned = own.filter((item) => item.locked);
         return {
             ...cut,
-            room: pinned.length ? { ...cut.room, fixedFurniture } : cut.room,
+            room: withFixedFurniture(cut.room, solverFixedFurniture(pinned, offset)),
             offset,
             // Upper units are not rearranged; they stay over the worktop.
             kept: items.filter((item) => !own.includes(item) || item.locked || upper(item)),
@@ -7250,7 +7238,21 @@ const DrawRoom: React.FC = () => {
         setAutoLayoutStatus("Подбираем варианты…");
         setAutoLayoutApplied(null);
         try {
-            let solved: (PlannerObservationTarget & { label: string })[] = [];
+            // `around`: what found no spot stayed put and the rest was solved around it.
+            let solved: (PlannerObservationTarget & { label: string; around?: boolean })[] = [];
+            const nameOf = (definitionId: string) =>
+                furnitureDefinition(definitionId)?.label ?? definitionId;
+            // The hand-placed pieces standing for unplaced instances, one per instance.
+            const leftoverFor = (ids: string[]) => {
+                const remaining = [...autoLayoutMovable];
+                return ids.flatMap((id) => {
+                    const definitionId = instances.find(
+                        (instance) => instance.instanceId === id,
+                    )?.definitionId;
+                    const index = remaining.findIndex((item) => item.definitionId === definitionId);
+                    return index === -1 ? [] : remaining.splice(index, 1);
+                });
+            };
             const response = await requestSolver({
                 action: "solve-variants",
                 room: target.room,
@@ -7271,45 +7273,52 @@ const DrawRoom: React.FC = () => {
                         solverStatus: "success" as const,
                     }));
                 } else {
-                    // As on the layout step: fall back to what fits, dropping optional pieces.
-                    const fallback = await requestSolver({
-                        action: "solve-preferred-fallback",
-                        room: target.room,
+                    // As on the layout step: fall back to what fits, dropping optional
+                    // pieces; what still finds no spot stays put and the rest goes around it.
+                    const arranged = await arrangeAroundLeftovers(
+                        target.room,
                         instances,
-                        preferences: {},
-                    });
-                    if (
-                        fallback.ok &&
-                        fallback.action === "solve-preferred-fallback" &&
-                        fallback.result.result.status === "success"
-                    )
+                        (ids) => solverFixedFurniture(leftoverFor(ids), target.offset),
+                        async (room, pieces) => {
+                            const response = await requestSolver({
+                                action: "solve-preferred-fallback",
+                                room,
+                                instances: pieces,
+                                preferences: {},
+                            });
+                            return response.ok && response.action === "solve-preferred-fallback"
+                                ? response.result
+                                : null;
+                        },
+                    );
+                    if (arranged) {
+                        const { core, unplaced, around } = arranged;
+                        const names = Array.from(
+                            new Set(unplaced.map((instance) => nameOf(instance.definitionId))),
+                        ).join(", ");
                         solved = [
                             {
                                 id: WORKING_CORE_OBSERVATION_ID,
-                                label: fallback.result.unplacedInstances.length
-                                    ? `Не поместилось: ${Array.from(
-                                          new Set(
-                                              fallback.result.unplacedInstances.map(
-                                                  (instance) =>
-                                                      furnitureDefinition(instance.definitionId)
-                                                          ?.label ?? instance.definitionId,
-                                              ),
-                                          ),
-                                      ).join(", ")}`
+                                label: unplaced.length
+                                    ? around
+                                        ? `Остаётся на своём месте: ${names}`
+                                        : `Не поместилось: ${names}`
                                     : "Всё поместилось",
-                                placements: fallback.result.result.placements,
-                                exploredNodes: fallback.result.result.exploredNodes,
-                                score: fallback.result.result.score,
-                                notes: fallback.result.result.notes,
+                                around,
+                                placements: core.placements,
+                                exploredNodes: core.exploredNodes,
+                                score: core.score,
+                                notes: core.notes,
                                 solverStatus: "partial" as const,
                                 workingCore: {
                                     requestedItemCount: instances.length,
-                                    unplacedInstanceIds: fallback.result.unplacedInstances.map(
+                                    unplacedInstanceIds: unplaced.map(
                                         (instance) => instance.instanceId,
                                     ),
                                 },
                             },
                         ];
+                    }
                 }
             }
             // A variant must also hold in the whole apartment, as hand-placed pieces do.
@@ -7333,20 +7342,14 @@ const DrawRoom: React.FC = () => {
                         ),
                 );
                 // Pieces that did not fit stay where the person had put them.
-                const remaining = [...autoLayoutMovable];
-                const leftover = (variant.workingCore?.unplacedInstanceIds ?? []).flatMap((id) => {
-                    const definitionId = instances.find(
-                        (instance) => instance.instanceId === id,
-                    )?.definitionId;
-                    const index = remaining.findIndex((item) => item.definitionId === definitionId);
-                    return index === -1 ? [] : remaining.splice(index, 1);
-                });
+                const leftover = leftoverFor(variant.workingCore?.unplacedInstanceIds ?? []);
                 return fits && pieces.length
                     ? [
                           {
                               summary: { label: variant.label, count: pieces.length },
                               pieces,
                               leftover,
+                              around: Boolean(variant.around),
                               target: variant,
                           },
                       ]
@@ -7435,19 +7438,20 @@ const DrawRoom: React.FC = () => {
                 furniture: [...autoLayoutTarget.kept, ...variant.pieces, ...variant.leftover],
             });
             setAutoLayoutApplied(index);
+            // Say why each leftover found no spot, in the catalogue's own rules.
             const missed = Array.from(
-                new Set(
-                    variant.leftover.map(
-                        (item) =>
-                            furnitureDefinition(item.definitionId)?.label ?? item.definitionId,
-                    ),
-                ),
-            );
+                new Set(variant.leftover.map((item) => item.definitionId)),
+            ).map((definitionId) => {
+                const rules = placementRules(definitionId);
+                return `${furnitureDefinition(definitionId)?.label ?? definitionId}: нет подходящего места${rules.length ? ` (нужно ${rules.join(", ")})` : ""}`;
+            });
             const applied = missed.length
-                ? `Вариант ${index + 1} расставлен. Не поместилось: ${missed.join(", ")} — оставлено на прежнем месте, передвиньте вручную.`
+                ? `Вариант ${index + 1} расставлен. ${missed.join("; ")} — ${
+                      variant.around
+                          ? "оставлено там, где вы поставили, остальное расставлено вокруг."
+                          : "оставлено на прежнем месте, передвиньте вручную."
+                  }`
                 : `Вариант ${index + 1} расставлен. Предметы можно двигать вручную.`;
-            // The furniture step keeps its own hint above the drawing; the
-            // auto layout column says what happened.
             setNotice(applied);
             setAutoLayoutStatus(applied);
         },

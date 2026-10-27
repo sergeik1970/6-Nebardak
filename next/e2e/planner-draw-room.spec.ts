@@ -5008,10 +5008,10 @@ test("a piece auto layout cannot fit stays on the plan for the next try", async 
     await expect(variant).toContainText("Не поместилось: Кресло", { timeout: 30_000 });
     await variant.click();
 
-    // The armchair is still there, and the column says where it went.
+    // The armchair is still there, and the column says why it found no spot.
     await expect(pieces).toHaveCount(4);
     await expect(auto.getByRole("status")).toContainText(
-        "Не поместилось: Кресло, схема 900 × 900 мм — оставлено на прежнем месте",
+        "Кресло, схема 900 × 900 мм: нет подходящего места (нужно 70 см спереди, не у окна) — оставлено на прежнем месте, передвиньте вручную.",
     );
     // The next try counts it again.
     await expect(auto.locator("[data-auto-layout-item='armchair']")).toBeVisible();
