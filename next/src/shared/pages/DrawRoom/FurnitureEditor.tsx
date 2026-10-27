@@ -258,7 +258,7 @@ export default function FurnitureEditor({
                 if (event.code === "KeyC" && selected && !pending) {
                     event.preventDefault();
                     clipboard.current = selected;
-                    setMessage("Скопировано. Cmd+V — поставить копию.");
+                    setMessage("Скопировано. ⌘V или Ctrl+V — поставить копию.");
                 } else if (event.code === "KeyV" && clipboard.current) {
                     event.preventDefault();
                     event.stopImmediatePropagation();
