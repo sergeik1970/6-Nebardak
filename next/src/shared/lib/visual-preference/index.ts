@@ -1,6 +1,10 @@
-export const VISUAL_TEST_SESSION_VERSION = 2 as const;
+export const VISUAL_TEST_SESSION_VERSION = 3 as const;
+/** Version 2 sessions predate tie-break rounds and keep replaying under their rules. */
+export const VISUAL_TEST_SUPPORTED_VERSIONS = [2, 3] as const;
 export const VISUAL_TEST_SESSION_KEY = "stylefinder:visual-preference:v2";
 export const VISUAL_TEST_TOTAL_STEPS = 18;
+/** One tie-break round per node at most: three binary nodes and the final. */
+export const VISUAL_TEST_MAX_STEPS = VISUAL_TEST_TOTAL_STEPS + 4;
 export const VISUAL_TEST_MAX_PRELOAD_URLS = 4;
 
 export type NodeId =
@@ -81,8 +85,10 @@ interface SessionSnapshot {
     result?: VisualTestResult;
 }
 
+export type VisualTestSessionVersion = (typeof VISUAL_TEST_SUPPORTED_VERSIONS)[number];
+
 export interface VisualTestSession extends SessionSnapshot {
-    version: typeof VISUAL_TEST_SESSION_VERSION;
+    version: VisualTestSessionVersion;
     seed: number;
     answers: AnswerRecord[];
     history: SessionSnapshot[];
@@ -471,6 +477,14 @@ function seededIndex(length: number, seed: number, scope: string): number {
     return hashSeed(seed, scope) % length;
 }
 
+function regularRoundCount(nodeId: NodeId): number {
+    return NODES[nodeId].type === "binary" ? BINARY_ROUNDS : FINAL_ROUNDS;
+}
+
+function nodeCategory(nodeId: NodeId, key: string): VisualCategory | undefined {
+    return (NODES[nodeId].categories as readonly VisualCategory[]).find((item) => item.key === key);
+}
+
 function getRoundCategories(nodeId: NodeId, round: number): [VisualCategory, VisualCategory] {
     const node = NODES[nodeId];
     if (node.type === "binary") return [...node.categories];
@@ -498,8 +512,8 @@ function orderedRoundCategories(
     nodeId: NodeId,
     round: number,
     seed: number,
+    categories: [VisualCategory, VisualCategory],
 ): [VisualCategory, VisualCategory] {
-    const categories = getRoundCategories(nodeId, round);
     const sortedKeys = categories
         .map((item) => item.key)
         .sort()
@@ -528,8 +542,9 @@ function buildSlots(
     round: number,
     seed: number,
     usedImages: Record<string, number[]>,
+    roundCategories: [VisualCategory, VisualCategory] = getRoundCategories(nodeId, round),
 ): [VisualSlot, VisualSlot] {
-    const categories = orderedRoundCategories(nodeId, round, seed);
+    const categories = orderedRoundCategories(nodeId, round, seed, roundCategories);
     return categories.map((categoryDefinition) => ({
         key: categoryDefinition.key,
         imageIndex: pickImageIndex(
@@ -582,12 +597,9 @@ function snapshotOf(session: VisualTestSession): SessionSnapshot {
 
 function markCurrentImagesUsed(session: VisualTestSession): Record<string, number[]> {
     const usedImages = copyUsedImages(session.usedImages);
-    const categories = new Map(
-        getRoundCategories(session.nodeId, session.round).map((item) => [item.key, item]),
-    );
 
     for (const slot of session.slots) {
-        const folder = categories.get(slot.key)?.folder;
+        const folder = nodeCategory(session.nodeId, slot.key)?.folder;
         if (!folder) continue;
         const values = usedImages[folder] ? [...usedImages[folder]] : [];
         if (!values.includes(slot.imageIndex)) values.push(slot.imageIndex);
@@ -629,17 +641,43 @@ function rankedCategories(
     });
 }
 
-function makeResult(session: VisualTestSession, scores: Record<string, number>): VisualTestResult {
+/** The two leaders when the top score is shared, in seeded order; otherwise null. */
+function tiedLeaders(
+    nodeId: NodeId,
+    scores: Record<string, number>,
+    seed: number,
+): [VisualCategory, VisualCategory] | null {
+    const ranking = rankedCategories(NODES[nodeId].categories, scores, seed, nodeId);
+    return (scores[ranking[0].key] ?? 0) === (scores[ranking[1].key] ?? 0)
+        ? [ranking[0], ranking[1]]
+        : null;
+}
+
+export function isTieBreakRound(session: VisualTestSession): boolean {
+    return session.phase === "playing" && session.round >= regularRoundCount(session.nodeId);
+}
+
+/**
+ * Confidence describes the regular final rounds only: a tie-break pick settles
+ * the order but must not turn an even split into a "clear" signal.
+ */
+function makeResult(
+    session: VisualTestSession,
+    scores: Record<string, number>,
+    regularScores: Record<string, number>,
+): VisualTestResult {
     const node = NODES[session.nodeId];
     if (node.type !== "final") throw new Error("Result can only be created for a final node");
 
     const ranking = rankedCategories(node.categories, scores, session.seed, session.nodeId);
     const primary = STYLE_PROFILES[ranking[0].key];
-    const finalAnswers = session.answers.filter((answer) => answer.nodeId === session.nodeId);
+    const nodeAnswers = session.answers.filter((answer) => answer.nodeId === session.nodeId);
+    const finalAnswers = nodeAnswers.filter((answer) => answer.round < FINAL_ROUNDS);
+    const hadTieBreak = finalAnswers.length < nodeAnswers.length;
     const decisiveCount = finalAnswers.filter((answer) => answer.response.kind === "choose").length;
     const bothCount = finalAnswers.filter((answer) => answer.response.kind === "both").length;
     const neitherCount = finalAnswers.filter((answer) => answer.response.kind === "neither").length;
-    const scoreMargin = (scores[ranking[0].key] ?? 0) - (scores[ranking[1].key] ?? 0);
+    const scoreMargin = (regularScores[ranking[0].key] ?? 0) - (regularScores[ranking[1].key] ?? 0);
     const confidenceScore = Math.max(
         18,
         Math.min(
@@ -664,20 +702,25 @@ function makeResult(session: VisualTestSession, scores: Record<string, number>):
             decisiveCount >= 4
                 ? "в большинстве финальных пар был выбран один вариант"
                 : "несколько финальных пар оказались равно близкими",
-            scoreMargin > 0
-                ? `основное направление опередило ближайшее на ${scoreMargin.toLocaleString("ru-RU")} балла`
-                : "два направления получили одинаковый балл; порядок определён по seed",
+            hadTieBreak
+                ? "два направления набрали поровну, основное выбрано в решающем сравнении"
+                : scoreMargin > 0
+                  ? `основное направление опередило ближайшее на ${scoreMargin.toLocaleString("ru-RU")} балла`
+                  : "два направления получили одинаковый балл; порядок определён по seed",
         ],
         palette: [...primary.palette],
         materials: [...primary.materials],
     };
 }
 
-export function createVisualTestSession(seed: number): VisualTestSession {
+export function createVisualTestSession(
+    seed: number,
+    version: VisualTestSessionVersion = VISUAL_TEST_SESSION_VERSION,
+): VisualTestSession {
     const normalizedSeed = Number.isSafeInteger(seed) && seed > 0 ? seed >>> 0 || 1 : 1;
     const usedImages: Record<string, number[]> = {};
     return {
-        version: VISUAL_TEST_SESSION_VERSION,
+        version,
         phase: "playing",
         seed: normalizedSeed,
         nodeId: "root",
@@ -698,6 +741,9 @@ export function answerVisualTest(
     if (response.kind === "choose" && !session.slots.some((slot) => slot.key === response.key)) {
         throw new Error("The chosen category is not on the current screen");
     }
+    // A tie-break exists to force a pick; a neutral answer there would tie again.
+    const tieBreak = isTieBreakRound(session);
+    if (tieBreak && response.kind !== "choose") return session;
 
     const node = NODES[session.nodeId];
     const nextScores = scoreResponse(session.scores, session.slots, response);
@@ -710,7 +756,7 @@ export function answerVisualTest(
     };
     const answers = [...session.answers, answer];
     const history = [...session.history, snapshotOf(session)];
-    const roundCount = node.type === "binary" ? BINARY_ROUNDS : FINAL_ROUNDS;
+    const roundCount = regularRoundCount(session.nodeId);
 
     if (session.round + 1 < roundCount) {
         return {
@@ -719,6 +765,22 @@ export function answerVisualTest(
             scores: nextScores,
             usedImages,
             slots: buildSlots(session.nodeId, session.round + 1, session.seed, usedImages),
+            answers,
+            history,
+        };
+    }
+
+    const tie =
+        session.version >= 3 && !tieBreak
+            ? tiedLeaders(session.nodeId, nextScores, session.seed)
+            : null;
+    if (tie) {
+        return {
+            ...session,
+            round: roundCount,
+            scores: nextScores,
+            usedImages,
+            slots: buildSlots(session.nodeId, roundCount, session.seed, usedImages, tie),
             answers,
             history,
         };
@@ -752,7 +814,8 @@ export function answerVisualTest(
         usedImages,
         answers,
         history,
-        result: makeResult(withAnswer, nextScores),
+        // On a tie-break the stored scores are the regular-round totals.
+        result: makeResult(withAnswer, nextScores, tieBreak ? session.scores : nextScores),
     };
 }
 
@@ -761,7 +824,7 @@ export function undoVisualTest(session: VisualTestSession): VisualTestSession {
     if (!previous) return session;
 
     const restored: VisualTestSession = {
-        version: VISUAL_TEST_SESSION_VERSION,
+        version: session.version,
         seed: session.seed,
         phase: previous.phase,
         nodeId: previous.nodeId,
@@ -778,9 +841,7 @@ export function undoVisualTest(session: VisualTestSession): VisualTestSession {
 }
 
 export function getCategoryForSlot(session: VisualTestSession, slot: VisualSlot): VisualCategory {
-    const categoryDefinition = getRoundCategories(session.nodeId, session.round).find(
-        (item) => item.key === slot.key,
-    );
+    const categoryDefinition = nodeCategory(session.nodeId, slot.key);
     if (!categoryDefinition) throw new Error(`Unknown visual category ${slot.key}`);
     return categoryDefinition;
 }
@@ -802,7 +863,7 @@ export function getReachableNextImageUrls(session: VisualTestSession): string[] 
 
     for (const response of responses) {
         const next = answerVisualTest(session, response);
-        if (next.phase !== "playing") continue;
+        if (next === session || next.phase !== "playing") continue;
         for (const slot of next.slots) {
             const categoryDefinition = getCategoryForSlot(next, slot);
             urls.add(getVisualImagePath(categoryDefinition, slot.imageIndex));
@@ -829,7 +890,7 @@ function fingerprint(value: unknown): string {
 }
 
 function parseReplayableAnswers(value: unknown): AnswerRecord[] | null {
-    if (!Array.isArray(value) || value.length > VISUAL_TEST_TOTAL_STEPS) return null;
+    if (!Array.isArray(value) || value.length > VISUAL_TEST_MAX_STEPS) return null;
     const answers: AnswerRecord[] = [];
 
     for (const item of value) {
@@ -876,8 +937,12 @@ function parseReplayableAnswers(value: unknown): AnswerRecord[] | null {
     return answers;
 }
 
-export function replayVisualTest(seed: number, answers: AnswerRecord[]): VisualTestSession {
-    let session = createVisualTestSession(seed);
+export function replayVisualTest(
+    seed: number,
+    answers: AnswerRecord[],
+    version: VisualTestSessionVersion = VISUAL_TEST_SESSION_VERSION,
+): VisualTestSession {
+    let session = createVisualTestSession(seed, version);
 
     for (const answer of answers) {
         if (session.phase !== "playing")
@@ -895,7 +960,9 @@ export function replayVisualTest(seed: number, answers: AnswerRecord[]): VisualT
         if (fingerprint(expectedContext) !== fingerprint(storedContext)) {
             throw new Error("Stored answer does not match its deterministic screen");
         }
-        session = answerVisualTest(session, answer.response);
+        const next = answerVisualTest(session, answer.response);
+        if (next === session) throw new Error("Stored answer is not accepted on its screen");
+        session = next;
     }
 
     return session;
@@ -908,7 +975,8 @@ export function serializeVisualTestSession(session: VisualTestSession): string {
 function normalizeParsedVisualTestSession(candidate: unknown): VisualTestSession | null {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
     const record = candidate as Record<string, unknown>;
-    if (record.version !== VISUAL_TEST_SESSION_VERSION) return null;
+    const version = VISUAL_TEST_SUPPORTED_VERSIONS.find((item) => item === record.version);
+    if (version === undefined) return null;
     if (
         !Number.isSafeInteger(record.seed) ||
         (record.seed as number) <= 0 ||
@@ -920,7 +988,7 @@ function normalizeParsedVisualTestSession(candidate: unknown): VisualTestSession
     if (!answers) return null;
 
     try {
-        const replayed = replayVisualTest(record.seed as number, answers);
+        const replayed = replayVisualTest(record.seed as number, answers, version);
         return fingerprint(record) === fingerprint(replayed) ? replayed : null;
     } catch {
         return null;
@@ -981,6 +1049,14 @@ export function clearVisualTestSession(storage: SessionStorageLike): void {
     }
 }
 
+/** The regular 18 steps plus every tie-break shown so far, including the current one. */
+export function getVisualTestTotalSteps(session: VisualTestSession): number {
+    const pastTieBreaks = session.answers.filter(
+        (answer) => answer.round >= regularRoundCount(answer.nodeId),
+    ).length;
+    return VISUAL_TEST_TOTAL_STEPS + pastTieBreaks + (isTieBreakRound(session) ? 1 : 0);
+}
+
 export function getVisualTestStep(session: VisualTestSession): number {
-    return Math.min(session.answers.length + 1, VISUAL_TEST_TOTAL_STEPS);
+    return Math.min(session.answers.length + 1, getVisualTestTotalSteps(session));
 }

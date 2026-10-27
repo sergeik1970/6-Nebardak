@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
     STYLE_PROFILES,
     VISUAL_TEST_MAX_PRELOAD_URLS,
+    VISUAL_TEST_MAX_STEPS,
     VISUAL_TEST_SESSION_KEY,
     VISUAL_TEST_TOTAL_STEPS,
     answerVisualTest,
     clearVisualTestSession,
     createVisualTestSession,
     getReachableNextImageUrls,
+    getVisualTestStep,
+    getVisualTestTotalSteps,
+    isTieBreakRound,
     normalizeVisualTestSession,
     parseVisualTestSession,
     persistVisualTestSession,
@@ -38,9 +42,20 @@ function answerFirst(session: VisualTestSession): VisualTestSession {
     return answerVisualTest(session, { kind: "choose", key: session.slots[0].key });
 }
 
+function choose(session: VisualTestSession, key: string): VisualTestSession {
+    return answerVisualTest(session, { kind: "choose", key });
+}
+
 function reachFinalNode(seed = 20260717): VisualTestSession {
     let session = createVisualTestSession(seed);
-    while (session.answers.length < 12) session = answerFirst(session);
+    while (!session.nodeId.endsWith("-styles")) session = answerFirst(session);
+    return session;
+}
+
+/** Splits the four root rounds 2:2 between "techno" and "natura". */
+function tieRoot(seed: number, version?: 2 | 3): VisualTestSession {
+    let session = createVisualTestSession(seed, version);
+    for (const key of ["techno", "natura", "techno", "natura"]) session = choose(session, key);
     return session;
 }
 
@@ -172,7 +187,8 @@ describe("visual preference engine", () => {
         const resultSession = finish(createVisualTestSession(808));
         const restored = parseVisualTestSession(serializeVisualTestSession(resultSession));
 
-        expect(resultSession.answers).toHaveLength(VISUAL_TEST_TOTAL_STEPS);
+        expect(resultSession.answers.length).toBeGreaterThanOrEqual(VISUAL_TEST_TOTAL_STEPS);
+        expect(resultSession.answers.length).toBeLessThanOrEqual(VISUAL_TEST_MAX_STEPS);
         expect(resultSession.phase).toBe("results");
         expect(resultSession.result).toBeDefined();
         expect(resultSession.result?.nearbyKeys).toHaveLength(2);
@@ -185,7 +201,7 @@ describe("visual preference engine", () => {
     it("preloads only the bounded set of reachable next images", () => {
         let session = createVisualTestSession(119);
 
-        for (let step = 0; step < VISUAL_TEST_TOTAL_STEPS; step += 1) {
+        for (let step = 0; step < VISUAL_TEST_MAX_STEPS; step += 1) {
             const urls = getReachableNextImageUrls(session);
             expect(urls.length).toBeLessThanOrEqual(VISUAL_TEST_MAX_PRELOAD_URLS);
             expect(new Set(urls).size).toBe(urls.length);
@@ -193,5 +209,111 @@ describe("visual preference engine", () => {
             session = answerFirst(session);
             if (session.phase === "results") break;
         }
+    });
+});
+
+describe("visual preference tie-break round", () => {
+    it("moves on without a tie-break when a binary node has a winner", () => {
+        let session = createVisualTestSession(31);
+        for (let round = 0; round < 4; round += 1) session = choose(session, "techno");
+
+        expect(session.nodeId).toBe("urban");
+        expect(session.round).toBe(0);
+    });
+
+    it("adds a forced-choice round with the same pair after a binary tie", () => {
+        const tied = tieRoot(32);
+
+        expect(tied.nodeId).toBe("root");
+        expect(isTieBreakRound(tied)).toBe(true);
+        expect(tied.slots.map((slot) => slot.key).sort()).toEqual(["natura", "techno"]);
+        expect(getVisualTestStep(tied)).toBe(5);
+        expect(getVisualTestTotalSteps(tied)).toBe(VISUAL_TEST_TOTAL_STEPS + 1);
+        expect(answerVisualTest(tied, { kind: "both" })).toBe(tied);
+        expect(answerVisualTest(tied, { kind: "neither" })).toBe(tied);
+
+        const decided = choose(tied, "natura");
+        expect(decided.nodeId).toBe("nature");
+        expect(isTieBreakRound(decided)).toBe(false);
+        expect(getVisualTestTotalSteps(decided)).toBe(VISUAL_TEST_TOTAL_STEPS + 1);
+    });
+
+    it("shows a fresh photo in the tie-break round", () => {
+        const tied = tieRoot(33);
+        const shown = tied.answers.flatMap((answer, index) =>
+            answer.slotKeys.map(
+                (key) =>
+                    `${key}:${tied.history[index].slots.find((slot) => slot.key === key)!.imageIndex}`,
+            ),
+        );
+
+        for (const slot of tied.slots) {
+            expect(shown).not.toContain(`${slot.key}:${slot.imageIndex}`);
+        }
+    });
+
+    it("lets the tie-break pick the primary style without inflating confidence", () => {
+        let session = reachFinalNode(34);
+        for (let round = 0; round < 6; round += 1) {
+            session = answerVisualTest(session, { kind: "both" });
+        }
+
+        expect(isTieBreakRound(session)).toBe(true);
+        const pick = session.slots[1].key;
+        const result = choose(session, pick);
+
+        expect(result.phase).toBe("results");
+        expect(result.result?.primaryKey).toBe(pick);
+        expect(result.result?.confidenceScore).toBe(18);
+        expect(result.result?.influences[2]).toBe(
+            "два направления набрали поровну, основное выбрано в решающем сравнении",
+        );
+    });
+
+    it("undoes a tie-break back to the last regular round", () => {
+        const tied = tieRoot(35);
+        const decided = choose(tied, "techno");
+
+        expect(undoVisualTest(decided)).toEqual(tied);
+        expect(isTieBreakRound(undoVisualTest(tied))).toBe(false);
+    });
+
+    it("round-trips a session with a tie-break through storage", () => {
+        const storage = new MemoryStorage();
+        const session = choose(tieRoot(36), "techno");
+
+        expect(persistVisualTestSession(storage, session)).toBe(true);
+        expect(restoreVisualTestSession(storage)).toEqual(session);
+    });
+
+    it("rejects a stored neutral answer on a tie-break screen", () => {
+        const tied = tieRoot(37);
+        const forged = {
+            ...tied,
+            answers: [
+                ...tied.answers,
+                {
+                    nodeId: "root",
+                    round: 4,
+                    slotKeys: tied.slots.map((slot) => slot.key),
+                    response: { kind: "neither" },
+                },
+            ],
+        };
+
+        expect(normalizeVisualTestSession(forged)).toBeNull();
+    });
+
+    it("keeps replaying version 2 sessions under their seeded tie rule", () => {
+        const legacy = tieRoot(38, 2);
+
+        expect(legacy.version).toBe(2);
+        expect(legacy.nodeId).not.toBe("root");
+        expect(isTieBreakRound(legacy)).toBe(false);
+        expect(normalizeVisualTestSession(legacy)).toEqual(legacy);
+
+        const finished = finish(legacy);
+        expect(finished.answers).toHaveLength(VISUAL_TEST_TOTAL_STEPS);
+        expect(parseVisualTestSession(serializeVisualTestSession(finished))).toEqual(finished);
     });
 });

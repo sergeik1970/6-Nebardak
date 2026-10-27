@@ -189,6 +189,16 @@
     margin-top: 1rem;
 }
 
+.tieBreakNote {
+    margin: 1rem 0 0;
+    padding: 0.75rem 1rem;
+    color: #4b433a;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    background: var(--sf-color-warning-surface);
+    border-left: 3px solid var(--sf-color-brand-active);
+}
+
 .neutralButton,
 .secondaryAction {
     padding: 0.75rem 1rem;

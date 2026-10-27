@@ -134,7 +134,7 @@ const createVisualProgress = () => answerFirst(answerFirst(createVisualTestSessi
 const createVisualResult = () => {
     let session = createVisualTestSession(20260718);
     while (session.phase === "playing") session = answerFirst(session);
-    if (session.answers.length !== VISUAL_TEST_TOTAL_STEPS) {
+    if (session.answers.length < VISUAL_TEST_TOTAL_STEPS) {
         throw new Error("Expected a complete visual-test fixture.");
     }
     return session;
