@@ -5016,3 +5016,81 @@ test("a piece auto layout cannot fit stays on the plan for the next try", async 
     // The next try counts it again.
     await expect(auto.locator("[data-auto-layout-item='armchair']")).toBeVisible();
 });
+
+test("a carried piece turns to the wall and meets its neighbour, as in Remplanner", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Pointer placing is covered once");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    // Inner faces at x 4050..8950 and y 2050..5950.
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 5000, 4000);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("living");
+    await page.locator("[data-draw-room-step='furniture']").click();
+    const saved = () =>
+        page.evaluate(
+            () =>
+                (
+                    JSON.parse(localStorage.getItem("stylefinder:draw-room-editor:v1") ?? "{}") as {
+                        furniture?: {
+                            definitionId: string;
+                            x: number;
+                            y: number;
+                            rotation: number;
+                            mirrored?: boolean;
+                        }[];
+                    }
+                ).furniture ?? [],
+        );
+    const carryTo = async (x: number, y: number) => {
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y, { steps: 6 });
+        await page.mouse.click(point.x, point.y);
+    };
+
+    // Carried up to the right wall, the sofa turns its back to it and stands flush.
+    await chooseFurniture(page, "sofa-three");
+    await carryTo(8500, 4400);
+    await expect
+        .poll(async () => (await saved())[0])
+        .toMatchObject({
+            definitionId: "sofa-three",
+            rotation: 90,
+            x: 8950 - 950,
+        });
+
+    // An armchair dropped 60 mm short of the sofa is pulled against it.
+    await page.keyboard.press("Escape");
+    await chooseFurniture(page, "armchair");
+    // The sofa spans y 3300..5500 now; the armchair goes just above it, against the wall.
+    await carryTo(8500, 3300 - 60 - 450);
+    await expect
+        .poll(async () => (await saved())[1])
+        .toMatchObject({ definitionId: "armchair", rotation: 90, x: 8950 - 900 });
+    const [sofa, armchair] = await saved();
+    // Flush against the sofa: no gap between the armchair's bottom and the sofa's top.
+    expect(armchair.y + 900).toBe(sofa.y);
+
+    // Cmd+C / Cmd+V puts a copy in hand; E mirrors a corner sofa before it is placed.
+    await page.keyboard.press("ControlOrMeta+c");
+    await page.keyboard.press("ControlOrMeta+v");
+    await carryTo(5000, 3000);
+    await expect.poll(async () => (await saved()).length).toBe(3);
+    await page.keyboard.press("Escape");
+    await chooseFurniture(page, "sofa-four-left");
+    await page.keyboard.press("e");
+    await carryTo(6500, 5300);
+    await expect
+        .poll(async () => (await saved()).find((item) => item.definitionId === "sofa-four-left"))
+        .toMatchObject({ rotation: 180, mirrored: true });
+
+    // The list of shortcuts is one tap away in the rail heading.
+    await page.keyboard.press("Escape");
+    await page.locator("[data-furniture-section]").first().hover();
+    await page.locator("[data-furniture-shortcuts]").click();
+    await expect(page.locator("[data-furniture-flyout='shortcuts']")).toContainText("Зеркально");
+});
