@@ -7,6 +7,7 @@ import {
     detectRestarts,
     evaluateProd,
     fetchProdStatus,
+    formatRegistrations,
     formatRestarts,
     parseProdStatus,
 } from "./prod.js";
@@ -26,6 +27,7 @@ const metrika = config.metrika
     ? new Metrika({ ...config.metrika, timeoutMs: config.requestTimeoutMs })
     : null;
 let lastContainers = new Map();
+let lastUserId = null;
 let warnedNoStartTimes = false;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -88,6 +90,8 @@ async function runProd() {
     lastContainers = status.containers;
     stats.recordRestarts(restarts);
     outbox.push(formatRestarts(restarts));
+    outbox.push(formatRegistrations(lastUserId, status.users));
+    if (status.users) lastUserId = status.users.lastId;
     for (const { key, label, ...result } of evaluateProd(status, config.prod)) {
         outbox.push(alerts.record(key, label, result, config.failureThreshold));
     }
