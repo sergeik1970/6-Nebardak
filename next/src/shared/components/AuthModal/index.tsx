@@ -429,7 +429,7 @@ const AuthModal: React.FC<AuthModalProps> = ({
                                         </Link>
                                     </>
                                 }
-                                label="Я даю согласие на обработку моих персональных данных"
+                                label="Мне есть 18 лет, и я даю согласие на обработку моих персональных данных"
                                 onChange={(event) => setHasConsent(event.target.checked)}
                                 required
                             />

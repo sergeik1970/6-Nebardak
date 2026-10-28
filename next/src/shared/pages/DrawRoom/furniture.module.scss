@@ -295,6 +295,16 @@
         cursor: not-allowed;
     }
 }
+.autoLayoutReviewNote {
+    margin: 0;
+    color: #b9c4c8;
+    font-size: 12px;
+    line-height: 1.4;
+    a {
+        color: #edf2f1;
+        text-underline-offset: 2px;
+    }
+}
 
 // The step's layer over the drawing: the catalogue rail, its open section and
 // the room card. Only the surfaces themselves catch the pointer.
@@ -555,6 +565,13 @@
         pointer-events: auto;
         background: #fffdf9;
         box-shadow: 0 6px 24px #26343220;
+    }
+    // The sheet covers half the plan: it steps aside while a piece is dragged
+    // and comes back where the piece is dropped.
+    .furniture[data-moving="true"] {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s ease;
     }
     .panel {
         position: static;

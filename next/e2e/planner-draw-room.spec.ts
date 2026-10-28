@@ -4768,6 +4768,46 @@ test("a phone frames a freshly closed room and the tool dock reaches past an ope
     await expect(openingGroup).toHaveAttribute("aria-expanded", "true");
 });
 
+test("a phone frames the room above the furniture sheet and moves the sheet aside for a drag", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile-chromium", "Phone furniture sheet is covered once");
+    await page.addInitScript(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await drawSimpleRect(page);
+
+    await page.locator("[data-draw-room-step='furniture']").click();
+    const sheet = page.locator("[data-draw-room-bottom-sheet]");
+    await expect(sheet).toBeVisible();
+    // The catalogue covers the canvas's lower half; the whole room sits above it.
+    const sheetTop = async () => (await sheet.boundingBox())!.y;
+    const roomBottom = async () =>
+        (await getBoardScreenPoint(page, 8000, BOARD_HEIGHT_MM * 0.69)).y;
+    await expect.poll(async () => (await roomBottom()) < (await sheetTop())).toBe(true);
+    const boardTop = (await page.locator("[data-draw-room-board='true']").boundingBox())!.y;
+    expect((await getBoardScreenPoint(page, 8000, BOARD_HEIGHT_MM * 0.23)).y).toBeGreaterThan(
+        boardTop,
+    );
+
+    await chooseFurniture(page, "single-bed");
+    const spot = await getBoardScreenPoint(page, 6000, 3500);
+    await page.mouse.move(spot.x, spot.y);
+    await page.mouse.click(spot.x, spot.y);
+    const piece = page.locator("[data-draw-furniture^='furniture-']");
+    await expect(piece).toHaveCount(1);
+
+    // The sheet steps aside while the piece is dragged and returns on release.
+    const box = (await piece.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 20, box.y + box.height / 2 + 20, { steps: 5 });
+    await expect(sheet).toHaveAttribute("data-moving", "true");
+    await expect(sheet).toHaveCSS("opacity", "0");
+    await page.mouse.up();
+    await expect(sheet).toHaveAttribute("data-moving", "false");
+    await expect(sheet).toHaveCSS("opacity", "1");
+});
+
 test("the wall tool resting on a wall measures from the cursor to each corner", async ({
     page,
 }, testInfo) => {

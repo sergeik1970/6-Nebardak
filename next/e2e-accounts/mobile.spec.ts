@@ -22,7 +22,9 @@ test("@mobile account pages and every project step fit a phone", async ({ page }
     await dialog.getByPlaceholder("Введите ваше имя").fill(account.name);
     await dialog.getByPlaceholder("name@example.com").fill(account.email);
     await dialog.getByPlaceholder("Введите пароль").fill(account.password);
-    await dialog.getByText("Я даю согласие на обработку моих персональных данных").click();
+    await dialog
+        .getByText("Мне есть 18 лет, и я даю согласие на обработку моих персональных данных")
+        .click();
     await dialog.locator('button[type="submit"]').click();
     await expect(page.getByRole("heading", { name: "Проектов пока нет" })).toBeVisible();
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);

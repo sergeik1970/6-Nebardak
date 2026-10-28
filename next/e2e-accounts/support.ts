@@ -69,7 +69,9 @@ export const registerByUi = async (page: Page, account: Account = newAccount()) 
     await dialog.getByPlaceholder("Введите пароль").fill(account.password);
     const submit = dialog.locator('button[type="submit"]');
     await expect(submit).toBeDisabled();
-    await dialog.getByText("Я даю согласие на обработку моих персональных данных").click();
+    await dialog
+        .getByText("Мне есть 18 лет, и я даю согласие на обработку моих персональных данных")
+        .click();
     await expect(submit).toBeEnabled();
     await submit.click();
     await expect(dialog).toBeHidden();

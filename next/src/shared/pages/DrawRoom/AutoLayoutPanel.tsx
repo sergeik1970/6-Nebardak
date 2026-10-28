@@ -1,3 +1,4 @@
+import Link from "next/link";
 import React, { useState } from "react";
 import type { PlannerObservationVerdict } from "@/services/plannerObservationService";
 import { FURNITURE_CATALOG } from "@/shared/lib/furniture-planner";
@@ -157,6 +158,15 @@ export default function AutoLayoutPanel({
                                     <button type="submit" disabled={!comment.trim()}>
                                         Отправить на разбор
                                     </button>
+                                    {/* Sending is the consent: the policy names this purpose. */}
+                                    <p className={styles.autoLayoutReviewNote}>
+                                        Отправляя вариант, вы соглашаетесь, что команда StyleFinder
+                                        увидит этот план, оценку и комментарий, чтобы улучшить
+                                        авторасстановку.{" "}
+                                        <Link href="/privacy#layout-review" target="_blank">
+                                            Подробнее
+                                        </Link>
+                                    </p>
                                     {reviewStatus && <p>{reviewStatus}</p>}
                                 </>
                             )}
