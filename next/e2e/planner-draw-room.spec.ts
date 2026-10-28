@@ -4768,6 +4768,56 @@ test("a phone frames a freshly closed room and the tool dock reaches past an ope
     await expect(openingGroup).toHaveAttribute("aria-expanded", "true");
 });
 
+test("two fingers zoom and pan a phone's plan instead of drawing", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile-chromium", "Touch gestures are covered once");
+    await page.addInitScript(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await openToolGroup(page, "walls");
+    await page.locator("[data-draw-room-tool='wall']").click();
+
+    const board = page.locator("[data-draw-room-board='true']");
+    const viewWidth = () => board.evaluate((svg) => (svg as SVGSVGElement).viewBox.baseVal.width);
+    const startWidth = await viewWidth();
+    const box = (await board.boundingBox())!;
+    const centre = { x: box.x + box.width / 2, y: box.y + box.height * 0.3 };
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (
+        type: "touchStart" | "touchMove" | "touchEnd",
+        points: { x: number; y: number }[],
+    ) =>
+        cdp.send("Input.dispatchTouchEvent", {
+            type,
+            touchPoints: points.map((point, id) => ({ ...point, id })),
+        });
+    const fingers = (spread: number, shiftY = 0) => [
+        { x: centre.x - spread, y: centre.y + shiftY },
+        { x: centre.x + spread, y: centre.y + shiftY },
+    ];
+
+    // The first finger starts a wall before the second one lands.
+    await touch("touchStart", [fingers(20)[0]]);
+    await touch("touchMove", [{ x: centre.x - 40, y: centre.y }]);
+    await touch("touchStart", fingers(20));
+    for (let spread = 30; spread <= 120; spread += 15) await touch("touchMove", fingers(spread));
+    await touch("touchEnd", []);
+
+    await expect.poll(viewWidth).toBeLessThan(startWidth / 3);
+    await expect(page.locator("[data-draw-room-wall-segment]")).toHaveCount(0);
+
+    // Pinching in zooms back out; moving both fingers pans.
+    const zoomedWidth = await viewWidth();
+    const viewY = () => board.evaluate((svg) => (svg as SVGSVGElement).viewBox.baseVal.y);
+    await touch("touchStart", [fingers(120)[0]]);
+    await touch("touchStart", fingers(120));
+    for (let spread = 105; spread >= 60; spread -= 15) await touch("touchMove", fingers(spread));
+    await expect.poll(viewWidth).toBeGreaterThan(zoomedWidth * 1.5);
+    const yBeforePan = await viewY();
+    for (let shift = 10; shift <= 60; shift += 10) await touch("touchMove", fingers(60, shift));
+    await touch("touchEnd", []);
+    await expect.poll(viewY).toBeLessThan(yBeforePan);
+    await expect(page.locator("[data-draw-room-wall-segment]")).toHaveCount(0);
+});
+
 test("a phone frames the room above the furniture sheet and moves the sheet aside for a drag", async ({
     page,
 }, testInfo) => {
