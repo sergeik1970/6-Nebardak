@@ -7,6 +7,7 @@ const PUBLIC_ROUTES = [
     { path: "/planner", name: "планировщик" },
     { path: "/privacy", name: "политика обработки данных" },
     { path: "/consent", name: "согласие на обработку данных" },
+    { path: "/analytics-consent", name: "согласие на веб-аналитику" },
     { path: "/account", name: "личный кабинет" },
     { path: "/auth/forgot", name: "восстановление пароля" },
 ] as const;

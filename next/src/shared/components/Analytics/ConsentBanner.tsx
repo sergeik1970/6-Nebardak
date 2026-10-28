@@ -12,8 +12,9 @@ const ConsentBanner: React.FC<ConsentBannerProps> = ({ onChoice }) => (
     <section className={styles.banner} aria-label="Согласие на веб-аналитику" data-consent-banner>
         <p className={styles.text}>
             Можно включить Яндекс Метрику? Она использует cookie и помогает понять, где сервисом
-            неудобно пользоваться. Без вашего согласия она не загружается.{" "}
-            <Link href="/privacy#cookies">Подробнее</Link>
+            неудобно пользоваться. Нажимая «Разрешить», вы даёте{" "}
+            <Link href="/analytics-consent">согласие на обработку данных для веб-аналитики</Link>.
+            Без него Метрика не загружается.
         </p>
         <div className={styles.actions}>
             <button
