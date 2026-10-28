@@ -6227,6 +6227,38 @@ const DrawRoom: React.FC = () => {
         ],
     );
 
+    /**
+     * Camera motion must not run annotation collision/layout or reconcile the
+     * whole editor on every wheel tick or pinch frame. SVG applies the camera
+     * now; React settles screen-space annotations once the gesture ends.
+     */
+    const paintCamera = useCallback(
+        (next: CanvasViewBox) => {
+            const board = boardRef.current;
+            if (!board) return;
+            viewBoxRef.current = next;
+            board.setAttribute("viewBox", `${next.x} ${next.y} ${next.width} ${next.height}`);
+            board.setAttribute("data-camera-moving", "true");
+            if (zoomStatusRef.current) {
+                zoomStatusRef.current.textContent = `Масштаб: ${Math.max(1, Math.round((fitViewBox.width / next.width) * 100))}%`;
+            }
+            const bleed = renderedWallThickness;
+            board.querySelectorAll("[data-camera-envelope]").forEach((element) => {
+                element.setAttribute("x", String(next.x - bleed));
+                element.setAttribute("y", String(next.y - bleed));
+                element.setAttribute("width", String(next.width + bleed * 2));
+                element.setAttribute("height", String(next.height + bleed * 2));
+            });
+            if (wheelZoomSettleRef.current !== null) clearTimeout(wheelZoomSettleRef.current);
+            wheelZoomSettleRef.current = setTimeout(() => {
+                wheelZoomSettleRef.current = null;
+                board.removeAttribute("data-camera-moving");
+                setViewBox({ ...viewBoxRef.current });
+            }, 120);
+        },
+        [fitViewBox.width, renderedWallThickness],
+    );
+
     const flushPendingWheelZoom = useCallback(() => {
         wheelZoomFrameRef.current = null;
         const board = boardRef.current;
@@ -6264,29 +6296,8 @@ const DrawRoom: React.FC = () => {
             );
         }
 
-        // Camera motion must not run annotation collision/layout or reconcile
-        // the whole editor on every wheel tick. SVG applies the camera now;
-        // React settles screen-space annotations once the gesture ends.
-        viewBoxRef.current = next;
-        board.setAttribute("viewBox", `${next.x} ${next.y} ${next.width} ${next.height}`);
-        board.setAttribute("data-camera-moving", "true");
-        if (zoomStatusRef.current) {
-            zoomStatusRef.current.textContent = `Масштаб: ${Math.max(1, Math.round((fitViewBox.width / next.width) * 100))}%`;
-        }
-        const bleed = renderedWallThickness;
-        board.querySelectorAll("[data-camera-envelope]").forEach((element) => {
-            element.setAttribute("x", String(next.x - bleed));
-            element.setAttribute("y", String(next.y - bleed));
-            element.setAttribute("width", String(next.width + bleed * 2));
-            element.setAttribute("height", String(next.height + bleed * 2));
-        });
-        if (wheelZoomSettleRef.current !== null) clearTimeout(wheelZoomSettleRef.current);
-        wheelZoomSettleRef.current = setTimeout(() => {
-            wheelZoomSettleRef.current = null;
-            board.removeAttribute("data-camera-moving");
-            setViewBox({ ...viewBoxRef.current });
-        }, 120);
-    }, [fitViewBox, renderedWallThickness]);
+        paintCamera(next);
+    }, [fitViewBox, paintCamera]);
 
     const queueWheelZoom = useCallback(
         (clientX: number, clientY: number, deltaY: number, deltaMode: number) => {
@@ -6314,6 +6325,134 @@ const DrawRoom: React.FC = () => {
         board.addEventListener("wheel", handleNativeWheel, { passive: false });
         return () => board.removeEventListener("wheel", handleNativeWheel);
     }, [queueWheelZoom]);
+
+    /**
+     * Two fingers zoom and pan the plan on a touch screen. The first finger
+     * has already begun a wall, a drag or a pan by the time the second lands,
+     * so that gesture is cancelled the way the browser would cancel it; until
+     * both fingers lift, the editor sees none of their events.
+     */
+    useEffect(() => {
+        const board = boardRef.current;
+        const area = board?.closest("section");
+        if (!board || !area) return;
+        const touches = new Map<number, { x: number; y: number; target: EventTarget | null }>();
+        let pinch: { distance: number; focus: Point; view: CanvasViewBox } | null = null;
+        // Fingers of a finished pinch stay muted until they lift.
+        const muted = new Set<number>();
+        let cancelling = false;
+
+        const pair = () => {
+            const [first, second] = Array.from(touches.values());
+            return {
+                distance: Math.hypot(second.x - first.x, second.y - first.y),
+                middle: { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 },
+            };
+        };
+        const begin = () => {
+            const { distance, middle } = pair();
+            const view = viewBoxRef.current;
+            const rendered = getRenderedViewBounds(board.getBoundingClientRect(), view);
+            const ratioX = (middle.x - rendered.left) / rendered.width;
+            const ratioY = (middle.y - rendered.top) / rendered.height;
+            pinch = {
+                distance: Math.max(distance, 1),
+                focus: { x: view.x + ratioX * view.width, y: view.y + ratioY * view.height },
+                view,
+            };
+        };
+        const follow = () => {
+            if (!pinch) return;
+            const { distance, middle } = pair();
+            const width = clamp(
+                (pinch.view.width * pinch.distance) / Math.max(distance, 1),
+                fitViewBox.width / MAX_ZOOM,
+                fitViewBox.width / MIN_ZOOM,
+            );
+            const height = width / (fitViewBox.width / fitViewBox.height);
+            // The plan point that sat between the fingers stays between them.
+            const rendered = getRenderedViewBounds(board.getBoundingClientRect(), pinch.view);
+            const ratioX = (middle.x - rendered.left) / rendered.width;
+            const ratioY = (middle.y - rendered.top) / rendered.height;
+            paintCamera(
+                clampViewBox(
+                    {
+                        x: pinch.focus.x - ratioX * width,
+                        y: pinch.focus.y - ratioY * height,
+                        width,
+                        height,
+                    },
+                    fitViewBox,
+                ),
+            );
+        };
+        const swallow = (event: PointerEvent) => {
+            event.stopImmediatePropagation();
+            event.preventDefault();
+        };
+
+        const down = (event: PointerEvent) => {
+            if (event.pointerType !== "touch" || cancelling) return;
+            if (!board.contains(event.target as Node)) return;
+            // A third finger, or one landing beside a finger still muted, waits too.
+            if (pinch || muted.size) {
+                muted.add(event.pointerId);
+                swallow(event);
+                return;
+            }
+            touches.set(event.pointerId, {
+                x: event.clientX,
+                y: event.clientY,
+                target: event.target,
+            });
+            if (touches.size !== 2) return;
+            swallow(event);
+            const [firstId, first] = Array.from(touches.entries())[0];
+            cancelling = true;
+            (first.target ?? board).dispatchEvent(
+                new PointerEvent("pointercancel", {
+                    pointerId: firstId,
+                    pointerType: "touch",
+                    isPrimary: true,
+                    bubbles: true,
+                }),
+            );
+            cancelling = false;
+            begin();
+        };
+        const move = (event: PointerEvent) => {
+            if (muted.has(event.pointerId)) return swallow(event);
+            const touch = touches.get(event.pointerId);
+            if (!touch) return;
+            touch.x = event.clientX;
+            touch.y = event.clientY;
+            touch.target = event.target;
+            if (!pinch) return;
+            swallow(event);
+            follow();
+        };
+        const up = (event: PointerEvent) => {
+            if (cancelling) return;
+            if (muted.delete(event.pointerId)) return swallow(event);
+            if (!touches.delete(event.pointerId)) return;
+            if (!pinch) return;
+            swallow(event);
+            pinch = null;
+            touches.forEach((_, id) => muted.add(id));
+            touches.clear();
+        };
+
+        area.addEventListener("pointerdown", down, true);
+        area.addEventListener("pointermove", move, true);
+        area.addEventListener("pointerup", up, true);
+        area.addEventListener("pointercancel", up, true);
+        return () => {
+            area.removeEventListener("pointerdown", down, true);
+            area.removeEventListener("pointermove", move, true);
+            area.removeEventListener("pointerup", up, true);
+            area.removeEventListener("pointercancel", up, true);
+        };
+    }, [fitViewBox, paintCamera]);
 
     const cancelContourWallDrag = useCallback((message = "Перемещение стены отменено.") => {
         const drag = contourWallDragRef.current;
@@ -6455,6 +6594,20 @@ const DrawRoom: React.FC = () => {
         stopPan();
         stopWallDrawing();
         cancelContourWallDrag();
+        // A door or window moves only on release; a cancelled drag leaves it put.
+        if (openingDragRef.current) {
+            openingDragRef.current = null;
+            setOpeningDragSelection(null);
+            setOpeningDragPreview(null);
+            if (capturedPointerRef.current !== null) {
+                try {
+                    boardRef.current?.releasePointerCapture(capturedPointerRef.current);
+                } catch {
+                    // capture already released
+                }
+                capturedPointerRef.current = null;
+            }
+        }
     }, [cancelContourWallDrag, stopPan, stopWallDrawing]);
 
     useEffect(() => {
