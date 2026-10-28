@@ -44,7 +44,8 @@ describe("project progress", () => {
                 ],
             },
         });
-        expect(furnished.result).toEqual({ done: true, available: true });
+        // Furniture does not tick the result off: it is a view, not a task.
+        expect(furnished.result).toEqual({ done: false, available: true });
     });
 
     it("counts an older project's planner room and saved layout", () => {
@@ -79,6 +80,6 @@ describe("project progress", () => {
                 } as never,
             },
         });
-        expect(getProjectProgress(placed).result).toEqual({ done: true, available: true });
+        expect(getProjectProgress(placed).result).toEqual({ done: false, available: true });
     });
 });

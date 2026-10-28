@@ -31,21 +31,17 @@ export const hasProjectRoom = (document: ProjectDocument): boolean => {
     return deriveDrawWallGraphRoom(drawing.segments, drawing.wallThickness) !== null;
 };
 
-/** Pieces standing on the drawing, or a layout saved before the drawing held furniture. */
-const hasPlacedFurniture = (document: ProjectDocument): boolean =>
-    (document.drawing?.furniture?.length ?? 0) > 0 ||
-    Boolean(document.planner?.layout?.placements.length);
-
 export const getProjectProgress = (document: ProjectDocument | null): ProjectProgress => {
     const style = Boolean(document?.visualTest?.result || document?.questionnaire.meta?.styleLabel);
     const room = document ? hasProjectRoom(document) : false;
-    const furnished = document ? hasPlacedFurniture(document) : false;
 
     return {
         style: { done: style, available: true },
         plan: { done: room, available: true },
+        // The result is a view of the plan, not a task: it opens with the
+        // room and never shows as finished while furniture is still placed.
         result: room
-            ? { done: furnished, available: true }
+            ? { done: false, available: true }
             : {
                   done: false,
                   available: false,

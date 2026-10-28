@@ -93,7 +93,8 @@ test("desktop golden path reaches an editable and exportable plan", async ({ pag
     await auto.locator("[data-auto-layout-variant='0']").click({ timeout: 60_000 });
     const pieces = page.locator("[data-draw-furniture^='furniture-']");
     await expect(pieces).not.toHaveCount(0);
-    await expect(steps.locator('[data-step="result"]')).toHaveAttribute("data-status", "done");
+    // The result opens with the room; placed furniture never ticks it off.
+    await expect(steps.locator('[data-step="result"]')).toHaveAttribute("data-status", "open");
 
     await page.locator("[data-draw-room-step='result']").click();
     const result = page.locator("[data-draw-room-result='true']");
