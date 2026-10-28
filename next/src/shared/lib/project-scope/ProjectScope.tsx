@@ -191,7 +191,7 @@ const GuestBar: React.FC = () => {
  * the browser-only guest draft, or a saved project (`?project=<id>`) that is
  * loaded from the account, edited locally and synced back automatically.
  */
-const ProjectScope: React.FC<{ children: ReactNode }> = ({ children }) => {
+const ProjectScopeBody: React.FC<{ children: ReactNode }> = ({ children }) => {
     const router = useRouter();
     const { user, isLoading } = useAuth();
     const { openAuthModal } = useAuthModal();
@@ -335,6 +335,20 @@ const ProjectScope: React.FC<{ children: ReactNode }> = ({ children }) => {
         </>
     );
 };
+
+/**
+ * `header` (a page's site navigation) stays above the project bar in every
+ * state, so the bar reads as part of the page rather than above the site.
+ */
+const ProjectScope: React.FC<{ children: ReactNode; header?: ReactNode }> = ({
+    children,
+    header,
+}) => (
+    <>
+        {header}
+        <ProjectScopeBody>{children}</ProjectScopeBody>
+    </>
+);
 
 export default ProjectScope;
 

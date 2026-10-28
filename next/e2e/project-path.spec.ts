@@ -32,6 +32,18 @@ test("the steps go from the style test to the planner and open the result once w
     await expect(page).toHaveURL(/\/test$/);
 });
 
+test("the style test keeps the site navigation above the project bar", async ({ page }) => {
+    await page.goto("/test", { waitUntil: "networkidle" });
+    const navigation = page.getByRole("navigation", { name: "Основная навигация" });
+    const bar = page.locator("[data-project-bar='true']");
+    await expect(navigation).toBeVisible();
+    await expect(bar).toBeVisible();
+    // The logo and menu come first; the project's draft line follows them.
+    expect((await bar.boundingBox())!.y).toBeGreaterThanOrEqual(
+        (await navigation.boundingBox())!.y + (await navigation.boundingBox())!.height - 1,
+    );
+});
+
 test("an older project's room and layout open in the planner as a drawing", async ({
     page,
 }, testInfo) => {
