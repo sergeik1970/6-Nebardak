@@ -23,6 +23,7 @@
 }
 
 .status {
+    min-width: 0;
     display: inline-flex;
     gap: 6px;
     align-items: center;
@@ -52,6 +53,10 @@
     &[data-tone="error"] {
         color: var(--sf-color-error);
     }
+}
+
+.shortStatus {
+    display: none;
 }
 
 .action {
@@ -88,5 +93,43 @@
 
     .title {
         max-width: 45%;
+    }
+}
+
+@media (max-width: 560px) {
+    // One line for name, save state and action, one for the steps: the room
+    // editor below needs every pixel of a phone screen.
+    .bar {
+        flex-wrap: wrap;
+        row-gap: 0;
+        padding: 2px var(--sf-space-3);
+    }
+
+    .title {
+        max-width: 38%;
+    }
+
+    .status {
+        flex: 1 1 0;
+    }
+
+    .fullStatus:has(+ .shortStatus) {
+        display: none;
+    }
+
+    .fullStatus,
+    .shortStatus {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .shortStatus {
+        display: inline;
+    }
+
+    .action {
+        margin-left: auto;
     }
 }

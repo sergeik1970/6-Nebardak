@@ -90,6 +90,8 @@ export default function FurnitureEditor({
     const [query, setQuery] = useState("");
     const [section, setSection] = useState<string | null>(null);
     const [message, setMessage] = useState("");
+    /** A piece is being dragged: the phone's bottom sheet steps aside meanwhile. */
+    const [moving, setMoving] = useState(false);
     const drag = useRef<{ initial: DrawFurniture; start: DOMPoint; last: DrawFurniture } | null>(
         null,
     );
@@ -122,6 +124,7 @@ export default function FurnitureEditor({
             setPreview(null);
             setMessage("");
             setSection(null);
+            setMoving(false);
             drag.current = null;
         }
     }, [active]);
@@ -274,6 +277,7 @@ export default function FurnitureEditor({
             if (event.key === "Escape") {
                 event.stopImmediatePropagation();
                 drag.current = null;
+                setMoving(false);
                 setSection(null);
                 setPreview(null);
                 setPending(null);
@@ -434,6 +438,7 @@ export default function FurnitureEditor({
                     session.last = next;
                     setMessage(reason ?? "");
                     setPreview(next);
+                    setMoving(true);
                 }}
                 onPointerUp={(event) => {
                     if (!drag.current || drag.current.initial.id !== item.id) return;
@@ -442,6 +447,7 @@ export default function FurnitureEditor({
                     const initial = drag.current.initial;
                     drag.current = null;
                     setPreview(null);
+                    setMoving(false);
                     if (event.currentTarget.hasPointerCapture(event.pointerId))
                         event.currentTarget.releasePointerCapture(event.pointerId);
                     if (
@@ -455,10 +461,12 @@ export default function FurnitureEditor({
                     event.stopPropagation();
                     drag.current = null;
                     setPreview(null);
+                    setMoving(false);
                 }}
                 onLostPointerCapture={() => {
                     drag.current = null;
                     setPreview(null);
+                    setMoving(false);
                 }}
             >
                 <title>
@@ -721,6 +729,8 @@ export default function FurnitureEditor({
                     aria-label="Мебель на чертеже"
                     data-editing={Boolean(editing)}
                     data-flyout-open={flyoutOpen}
+                    data-moving={moving}
+                    data-draw-room-bottom-sheet
                     data-section-open={Boolean(
                         (openSection || autoLayoutOpen || shortcutsOpen) && !query.trim(),
                     )}

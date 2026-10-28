@@ -172,6 +172,7 @@ const GuestBar: React.FC = () => {
                         ? "Хранится только в этом браузере"
                         : "Хранится только в этом браузере — войдите, чтобы не потерять"
             }
+            shortStatus={state === "idle" ? "Только в этом браузере" : undefined}
             tone={state === "error" ? "error" : "warn"}
             action={
                 user

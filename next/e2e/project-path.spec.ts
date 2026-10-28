@@ -32,6 +32,28 @@ test("the steps go from the style test to the planner and open the result once w
     await expect(page).toHaveURL(/\/test$/);
 });
 
+test("on a phone the project bar and the planner share one screen", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile-chromium", "Phone layout is covered once");
+    await page.goto("/planner", { waitUntil: "networkidle" });
+    const bar = page.locator("[data-project-bar='true']");
+    await expect(bar).toBeVisible();
+
+    // The editor takes what the bar leaves: nothing scrolls and its bottom
+    // edge, with the tool dock and the status line, stays on screen.
+    const metrics = await page.evaluate(() => {
+        const footer = document.querySelector("main footer");
+        return {
+            viewport: window.innerHeight,
+            scrollHeight: document.documentElement.scrollHeight,
+            footerBottom: footer ? footer.getBoundingClientRect().bottom : Infinity,
+        };
+    });
+    expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.viewport);
+    expect(metrics.footerBottom).toBeLessThanOrEqual(metrics.viewport);
+    // Name, save state and action on one line, the steps on another.
+    expect((await bar.boundingBox())!.height).toBeLessThan(90);
+});
+
 test("an older project's room and layout open in the planner as a drawing", async ({
     page,
 }, testInfo) => {

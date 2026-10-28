@@ -1732,9 +1732,6 @@
 }
 
 @media (max-width: 760px) {
-    .editor {
-        height: 100dvh;
-    }
     .appBar {
         min-height: 62px;
         padding: 8px 10px;
@@ -2018,11 +2015,11 @@
         flex-basis: auto;
     }
     .statusBar {
-        min-height: 42px;
+        min-height: 30px;
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 6px 12px;
+        padding: 4px 12px;
         font-size: 11px;
     }
     .statusBar [data-draw-room-status="grid"],
