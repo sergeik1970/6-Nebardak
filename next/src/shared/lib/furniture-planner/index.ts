@@ -5,6 +5,7 @@ export * from "./draw-room-grid";
 export * from "./draw-room-wall-graph";
 export * from "./geometry";
 export * from "./handoff";
+export * from "./kitchen-layout";
 export * from "./placement-history";
 export * from "./plan-export";
 export * from "./project-draft";
