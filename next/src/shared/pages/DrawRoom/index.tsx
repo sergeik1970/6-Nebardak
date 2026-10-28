@@ -7824,6 +7824,20 @@ const DrawRoom: React.FC = () => {
                   ? "От стороны стены"
                   : "Тяните стену"
             : openingPreview?.message ?? openingDragPreview?.message ?? notice;
+    // A phone fits two lines of the notice; a longer one opens in full on a tap.
+    const noticeTextRef = useRef<HTMLSpanElement>(null);
+    const [noticeExpanded, setNoticeExpanded] = useState(false);
+    const [noticeTruncated, setNoticeTruncated] = useState(false);
+    useEffect(() => {
+        setNoticeExpanded(false);
+    }, [visibleNotice]);
+    useEffect(() => {
+        const text = noticeTextRef.current;
+        if (!text || noticeExpanded) return;
+        setNoticeTruncated(
+            text.scrollHeight > text.clientHeight + 1 || text.scrollWidth > text.clientWidth + 1,
+        );
+    }, [canvasSize.width, noticeExpanded, visibleNotice]);
     const openWallComponents = useMemo(
         () =>
             getConnectedWallComponents(scene.segments).map((segments, index) => ({
@@ -8169,8 +8183,27 @@ const DrawRoom: React.FC = () => {
                                       : "Выбор"}
                         </b>
                     </span>
-                    <span className={styles.canvasNotice} data-draw-room-notice="true">
-                        {visibleNotice}
+                    <span className={styles.canvasNoticeSlot}>
+                        <button
+                            type="button"
+                            className={styles.canvasNotice}
+                            data-draw-room-notice="true"
+                            data-truncated={noticeTruncated}
+                            aria-expanded={noticeTruncated ? noticeExpanded : undefined}
+                            tabIndex={noticeTruncated ? 0 : -1}
+                            onClick={() => {
+                                if (noticeTruncated) setNoticeExpanded((open) => !open);
+                            }}
+                        >
+                            <span ref={noticeTextRef} className={styles.canvasNoticeText}>
+                                {visibleNotice}
+                            </span>
+                            {noticeTruncated && !noticeExpanded ? (
+                                <span className={styles.canvasNoticeMore} aria-hidden="true">
+                                    ▾
+                                </span>
+                            ) : null}
+                        </button>
                     </span>
                     {newerPlannerRoom && (
                         <span

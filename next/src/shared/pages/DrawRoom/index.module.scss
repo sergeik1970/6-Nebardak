@@ -441,14 +441,73 @@
     white-space: nowrap;
 }
 
-.canvasNotice {
+.canvasNoticeSlot {
+    position: relative;
     flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
+    /* Holds the row's height while the notice opens out of the flow. */
+    min-height: 1.2em;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+}
+
+.canvasNotice {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border: 0;
+    padding: 0;
     color: #3d555f;
+    background: transparent;
+    font: inherit;
     font-weight: 650;
+    text-align: left;
+    cursor: default;
+}
+.canvasNotice[data-truncated="true"] {
+    cursor: pointer;
+}
+.canvasNotice:focus-visible {
+    outline: 2px solid var(--draw-orange);
+    outline-offset: 2px;
+}
+
+.canvasNoticeText {
+    min-width: 0;
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.canvasNoticeMore {
+    flex: none;
+    color: #8a4900;
+}
+
+/* The whole notice opens over the canvas, so the plan below does not move. */
+.canvasMeta:has(.canvasNotice[aria-expanded="true"]) {
+    position: relative;
+    z-index: 6;
+    overflow: visible;
+}
+.canvasNotice[aria-expanded="true"] {
+    position: absolute;
+    top: -4px;
+    right: -6px;
+    left: -6px;
+    z-index: 1;
+    width: auto;
+    border: 1px solid #ccd7d9;
+    padding: 6px;
+    background: #fffdfa;
+    box-shadow: 0 8px 20px rgba(32, 45, 52, 0.16);
+
+    .canvasNoticeText {
+        white-space: normal;
+    }
 }
 
 /* A completed draft can be geometrically correct yet intentionally blocked
@@ -1787,6 +1846,16 @@
     }
     .canvasNotice {
         font-weight: 750;
+    }
+    .canvasNoticeSlot {
+        min-height: 2.4em;
+    }
+    /* Two lines fit the row's height; a longer notice opens on a tap. */
+    .canvasNotice:not([aria-expanded="true"]) .canvasNoticeText {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        white-space: normal;
     }
     .plannerEligibilityWarning {
         display: none;

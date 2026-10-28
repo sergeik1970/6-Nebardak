@@ -4867,6 +4867,32 @@ test("a phone frames the room above the furniture sheet and moves the sheet asid
     await expect(sheet).toHaveCSS("opacity", "1");
 });
 
+test("a phone shows a long notice in two lines and opens it in full on a tap", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile-chromium", "Phone notice is covered once");
+    await page.addInitScript(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await drawSimpleRect(page);
+
+    const notice = page.locator("[data-draw-room-notice='true']");
+    await expect(notice).toContainText("Контур замкнут");
+    await expect(notice).toHaveAttribute("data-truncated", "true");
+    await expect(notice).toHaveAttribute("aria-expanded", "false");
+    const canvas = page.locator("[data-draw-room-board='true']");
+    const canvasTop = (await canvas.boundingBox())!.y;
+
+    // The whole text opens over the canvas; the plan below stays where it was.
+    await notice.tap();
+    await expect(notice).toHaveAttribute("aria-expanded", "true");
+    await expect(notice).toContainText("три точки перемещения");
+    expect((await notice.boundingBox())!.height).toBeGreaterThan(40);
+    expect((await canvas.boundingBox())!.y).toBe(canvasTop);
+
+    await notice.tap();
+    await expect(notice).toHaveAttribute("aria-expanded", "false");
+});
+
 test("the wall tool resting on a wall measures from the cursor to each corner", async ({
     page,
 }, testInfo) => {
