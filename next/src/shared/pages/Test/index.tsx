@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Footer from "@/shared/components/Footer";
-import Navigation from "@/shared/components/Navigation";
 import { trackGoal } from "@/shared/lib/analytics";
 import {
     clearProjectDraftVisualTest,
@@ -299,7 +298,6 @@ const Test: React.FC = () => {
     if (!session) {
         return (
             <div className={styles.test}>
-                <Navigation />
                 <main id="main-content" className={styles.main} tabIndex={-1}>
                     <div className={styles.loading} role="status" aria-live="polite">
                         <span className={styles.loadingMark} aria-hidden="true" />
@@ -318,7 +316,6 @@ const Test: React.FC = () => {
 
         return (
             <div className={styles.test}>
-                <Navigation />
                 <main id="main-content" className={styles.main} tabIndex={-1}>
                     <section
                         className={styles.resultHero}
@@ -449,7 +446,6 @@ const Test: React.FC = () => {
 
     return (
         <div className={styles.test}>
-            <Navigation />
             <main id="main-content" className={styles.main} tabIndex={-1}>
                 <section className={styles.intro} aria-labelledby="test-title">
                     <div>
