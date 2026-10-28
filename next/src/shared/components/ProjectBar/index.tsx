@@ -14,6 +14,8 @@ interface ProjectBarProps {
     title: ReactNode;
     /** Save state; omitted where nothing is synced (accounts switched off). */
     status?: string;
+    /** A phone-width wording of `status`, so the bar keeps to one line there. */
+    shortStatus?: string;
     tone?: Tone;
     action?: Action;
     steps?: ReactNode;
@@ -24,7 +26,14 @@ interface ProjectBarProps {
  * saved. Its height is published as `--sf-project-bar-height` so full-screen
  * pages (the room editor) can subtract it instead of overflowing.
  */
-const ProjectBar: React.FC<ProjectBarProps> = ({ title, status, tone = "ok", action, steps }) => {
+const ProjectBar: React.FC<ProjectBarProps> = ({
+    title,
+    status,
+    shortStatus,
+    tone = "ok",
+    action,
+    steps,
+}) => {
     const ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -48,7 +57,8 @@ const ProjectBar: React.FC<ProjectBarProps> = ({ title, status, tone = "ok", act
             {steps}
             {status ? (
                 <span className={styles.status} data-tone={tone} role="status" aria-live="polite">
-                    {status}
+                    <span className={styles.fullStatus}>{status}</span>
+                    {shortStatus ? <span className={styles.shortStatus}>{shortStatus}</span> : null}
                 </span>
             ) : null}
             {action ? (

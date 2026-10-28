@@ -145,6 +145,10 @@
         border-color: var(--sf-color-line);
         background: var(--sf-color-surface-strong);
         color: var(--sf-color-ink-muted);
+        cursor: not-allowed;
+    }
+
+    &[aria-busy="true"] {
         cursor: wait;
     }
 }

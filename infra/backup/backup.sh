@@ -3,9 +3,8 @@
 #
 # The dump is checked with pg_restore --list, encrypted with age to a public
 # recipient whose private key never lives on the server, and uploaded to
-# S3-compatible storage with an upload-only key. Retention is enforced by bucket
-# lifecycle rules on the daily/, weekly/ and monthly/ prefixes, so a compromised
-# server can neither read nor delete earlier copies.
+# S3-compatible storage. A bucket lifecycle rule deletes copies after 30 days, the
+# term stated in the privacy policy.
 set -Eeuo pipefail
 
 CONFIG=${STYLEFINDER_BACKUP_CONFIG:-/etc/stylefinder/backup.env}
@@ -71,9 +70,6 @@ rm -f "$DUMP"
 
 NAME=$(basename "$ENCRYPTED")
 s3_put "$ENCRYPTED" "daily/$NAME"
-# Sunday copies feed the 4-week tier, first-of-month copies the 6-month tier.
-if [ "$(date -u +%u)" = 7 ]; then s3_put "$ENCRYPTED" "weekly/$NAME"; fi
-if [ "$(date -u +%d)" = 01 ]; then s3_put "$ENCRYPTED" "monthly/$NAME"; fi
 
 SIZE=$(wc -c <"$ENCRYPTED" | tr -d ' ')
 echo "uploaded $NAME ($SIZE bytes)"

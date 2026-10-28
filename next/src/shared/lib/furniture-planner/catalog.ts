@@ -750,8 +750,8 @@ FURNITURE_CATALOG.push(...ADDITIONAL_FURNITURE_CATALOG);
 
 /**
  * Kitchen units in common Russian module sizes: 60 cm deep worktop run,
- * 35 cm deep upper units. Placed by hand on the drawing; the automatic
- * layout does not offer them yet (see CATEGORY_ORDER).
+ * 35 cm deep upper units. Placed by hand on the drawing; «Авторасстановка»
+ * lays them as one worktop run by its own rules (see kitchen-layout.ts).
  */
 export const KITCHEN_FURNITURE_CATALOG: FurnitureDefinition[] = [
     {
@@ -936,7 +936,7 @@ export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
     kitchen: "Кухня",
 };
 
-/** Categories the automatic layout offers; kitchen units are placed by hand for now. */
+/** Furniture categories in display order; kitchen units are laid by kitchen-layout.ts. */
 export const CATEGORY_ORDER: FurnitureCategory[] = [
     "sleep",
     "storage",
