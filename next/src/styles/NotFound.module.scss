@@ -11,6 +11,9 @@
     flex: 1;
     min-height: 65vh;
     display: grid;
+    // A plain auto column grows to the heading's longest word and pushes the
+    // card past a 320 px screen.
+    grid-template-columns: minmax(0, 1fr);
     place-items: center;
     padding: clamp(1rem, 5vw, 4rem);
     background: linear-gradient(rgba(99, 81, 57, 0.045) 1px, transparent 1px),
@@ -37,8 +40,10 @@
     margin: 0.5rem 0 1rem;
     color: #29251f;
     font-family: var(--font-display);
-    font-size: clamp(2.5rem, 8vw, 5.5rem);
+    font-size: clamp(1.75rem, 8.5vw, 5.5rem);
     font-weight: 400;
+    overflow-wrap: break-word;
+    hyphens: auto;
     letter-spacing: -0.035em;
     line-height: 0.95;
 }
