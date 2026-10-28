@@ -12,4 +12,4 @@ export const CURRENT_CONSENT_DATE = "20 октября 2026 г.";
  * Edition of the privacy policy. It moves on its own when only the policy text
  * changes (e.g. web analytics, which has a separate consent in the cookie banner).
  */
-export const CURRENT_PRIVACY_POLICY_DATE = "22 октября 2026 г.";
+export const CURRENT_PRIVACY_POLICY_DATE = "28 октября 2026 г.";

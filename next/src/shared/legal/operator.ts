@@ -7,10 +7,11 @@ export const LEGAL_OPERATOR = {
     name: "[ФИО индивидуального предпринимателя или наименование организации]",
     registration: "[ИНН и ОГРН / ОГРНИП]",
     address: "[почтовый адрес для обращений]",
-    email: "[адрес электронной почты для обращений по персональным данным]",
+    email: "contact@stylefinder.online",
     hosting: "[хостинг-провайдер и город размещения серверов в России]",
-    mailProvider: "[почтовый сервис, отправляющий письма]",
-    backupRetention: "[срок хранения резервных копий, например 30 дней]",
+    mailProvider: "ООО «Регистратор доменных имён РЕГ.РУ» (почтовый хостинг Reg.ru)",
+    backupStorage: "ООО «Регистратор доменных имён РЕГ.РУ» (облачное хранилище Reg.ru S3, Москва)",
+    backupRetention: "30 дней",
 } as const;
 
 export const hasLegalPlaceholders = (): boolean =>
