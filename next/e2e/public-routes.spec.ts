@@ -74,6 +74,26 @@ test("unknown route has a Russian recovery path", async ({ page }) => {
     ).toBeVisible();
 });
 
+test("the 404 card fits a 320 px phone", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile-chromium", "Narrow phone is covered once");
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto("/takoy-stranitsy-net", { waitUntil: "networkidle" });
+
+    const heading = page.getByRole("heading", { name: /страниц/i });
+    await expect(heading).toBeVisible();
+    const fit = await heading.evaluate((element) => {
+        const card = element.parentElement!.getBoundingClientRect();
+        return {
+            pageWidth: document.documentElement.scrollWidth,
+            cardRight: card.right,
+            headingOverflow: element.scrollWidth - element.clientWidth,
+        };
+    });
+    expect(fit.pageWidth).toBeLessThanOrEqual(320);
+    expect(fit.cardRight).toBeLessThanOrEqual(320);
+    expect(fit.headingOverflow).toBeLessThanOrEqual(0);
+});
+
 test("home offers direct planning alongside the style-detection path", async ({ page }) => {
     await page.goto("/", { waitUntil: "networkidle" });
 
