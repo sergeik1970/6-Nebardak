@@ -3,6 +3,7 @@ import {
     getRotatedGeometry,
     type ClearanceZone,
     type DrawWallSegment,
+    type FurnitureDefinition,
     type Rotation,
     type Rect,
     type RoomKind,
@@ -19,10 +20,33 @@ export interface DrawFurniture {
     rotation: Rotation;
     photoId?: string;
     locked?: boolean;
+    /** Flipped left to right, before rotation: a left-hand corner sofa made right-hand. */
+    mirrored?: boolean;
 }
 export const furnitureDefinition = (id: string) => FURNITURE_CATALOG.find((item) => item.id === id);
-export function furnitureGeometry(item: DrawFurniture) {
+
+const mirroredDefinitions = new Map<string, FurnitureDefinition>();
+/** The catalogue piece flipped left to right: body and clearance zones alike. */
+const mirroredDefinition = (definition: FurnitureDefinition): FurnitureDefinition => {
+    const cached = mirroredDefinitions.get(definition.id);
+    if (cached) return cached;
+    const { width } = getRotatedGeometry(definition, 0);
+    const flip = <T extends Rect>(rect: T): T => ({ ...rect, x: width - rect.x - rect.width });
+    const mirrored = {
+        ...definition,
+        body: { ...definition.body, rects: definition.body.rects.map(flip) },
+        clearanceZones: definition.clearanceZones.map(flip),
+    };
+    mirroredDefinitions.set(definition.id, mirrored);
+    return mirrored;
+};
+/** The catalogue piece as this item stands: flipped when the person mirrored it. */
+export const placedDefinition = (item: Pick<DrawFurniture, "definitionId" | "mirrored">) => {
     const definition = furnitureDefinition(item.definitionId)!;
+    return item.mirrored ? mirroredDefinition(definition) : definition;
+};
+export function furnitureGeometry(item: DrawFurniture) {
+    const definition = placedDefinition(item);
     const base = getRotatedGeometry(definition, 0);
     return getRotatedGeometry(
         {
@@ -56,6 +80,7 @@ export function readFurniture(value: unknown): DrawFurniture[] {
                 item.width > 10000 ||
                 item.depth > 10000 ||
                 (item.locked !== undefined && typeof item.locked !== "boolean") ||
+                (item.mirrored !== undefined && typeof item.mirrored !== "boolean") ||
                 ![0, 90, 180, 270].includes(item.rotation)
             )
                 return false;
@@ -259,7 +284,7 @@ export function furniturePassages(
     return floor.flatMap((item) => {
         const definition = furnitureDefinition(item.definitionId);
         if (!definition) return [];
-        const geometry = getRotatedGeometry(definition, item.rotation, item);
+        const geometry = getRotatedGeometry(placedDefinition(item), item.rotation, item);
         const face = {
             left: item.x,
             top: item.y,
@@ -404,4 +429,216 @@ export function snapFurnitureToWalls(
         if (nearest) next[axis] = item[axis] - nearest.direction * nearest.distance;
     });
     return next;
+}
+
+/** Rotation that puts each side of the plan behind a piece's back. */
+const BACK_TO: Record<"top" | "right" | "bottom" | "left", Rotation> = {
+    top: 0,
+    right: 90,
+    bottom: 180,
+    left: 270,
+};
+/** Within this of a wall, a piece that stands against walls turns its back to it. */
+export const FURNITURE_AUTO_ROTATE_MM = 300;
+
+/** Pieces that belong back to a wall; round and all-sided ones keep their turn. */
+export const turnsToWall = (definitionId: string) => {
+    const edges = furnitureDefinition(definitionId)?.placement.allowedWallContactEdges ?? [];
+    return edges.includes("back") && edges.length < 4;
+};
+
+/**
+ * Turns a piece so its back faces the nearest wall, as Remplanner does while
+ * a piece is carried: the wall faces around the piece's centre are measured,
+ * the closest one within reach of the turned piece's back wins, and the piece
+ * is set back against it. The current turn wins a near tie, so a piece in a
+ * corner does not flicker between the two walls.
+ */
+export function turnToNearestWall(
+    item: DrawFurniture,
+    walls: DrawWallSegment[],
+    thickness: number,
+): DrawFurniture {
+    if (!turnsToWall(item.definitionId)) return item;
+    const current = furnitureGeometry(item);
+    const centre = { x: item.x + current.width / 2, y: item.y + current.depth / 2 };
+    const half = thickness / 2;
+    const faces: { side: keyof typeof BACK_TO; at: number; distance: number }[] = [];
+    for (const wall of walls) {
+        if (wall.start.x === wall.end.x) {
+            const [y0, y1] = [wall.start.y, wall.end.y].sort((a, b) => a - b);
+            if (centre.y < y0 || centre.y > y1) continue;
+            if (wall.start.x + half <= centre.x)
+                faces.push({
+                    side: "left",
+                    at: wall.start.x + half,
+                    distance: centre.x - wall.start.x - half,
+                });
+            if (wall.start.x - half >= centre.x)
+                faces.push({
+                    side: "right",
+                    at: wall.start.x - half,
+                    distance: wall.start.x - half - centre.x,
+                });
+        } else if (wall.start.y === wall.end.y) {
+            const [x0, x1] = [wall.start.x, wall.end.x].sort((a, b) => a - b);
+            if (centre.x < x0 || centre.x > x1) continue;
+            if (wall.start.y + half <= centre.y)
+                faces.push({
+                    side: "top",
+                    at: wall.start.y + half,
+                    distance: centre.y - wall.start.y - half,
+                });
+            if (wall.start.y - half >= centre.y)
+                faces.push({
+                    side: "bottom",
+                    at: wall.start.y - half,
+                    distance: wall.start.y - half - centre.y,
+                });
+        }
+    }
+    // A long side the catalogue lets stand at a wall (a bed along the wall) keeps
+    // its turn; a short one (a sofa's arm) turns the back to the wall instead.
+    const definition = furnitureDefinition(item.definitionId)!;
+    const base = getRotatedGeometry(definition, 0);
+    const edgeAngle = { back: 0, right: 90, front: 180, left: 270 } as const;
+    // Either long side counts: a bed is passed from both sides now (see its passages).
+    const sideAllowed =
+        base.depth > base.width &&
+        definition.placement.allowedWallContactEdges.some(
+            (edge) => edge === "left" || edge === "right",
+        );
+    const longSideTo = (side: keyof typeof BACK_TO) =>
+        sideAllowed &&
+        [edgeAngle.left, edgeAngle.right].some(
+            (angle) => (BACK_TO[side] - angle + 360) % 360 === item.rotation,
+        );
+    const nearest = [...faces].sort(
+        (first, second) =>
+            first.distance -
+            (first.side === "left" || first.side === "right" ? current.width : current.depth) / 2 -
+            (second.distance -
+                (second.side === "left" || second.side === "right"
+                    ? current.width
+                    : current.depth) /
+                    2),
+    )[0];
+    if (nearest && longSideTo(nearest.side)) return item;
+    const options = faces.flatMap((face) => {
+        const turned = { ...item, rotation: BACK_TO[face.side] };
+        const geometry = furnitureGeometry(turned);
+        const across =
+            face.side === "left" || face.side === "right" ? geometry.width : geometry.depth;
+        // How far the turned piece's back would stand from this face.
+        const gap = face.distance - across / 2;
+        if (gap > FURNITURE_AUTO_ROTATE_MM) return [];
+        const placed = {
+            ...turned,
+            x:
+                face.side === "left"
+                    ? face.at
+                    : face.side === "right"
+                      ? face.at - geometry.width
+                      : snapMm(centre.x - geometry.width / 2),
+            y:
+                face.side === "top"
+                    ? face.at
+                    : face.side === "bottom"
+                      ? face.at - geometry.depth
+                      : snapMm(centre.y - geometry.depth / 2),
+        };
+        return [{ placed, score: gap - (turned.rotation === item.rotation ? 60 : 0) }];
+    });
+    options.sort((first, second) => first.score - second.score);
+    return options[0]?.placed ?? item;
+}
+const snapMm = (n: number) => Math.round(n / 10) * 10;
+
+/** Closer than this to another piece, a piece is pulled against it. */
+export const FURNITURE_NEIGHBOUR_SNAP_MM = 100;
+
+/**
+ * Magnets between pieces: a side within reach of a neighbour's opposite side
+ * is pulled against it, and then the two are lined up along that side when
+ * their ends are close. Upper units meet upper units; floor pieces, floor
+ * pieces. An axis already held by a wall keeps the wall.
+ */
+export function snapFurnitureToNeighbours(
+    item: DrawFurniture,
+    items: DrawFurniture[],
+    held: { x: boolean; y: boolean } = { x: false, y: false },
+): DrawFurniture {
+    const tier = furnitureDefinition(item.definitionId)?.mounting;
+    const box = (piece: DrawFurniture) => {
+        const { width, depth } = furnitureGeometry(piece);
+        return { left: piece.x, top: piece.y, right: piece.x + width, bottom: piece.y + depth };
+    };
+    const others = items
+        .filter(
+            (other) =>
+                other.id !== item.id && furnitureDefinition(other.definitionId)?.mounting === tier,
+        )
+        .map(box);
+    const me = box(item);
+    const overlap = (a0: number, a1: number, b0: number, b1: number) =>
+        Math.min(a1, b1) - Math.max(a0, b0);
+    let dx: number | null = null;
+    let dy: number | null = null;
+    const closer = (current: number | null, next: number) =>
+        Math.abs(next) < FURNITURE_NEIGHBOUR_SNAP_MM &&
+        (current === null || Math.abs(next) < Math.abs(current))
+            ? next
+            : current;
+    for (const other of others) {
+        // Side by side: facing sides along x, while the two share some depth.
+        if (!held.x && overlap(me.top, me.bottom, other.top, other.bottom) > 0) {
+            dx = closer(dx, other.left - me.right);
+            dx = closer(dx, other.right - me.left);
+        }
+        if (!held.y && overlap(me.left, me.right, other.left, other.right) > 0) {
+            dy = closer(dy, other.top - me.bottom);
+            dy = closer(dy, other.bottom - me.top);
+        }
+    }
+    const next = { ...item, x: item.x + (dx ?? 0), y: item.y + (dy ?? 0) };
+    // Line up the fronts or backs of pieces now standing side by side.
+    const placed = box(next);
+    let ax: number | null = null;
+    let ay: number | null = null;
+    for (const other of others) {
+        const touchingX =
+            Math.abs(other.left - placed.right) < 1 || Math.abs(other.right - placed.left) < 1;
+        const touchingY =
+            Math.abs(other.top - placed.bottom) < 1 || Math.abs(other.bottom - placed.top) < 1;
+        if (touchingX && !held.y) {
+            ay = closer(ay, other.top - placed.top);
+            ay = closer(ay, other.bottom - placed.bottom);
+        }
+        if (touchingY && !held.x) {
+            ax = closer(ax, other.left - placed.left);
+            ax = closer(ax, other.right - placed.right);
+        }
+    }
+    return { ...next, x: next.x + (ax ?? 0), y: next.y + (ay ?? 0) };
+}
+
+/**
+ * Where a carried piece lands: turned to the nearest wall when it stands
+ * against walls, pulled flush to it, then against its neighbours. Alt (⌥)
+ * turns every magnet off for a free spot.
+ */
+export function placeFurniture(
+    item: DrawFurniture,
+    items: DrawFurniture[],
+    walls: DrawWallSegment[],
+    thickness: number,
+    options: { magnets: boolean; turn: boolean },
+): DrawFurniture {
+    if (!options.magnets) return item;
+    const turned = options.turn ? turnToNearestWall(item, walls, thickness) : item;
+    const flush = snapFurnitureToWalls(turned, walls, thickness);
+    return snapFurnitureToNeighbours(flush, items, {
+        x: flush.x !== turned.x,
+        y: flush.y !== turned.y,
+    });
 }

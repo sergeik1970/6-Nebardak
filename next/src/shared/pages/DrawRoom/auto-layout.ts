@@ -20,7 +20,7 @@ import {
     type RoomBoundarySegment,
     type WindowOpening,
 } from "@/shared/lib/furniture-planner";
-import type { DrawFurniture } from "./furniture";
+import { placedDefinition, type DrawFurniture } from "./furniture";
 
 type Point = { x: number; y: number };
 
@@ -61,8 +61,9 @@ export const solverFixedFurniture = (
         width: rect.width,
         depth: rect.depth,
     });
+    // A mirrored corner sofa keeps its chaise on the side the person put it.
     const geometry = (item: DrawFurniture) =>
-        getRotatedGeometry(getFurniture(item.definitionId), item.rotation, item);
+        getRotatedGeometry(placedDefinition(item), item.rotation, item);
     return {
         bodies: floor.flatMap((item) => geometry(item).bodyRects.map((rect) => local(rect, item))),
         passages: floor.flatMap((item) =>

@@ -209,4 +209,21 @@ describe("auto layout in one room of the drawing", () => {
                 pouf.y + 500 > clear.y,
         ).toBe(false);
     });
+
+    it("gives the solver a mirrored corner sofa with its chaise on the mirrored side", () => {
+        const corner: DrawFurniture = {
+            id: "corner",
+            definitionId: "sofa-four-left",
+            x: 0,
+            y: 0,
+            width: 2200,
+            depth: 1500,
+            rotation: 0,
+        };
+        const chaise = (item: DrawFurniture) =>
+            solverFixedFurniture([item], { x: 0, y: 0 }).bodies.find((rect) => rect.depth === 550)!;
+
+        expect(chaise(corner).x).toBe(0);
+        expect(chaise({ ...corner, mirrored: true }).x).toBe(2200 - 730);
+    });
 });
