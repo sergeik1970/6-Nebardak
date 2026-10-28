@@ -551,6 +551,13 @@
         background: #fffdf9;
         box-shadow: 0 6px 24px #26343220;
     }
+    // The sheet covers half the plan: it steps aside while a piece is dragged
+    // and comes back where the piece is dropped.
+    .furniture[data-moving="true"] {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s ease;
+    }
     .panel {
         position: static;
         flex: 0 0 auto;

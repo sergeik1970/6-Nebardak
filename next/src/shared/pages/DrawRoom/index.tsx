@@ -521,6 +521,7 @@ const getContourFitViewBox = (
     thickness: number,
     canvasSize: { width: number; height: number },
     leftInsetPx = 0,
+    bottomInsetPx = 0,
 ): CanvasViewBox | null => {
     const faces = getDrawRoomWallFaceContours(contour, thickness);
     if (!faces) return null;
@@ -529,6 +530,7 @@ const getContourFitViewBox = (
         thickness,
         canvasSize,
         leftInsetPx,
+        bottomInsetPx,
     );
 };
 
@@ -538,6 +540,7 @@ const getSegmentsFitViewBox = (
     thickness: number,
     canvasSize: { width: number; height: number },
     leftInsetPx = 0,
+    bottomInsetPx = 0,
 ): CanvasViewBox | null => {
     const points = segments.flatMap((segment) => [segment.start, segment.end]);
     if (!points.length) return null;
@@ -553,25 +556,48 @@ const getSegmentsFitViewBox = (
         thickness,
         canvasSize,
         leftInsetPx,
+        bottomInsetPx,
     );
 };
+
+/** Room for the dimension chains around a drawing framed above a bottom sheet. */
+const BOTTOM_SHEET_FIT_PADDING_PX = 24;
 
 /**
  * Frames the drawing with comfortable padding. A side tool rail or panel
  * (`leftInsetPx`) floats over the canvas's left edge: if the framed drawing
  * would sit under it, the camera first pans without changing scale and only
  * zooms out when panning alone cannot keep the whole drawing clear.
+ *
+ * A phone's bottom sheet (`bottomInsetPx`) covers up to half the canvas, so
+ * there the drawing is framed into the strip above it instead, with just
+ * enough padding for the dimension chains.
  */
 const getBoundsFitViewBox = (
     bounds: ScreenRect,
     thickness: number,
     canvasSize: { width: number; height: number },
     leftInsetPx = 0,
+    bottomInsetPx = 0,
 ): CanvasViewBox | null => {
     if (!canvasSize.width || !canvasSize.height) return null;
     const sourceWidth = bounds.right - bounds.left;
     const sourceHeight = bounds.bottom - bounds.top;
     if (!sourceWidth || !sourceHeight) return null;
+    const visibleHeight = canvasSize.height - bottomInsetPx;
+    const sheetPadding = BOTTOM_SHEET_FIT_PADDING_PX * 2;
+    if (bottomInsetPx > 0 && visibleHeight > sheetPadding && canvasSize.width > sheetPadding) {
+        const millimetersPerPixel = Math.max(
+            sourceWidth / (canvasSize.width - sheetPadding),
+            sourceHeight / (visibleHeight - sheetPadding),
+        );
+        return {
+            x: (bounds.left + bounds.right - canvasSize.width * millimetersPerPixel) / 2,
+            y: (bounds.top + bounds.bottom - visibleHeight * millimetersPerPixel) / 2,
+            width: canvasSize.width * millimetersPerPixel,
+            height: canvasSize.height * millimetersPerPixel,
+        };
+    }
     const padding = Math.max(thickness * 8, Math.min(sourceWidth, sourceHeight) * 0.5);
     const frame = (usableWidth: number) => {
         let width = sourceWidth + padding * 2;
@@ -4030,6 +4056,7 @@ const DrawRoom: React.FC = () => {
     const [toolSheetCollapsed, setToolSheetCollapsed] = useState(false);
     const [toolSheetOverlaysCanvas, setToolSheetOverlaysCanvas] = useState(false);
     const autoFitPendingRef = useRef(false);
+    const fitOnFurnitureStepRef = useRef(false);
     // Set when a whole room appears at once (template, converted room).
     const fitAfterSceneChangeRef = useRef(false);
     const [templateOpen, setTemplateOpen] = useState(false);
@@ -6564,17 +6591,41 @@ const DrawRoom: React.FC = () => {
         return clamp(right - boardBox.left, 0, boardBox.width / 2);
     }, []);
 
+    /** How much of the canvas a phone's docked bottom sheet (the furniture catalogue) covers. */
+    const getBottomSheetInset = useCallback(() => {
+        const board = boardRef.current;
+        const sheet = board?.closest("section")?.querySelector("[data-draw-room-bottom-sheet]");
+        if (!board || !sheet) return 0;
+        const boardBox = board.getBoundingClientRect();
+        const sheetBox = sheet.getBoundingClientRect();
+        // Wider screens lay the same element over the whole canvas, its cards at the side.
+        const docked =
+            sheetBox.height > 0 &&
+            sheetBox.width >= boardBox.width * 0.6 &&
+            sheetBox.top > boardBox.top + boardBox.height * 0.25;
+        if (!docked) return 0;
+        return clamp(boardBox.bottom - sheetBox.top, 0, boardBox.height * 0.7);
+    }, []);
+
     /** Frames the drawing like "Вместить"; returns false when there is nothing to frame. */
     const fitDrawingToView = useCallback(() => {
         const leftInset = getSideOverlayInset();
+        const bottomInset = getBottomSheetInset();
         const contourFit = preview
             ? getContourFitViewBox(
                   previewContourPoints,
                   renderedWallThickness,
                   canvasSize,
                   leftInset,
+                  bottomInset,
               )
-            : getSegmentsFitViewBox(scene.segments, renderedWallThickness, canvasSize, leftInset);
+            : getSegmentsFitViewBox(
+                  scene.segments,
+                  renderedWallThickness,
+                  canvasSize,
+                  leftInset,
+                  bottomInset,
+              );
         const next = contourFit
             ? clampViewBox(contourFit, fitViewBox)
             : clampViewBox(fitViewBox, fitViewBox);
@@ -6584,6 +6635,7 @@ const DrawRoom: React.FC = () => {
     }, [
         canvasSize,
         fitViewBox,
+        getBottomSheetInset,
         getSideOverlayInset,
         preview,
         previewContourPoints,
@@ -6672,6 +6724,16 @@ const DrawRoom: React.FC = () => {
         }, AUTO_FIT_SETTLE_MS);
         return () => window.clearTimeout(timer);
     }, [fitDrawingToView, preview, toolSheetOverlaysCanvas]);
+
+    // The furniture catalogue docks over the lower half of a phone's canvas;
+    // opening the step frames the room into the strip above it, once.
+    useEffect(() => {
+        if (!fitOnFurnitureStepRef.current) return;
+        fitOnFurnitureStepRef.current = false;
+        if (activeToolGroup === "furniture" && toolSheetOverlaysCanvas && preview) {
+            fitDrawingToView();
+        }
+    }, [activeToolGroup, fitDrawingToView, preview, toolSheetOverlaysCanvas]);
 
     const resetToOriginal = useCallback(() => {
         stopPan();
@@ -7488,6 +7550,7 @@ const DrawRoom: React.FC = () => {
         setSelectedOpening(null);
         setSelectedContourWallEdge(null);
         setSelectedSegmentWallId(null);
+        fitOnFurnitureStepRef.current = group === "furniture" && activeToolGroup !== group;
         setActiveToolGroup(group);
         setToolSheetCollapsed(false);
     };
