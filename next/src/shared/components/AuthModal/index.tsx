@@ -142,9 +142,12 @@ const AuthModal: React.FC<AuthModalProps> = ({
             if (error) setError("");
         };
 
+    // Sign-up stays unavailable until the consent box is ticked.
+    const missingConsent = !isLogin && registrationEnabled && !hasConsent;
+
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
-        if (!isLogin && registrationEnabled && !hasConsent) {
+        if (missingConsent) {
             setError("Чтобы создать аккаунт, отметьте согласие на обработку данных.");
             return;
         }
@@ -442,7 +445,12 @@ const AuthModal: React.FC<AuthModalProps> = ({
                             </Link>
                         ) : null}
 
-                        <button className={styles.submitButton} disabled={isLoading} type="submit">
+                        <button
+                            aria-busy={isLoading}
+                            className={styles.submitButton}
+                            disabled={isLoading || missingConsent}
+                            type="submit"
+                        >
                             {isLoading ? "Подождите…" : isLogin ? "Войти" : "Зарегистрироваться"}
                         </button>
                     </form>
