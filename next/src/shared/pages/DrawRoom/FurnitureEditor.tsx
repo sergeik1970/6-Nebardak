@@ -29,6 +29,7 @@ import {
     searchFurnitureMenu,
 } from "./catalog-menu";
 import styles from "./furniture.module.scss";
+import { byPointer } from "./pointer-wording";
 import FurnitureSymbol, { FurnitureThumbnail } from "./FurnitureSymbol";
 import { isSchematicFurnitureSource } from "@/shared/lib/furniture-planner/catalog";
 
@@ -193,7 +194,10 @@ export default function FurnitureEditor({
                 setReposition(rotated);
                 setPreview(null);
                 setMessage(
-                    "Предмет повёрнут. Перетащите предмет на свободное место. Esc — отменить перестановку.",
+                    byPointer(
+                        "Предмет повёрнут. Перетащите предмет на свободное место. Esc — отменить перестановку.",
+                        "Предмет повёрнут. Перетащите его на свободное место.",
+                    ),
                 );
             }
         }
@@ -1136,7 +1140,10 @@ export default function FurnitureEditor({
                                                     setReposition(null);
                                                     setPreview(null);
                                                     setMessage(
-                                                        "Копия готова. Укажите свободное место на плане. Esc — отмена.",
+                                                        byPointer(
+                                                            "Копия готова. Укажите свободное место на плане. Esc — отмена.",
+                                                            "Копия готова. Коснитесь свободного места на плане.",
+                                                        ),
                                                     );
                                                 }}
                                             >
@@ -1200,8 +1207,14 @@ export default function FurnitureEditor({
                             <p role="status">
                                 {message ||
                                     (pending
-                                        ? "Щёлкните по свободному месту. У стены предмет развернётся и прилипнет к ней. R — поворот, Shift — несколько, Alt — без магнитов, Esc — отмена."
-                                        : "Потяните предмет, чтобы переместить. Alt — без магнитов. R — повернуть, E — зеркально.")}
+                                        ? byPointer(
+                                              "Щёлкните по свободному месту. У стены предмет развернётся и прилипнет к ней. R — поворот, Shift — несколько, Alt — без магнитов, Esc — отмена.",
+                                              "Коснитесь свободного места на плане. У стены предмет развернётся и прилипнет к ней.",
+                                          )
+                                        : byPointer(
+                                              "Потяните предмет, чтобы переместить. Alt — без магнитов. R — повернуть, E — зеркально.",
+                                              "Потяните предмет пальцем, чтобы переместить.",
+                                          ))}
                             </p>
                         </div>
                     ) : (

@@ -3121,7 +3121,12 @@ test("the furniture catalogue opens by sections like Remplanner", async ({ page 
     await sections.first().click();
     await flyout.locator("[data-add-furniture='double-bed']").click();
     await expect(flyout).toHaveCount(0);
-    await expect(panel.getByRole("status")).toContainText("Щёлкните по свободному месту");
+    // A phone has no cursor or keyboard: its hint speaks of a finger.
+    await expect(panel.getByRole("status")).toContainText(
+        testInfo.project.name === "mobile-chromium"
+            ? "Коснитесь свободного места"
+            : "Щёлкните по свободному месту",
+    );
     await page.keyboard.press("Escape");
 
     // Search looks through every section at once.
@@ -4408,7 +4413,7 @@ test("mobile drawing editor keeps the field and tool dock inside the viewport wi
     expect(containment.dockHeight).toBeGreaterThanOrEqual(44);
     const notice = page.locator("[data-draw-room-notice='true']");
     await expect(notice).toBeVisible();
-    await expect(notice).toContainText("Зажмите левую кнопку");
+    await expect(notice).toContainText("Ведите пальцем по сетке");
 
     await dragOnBoard(page, { x: 0.4, y: 0.4 }, { x: 0.405, y: 0.4 });
     await expect(notice).toContainText(/Нужно потянуть стену дальше|Каждая стена должна быть/);
@@ -4753,6 +4758,10 @@ test("a phone frames a freshly closed room and the tool dock reaches past an ope
     // its dimensions; closing the contour frames it so its chains stay readable.
     await expect.poll(viewWidth).toBeLessThan(sheetWidth);
     await expect(page.locator("[data-draw-room-dimension-chain='outer']")).toHaveCount(4);
+    // The H/S badge stays readable on the phone instead of shrinking with the walls.
+    const areaText = page.locator("[data-draw-room-summary-area]");
+    await expect(areaText).toBeVisible();
+    expect((await areaText.boundingBox())!.height).toBeGreaterThanOrEqual(10);
 
     await openToolGroup(page, "opening");
     await page.locator("[data-draw-room-door-kind='room']").click();

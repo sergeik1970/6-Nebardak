@@ -66,6 +66,7 @@ import {
     type WindowOpening,
 } from "@/shared/lib/furniture-planner";
 import styles from "./index.module.scss";
+import { byPointer } from "./pointer-wording";
 import FurnitureEditor from "./FurnitureEditor";
 import MeasureTool from "./MeasureTool";
 import {
@@ -255,6 +256,9 @@ const ROOM_LABEL_MAX_FONT_MM = 180;
 // H/S is secondary to the dimension chains: when zoomed in it must never
 // outgrow the 15 px dimension text and swallow a small room.
 const ROOM_LABEL_MAX_SCREEN_FONT_PX = 15;
+// A phone shows a whole room at ~40 mm per pixel, where the world-space H/S
+// would paint at 4 px; below this it keeps a readable screen size instead.
+const ROOM_LABEL_MIN_SCREEN_FONT_PX = 11;
 // Committed chains are useful while reading a plan, but become visual noise
 // once their fixed screen-size labels compete for the same few pixels.
 // Annotation text stops growing in world units when zooming out.
@@ -3872,9 +3876,12 @@ const getRoomSummaryPlacement = (
     const heightValue = `H=${Math.round(ROOM_CEILING_HEIGHT_MM / 10)}`;
     const areaValue = formatRoomArea(areaSquareMeters);
     const smallestClearSpan = Math.min(bounds.right - bounds.left, bounds.bottom - bounds.top);
-    const baseFontSize = Math.min(
-        clamp(smallestClearSpan * 0.12, ROOM_LABEL_MIN_FONT_MM, ROOM_LABEL_MAX_FONT_MM),
-        screenMillimetersPerPixel * ROOM_LABEL_MAX_SCREEN_FONT_PX,
+    const baseFontSize = Math.max(
+        Math.min(
+            clamp(smallestClearSpan * 0.12, ROOM_LABEL_MIN_FONT_MM, ROOM_LABEL_MAX_FONT_MM),
+            screenMillimetersPerPixel * ROOM_LABEL_MAX_SCREEN_FONT_PX,
+        ),
+        screenMillimetersPerPixel * ROOM_LABEL_MIN_SCREEN_FONT_PX,
     );
     const heightFontSize = baseFontSize * 0.95;
     const areaFontSize = baseFontSize * 1.08;
@@ -4091,8 +4098,11 @@ const DrawRoom: React.FC = () => {
     >(null);
     const [openingDragSelection, setOpeningDragSelection] = useState<SelectedOpening | null>(null);
     const [openingDragPreview, setOpeningDragPreview] = useState<OpeningPreview | null>(null);
-    const [notice, setNotice] = useState(
-        "Зажмите левую кнопку и ведите по сетке — стена рисуется сразу под курсором.",
+    const [notice, setNotice] = useState(() =>
+        byPointer(
+            "Зажмите левую кнопку и ведите по сетке — стена рисуется сразу под курсором.",
+            "Ведите пальцем по сетке — стена рисуется сразу за ним.",
+        ),
     );
     const [autosaveStatus, setAutosaveStatus] = useState<"loading" | "saved" | "error">("loading");
     const [layers, setLayers] = useState(DEFAULT_DRAWING_LAYERS);
@@ -4941,8 +4951,14 @@ const DrawRoom: React.FC = () => {
             setNotice(
                 nextTool === "wall"
                     ? preview
-                        ? "Зажмите левую кнопку и ведите по сетке — новая внутренняя стена станет перегородкой автоматически."
-                        : "Зажмите левую кнопку и ведите по сетке — стройте внешний контур комнаты."
+                        ? byPointer(
+                              "Зажмите левую кнопку и ведите по сетке — новая внутренняя стена станет перегородкой автоматически.",
+                              "Ведите пальцем по сетке — новая внутренняя стена станет перегородкой автоматически.",
+                          )
+                        : byPointer(
+                              "Зажмите левую кнопку и ведите по сетке — стройте внешний контур комнаты.",
+                              "Ведите пальцем по сетке — стройте внешний контур комнаты.",
+                          )
                     : nextTool === "door"
                       ? preview
                           ? `Нажмите на стену или перегородку — добавим ${getDoorCatalogItem(doorKind).label.toLocaleLowerCase("ru-RU")} дверь.`
@@ -5342,7 +5358,12 @@ const DrawRoom: React.FC = () => {
         } catch {
             // ignore
         }
-        setNotice("Режим перемещения: тяните поле мышью.");
+        setNotice(
+            byPointer(
+                "Режим перемещения: тяните поле мышью.",
+                "Режим перемещения: тяните поле пальцем, двумя пальцами — масштаб.",
+            ),
+        );
     }, []);
 
     const stopPan = useCallback(() => {
@@ -5517,7 +5538,12 @@ const DrawRoom: React.FC = () => {
             }
             const target = openingTarget(previews, point);
             if (!target) {
-                setNotice("Наведите курсор ближе к линии стены и нажмите ещё раз.");
+                setNotice(
+                    byPointer(
+                        "Наведите курсор ближе к линии стены и нажмите ещё раз.",
+                        "Коснитесь ближе к линии стены.",
+                    ),
+                );
                 return;
             }
             const owner = target.owner;
@@ -5616,7 +5642,12 @@ const DrawRoom: React.FC = () => {
             }
             const target = openingTarget(previews, point);
             if (!target) {
-                setNotice("Наведите курсор ближе к стене и нажмите ещё раз.");
+                setNotice(
+                    byPointer(
+                        "Наведите курсор ближе к стене и нажмите ещё раз.",
+                        "Коснитесь ближе к стене.",
+                    ),
+                );
                 return;
             }
             const owner = target.owner;
@@ -6533,7 +6564,12 @@ const DrawRoom: React.FC = () => {
         if (!window.confirm("Очистить контур, проёмы и всю мебель?")) return;
         commitScene(EMPTY_SCENE);
         setTool("wall");
-        setNotice("Поле очищено. Зажмите левую кнопку и ведите по сетке, чтобы нарисовать стену.");
+        setNotice(
+            byPointer(
+                "Поле очищено. Зажмите левую кнопку и ведите по сетке, чтобы нарисовать стену.",
+                "Поле очищено. Ведите пальцем по сетке, чтобы нарисовать стену.",
+            ),
+        );
     }, [
         commitScene,
         scene.doors.length,
@@ -6711,7 +6747,10 @@ const DrawRoom: React.FC = () => {
             // Ignore unavailable local storage; the visual reset still succeeded.
         }
         setNotice(
-            "Чистый лист восстановлен. Зажмите левую кнопку и ведите по сетке, чтобы нарисовать стену.",
+            byPointer(
+                "Чистый лист восстановлен. Зажмите левую кнопку и ведите по сетке, чтобы нарисовать стену.",
+                "Чистый лист восстановлен. Ведите пальцем по сетке, чтобы нарисовать стену.",
+            ),
         );
     }, [cancelContourWallDrag, fitViewBox, stopPan, stopWallDrawing]);
 
@@ -6789,7 +6828,7 @@ const DrawRoom: React.FC = () => {
             if (event.code === "Space") {
                 event.preventDefault();
                 setSpacePan(true);
-                setNotice("Режим перемещения включен. Тяни поле мышью.");
+                setNotice("Режим перемещения включен. Тяните поле мышью.");
                 return;
             }
             if (event.key === "Escape" && keyboardEntryOpen) {
@@ -7509,7 +7548,10 @@ const DrawRoom: React.FC = () => {
         setToolSheetCollapsed(false);
     };
     const visibleNotice = measuring
-        ? "Линейка: укажите две точки на плане. Esc — закрыть."
+        ? byPointer(
+              "Линейка: укажите две точки на плане. Esc — закрыть.",
+              "Линейка: укажите две точки на плане.",
+          )
         : activeToolGroup === "furniture"
           ? "Выберите мебель на плане. Потяните, чтобы переместить."
           : ghost
