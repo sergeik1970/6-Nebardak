@@ -4777,6 +4777,96 @@ test("a phone frames a freshly closed room and the tool dock reaches past an ope
     await expect(openingGroup).toHaveAttribute("aria-expanded", "true");
 });
 
+test("two fingers zoom and pan a phone's plan instead of drawing", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile-chromium", "Touch gestures are covered once");
+    await page.addInitScript(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await openToolGroup(page, "walls");
+    await page.locator("[data-draw-room-tool='wall']").click();
+
+    const board = page.locator("[data-draw-room-board='true']");
+    const viewWidth = () => board.evaluate((svg) => (svg as SVGSVGElement).viewBox.baseVal.width);
+    const startWidth = await viewWidth();
+    const box = (await board.boundingBox())!;
+    const centre = { x: box.x + box.width / 2, y: box.y + box.height * 0.3 };
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (
+        type: "touchStart" | "touchMove" | "touchEnd",
+        points: { x: number; y: number }[],
+    ) =>
+        cdp.send("Input.dispatchTouchEvent", {
+            type,
+            touchPoints: points.map((point, id) => ({ ...point, id })),
+        });
+    const fingers = (spread: number, shiftY = 0) => [
+        { x: centre.x - spread, y: centre.y + shiftY },
+        { x: centre.x + spread, y: centre.y + shiftY },
+    ];
+
+    // The first finger starts a wall before the second one lands.
+    await touch("touchStart", [fingers(20)[0]]);
+    await touch("touchMove", [{ x: centre.x - 40, y: centre.y }]);
+    await touch("touchStart", fingers(20));
+    for (let spread = 30; spread <= 120; spread += 15) await touch("touchMove", fingers(spread));
+    await touch("touchEnd", []);
+
+    await expect.poll(viewWidth).toBeLessThan(startWidth / 3);
+    await expect(page.locator("[data-draw-room-wall-segment]")).toHaveCount(0);
+
+    // Pinching in zooms back out; moving both fingers pans.
+    const zoomedWidth = await viewWidth();
+    const viewY = () => board.evaluate((svg) => (svg as SVGSVGElement).viewBox.baseVal.y);
+    await touch("touchStart", [fingers(120)[0]]);
+    await touch("touchStart", fingers(120));
+    for (let spread = 105; spread >= 60; spread -= 15) await touch("touchMove", fingers(spread));
+    await expect.poll(viewWidth).toBeGreaterThan(zoomedWidth * 1.5);
+    const yBeforePan = await viewY();
+    for (let shift = 10; shift <= 60; shift += 10) await touch("touchMove", fingers(60, shift));
+    await touch("touchEnd", []);
+    await expect.poll(viewY).toBeLessThan(yBeforePan);
+    await expect(page.locator("[data-draw-room-wall-segment]")).toHaveCount(0);
+});
+
+test("a phone frames the room above the furniture sheet and moves the sheet aside for a drag", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile-chromium", "Phone furniture sheet is covered once");
+    await page.addInitScript(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await drawSimpleRect(page);
+
+    await page.locator("[data-draw-room-step='furniture']").click();
+    const sheet = page.locator("[data-draw-room-bottom-sheet]");
+    await expect(sheet).toBeVisible();
+    // The catalogue covers the canvas's lower half; the whole room sits above it.
+    const sheetTop = async () => (await sheet.boundingBox())!.y;
+    const roomBottom = async () =>
+        (await getBoardScreenPoint(page, 8000, BOARD_HEIGHT_MM * 0.69)).y;
+    await expect.poll(async () => (await roomBottom()) < (await sheetTop())).toBe(true);
+    const boardTop = (await page.locator("[data-draw-room-board='true']").boundingBox())!.y;
+    expect((await getBoardScreenPoint(page, 8000, BOARD_HEIGHT_MM * 0.23)).y).toBeGreaterThan(
+        boardTop,
+    );
+
+    await chooseFurniture(page, "single-bed");
+    const spot = await getBoardScreenPoint(page, 6000, 3500);
+    await page.mouse.move(spot.x, spot.y);
+    await page.mouse.click(spot.x, spot.y);
+    const piece = page.locator("[data-draw-furniture^='furniture-']");
+    await expect(piece).toHaveCount(1);
+
+    // The sheet steps aside while the piece is dragged and returns on release.
+    const box = (await piece.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 20, box.y + box.height / 2 + 20, { steps: 5 });
+    await expect(sheet).toHaveAttribute("data-moving", "true");
+    await expect(sheet).toHaveCSS("opacity", "0");
+    await page.mouse.up();
+    await expect(sheet).toHaveAttribute("data-moving", "false");
+    await expect(sheet).toHaveCSS("opacity", "1");
+});
+
 test("the wall tool resting on a wall measures from the cursor to each corner", async ({
     page,
 }, testInfo) => {
@@ -5102,4 +5192,96 @@ test("a carried piece turns to the wall and meets its neighbour, as in Remplanne
     await page.locator("[data-furniture-section]").first().hover();
     await page.locator("[data-furniture-shortcuts]").click();
     await expect(page.locator("[data-furniture-flyout='shortcuts']")).toContainText("Зеркально");
+});
+
+test("auto layout lays the kitchen units as one worktop with the uppers over it", async ({
+    page,
+}, testInfo) => {
+    test.skip(
+        testInfo.project.name !== "desktop-chromium",
+        "The solver worker is covered once in Chromium",
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    // A 3,4 × 3,6 m kitchen.
+    await drawMeasuredRectangle(page, { x: 3000, y: 2000 }, 3400, 3600);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("kitchen");
+    await page.locator("[data-draw-room-step='furniture']").click();
+
+    // The person drops the units anywhere in the room.
+    const pieces = page.locator("[data-draw-furniture^='furniture-']");
+    const place = async (id: string, x: number, y: number) => {
+        const catalogue = page.getByRole("button", { name: "Закрыть", exact: true });
+        if (await catalogue.isVisible()) await catalogue.click();
+        await chooseFurniture(page, id);
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.click(point.x, point.y);
+    };
+    await place("kitchen-fridge", 4000, 3200);
+    await place("kitchen-sink", 5400, 3200);
+    await place("kitchen-cooker", 4000, 4400);
+    await place("kitchen-dishwasher", 5400, 4400);
+    await place("kitchen-base-600", 4700, 5000);
+    await place("kitchen-upper-600", 4700, 2600);
+    await place("kitchen-hood", 4000, 5000);
+    await expect(pieces).toHaveCount(7);
+
+    // The upper units are rearranged too, so they are listed.
+    await page.keyboard.press("Escape");
+    await page.locator("[data-furniture-auto-layout]").click();
+    const auto = page.locator("[data-draw-room-auto-layout='true']");
+    await expect(auto.locator("[data-auto-layout-item]")).toHaveCount(7);
+    await expect(auto.locator("[data-auto-layout-item='kitchen-hood']")).toBeVisible();
+    await auto.getByRole("button", { name: "Подобрать", exact: true }).click();
+    const variant = auto.locator("[data-auto-layout-variant='0']");
+    await expect(variant).toBeVisible({ timeout: 30_000 });
+    await expect(variant).toContainText(/кухня/i);
+    await variant.click();
+
+    await expect(pieces).toHaveCount(7);
+    await expect(
+        page.locator("[data-draw-furniture^='furniture-'][data-invalid='true']"),
+    ).toHaveCount(0);
+    // The floor units stand side by side: each one touches another.
+    const touching = await page.evaluate(() => {
+        const scene = JSON.parse(
+            localStorage.getItem("stylefinder:draw-room-editor:v1") ?? "{}",
+        ) as {
+            furniture?: {
+                definitionId: string;
+                x: number;
+                y: number;
+                width: number;
+                depth: number;
+                rotation: number;
+            }[];
+        };
+        const floor = (scene.furniture ?? [])
+            .filter(
+                (item) =>
+                    !item.definitionId.startsWith("kitchen-upper") &&
+                    item.definitionId !== "kitchen-hood",
+            )
+            .map((item) => {
+                const turned = item.rotation % 180 !== 0;
+                const width = turned ? item.depth : item.width;
+                const depth = turned ? item.width : item.depth;
+                return { left: item.x, top: item.y, right: item.x + width, bottom: item.y + depth };
+            });
+        const meet = (a: (typeof floor)[number], b: (typeof floor)[number]) =>
+            ((Math.abs(a.right - b.left) < 1 || Math.abs(b.right - a.left) < 1) &&
+                a.top < b.bottom &&
+                b.top < a.bottom) ||
+            ((Math.abs(a.bottom - b.top) < 1 || Math.abs(b.bottom - a.top) < 1) &&
+                a.left < b.right &&
+                b.left < a.right);
+        return floor.map((item) => floor.some((other) => other !== item && meet(item, other)));
+    });
+    expect(touching).toHaveLength(5);
+    expect(touching.every(Boolean)).toBe(true);
 });

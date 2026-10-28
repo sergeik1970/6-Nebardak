@@ -17,6 +17,7 @@ import {
     getRoomPartitionSegments,
     getRoomSegment,
     isHingedDoor,
+    isKitchenRunUnit,
     materializeRoomRegionsState,
     isGeneratedRoomName,
     roomKindLabel,
@@ -96,11 +97,14 @@ import {
     buildRegionSolverRoom,
     buildRoomInstances,
     arrangeAroundLeftovers,
+    hasKitchenRun,
     placementRules,
     roomFurnitureSet,
+    solveKitchenVariants,
     solvedToDrawFurniture,
     solverFixedFurniture,
     withFixedFurniture,
+    type FallbackSolve,
 } from "./auto-layout";
 import type {
     SolverWorkerRequest,
@@ -525,6 +529,7 @@ const getContourFitViewBox = (
     thickness: number,
     canvasSize: { width: number; height: number },
     leftInsetPx = 0,
+    bottomInsetPx = 0,
 ): CanvasViewBox | null => {
     const faces = getDrawRoomWallFaceContours(contour, thickness);
     if (!faces) return null;
@@ -533,6 +538,7 @@ const getContourFitViewBox = (
         thickness,
         canvasSize,
         leftInsetPx,
+        bottomInsetPx,
     );
 };
 
@@ -542,6 +548,7 @@ const getSegmentsFitViewBox = (
     thickness: number,
     canvasSize: { width: number; height: number },
     leftInsetPx = 0,
+    bottomInsetPx = 0,
 ): CanvasViewBox | null => {
     const points = segments.flatMap((segment) => [segment.start, segment.end]);
     if (!points.length) return null;
@@ -557,25 +564,48 @@ const getSegmentsFitViewBox = (
         thickness,
         canvasSize,
         leftInsetPx,
+        bottomInsetPx,
     );
 };
+
+/** Room for the dimension chains around a drawing framed above a bottom sheet. */
+const BOTTOM_SHEET_FIT_PADDING_PX = 24;
 
 /**
  * Frames the drawing with comfortable padding. A side tool rail or panel
  * (`leftInsetPx`) floats over the canvas's left edge: if the framed drawing
  * would sit under it, the camera first pans without changing scale and only
  * zooms out when panning alone cannot keep the whole drawing clear.
+ *
+ * A phone's bottom sheet (`bottomInsetPx`) covers up to half the canvas, so
+ * there the drawing is framed into the strip above it instead, with just
+ * enough padding for the dimension chains.
  */
 const getBoundsFitViewBox = (
     bounds: ScreenRect,
     thickness: number,
     canvasSize: { width: number; height: number },
     leftInsetPx = 0,
+    bottomInsetPx = 0,
 ): CanvasViewBox | null => {
     if (!canvasSize.width || !canvasSize.height) return null;
     const sourceWidth = bounds.right - bounds.left;
     const sourceHeight = bounds.bottom - bounds.top;
     if (!sourceWidth || !sourceHeight) return null;
+    const visibleHeight = canvasSize.height - bottomInsetPx;
+    const sheetPadding = BOTTOM_SHEET_FIT_PADDING_PX * 2;
+    if (bottomInsetPx > 0 && visibleHeight > sheetPadding && canvasSize.width > sheetPadding) {
+        const millimetersPerPixel = Math.max(
+            sourceWidth / (canvasSize.width - sheetPadding),
+            sourceHeight / (visibleHeight - sheetPadding),
+        );
+        return {
+            x: (bounds.left + bounds.right - canvasSize.width * millimetersPerPixel) / 2,
+            y: (bounds.top + bounds.bottom - visibleHeight * millimetersPerPixel) / 2,
+            width: canvasSize.width * millimetersPerPixel,
+            height: canvasSize.height * millimetersPerPixel,
+        };
+    }
     const padding = Math.max(thickness * 8, Math.min(sourceWidth, sourceHeight) * 0.5);
     const frame = (usableWidth: number) => {
         let width = sourceWidth + padding * 2;
@@ -4037,6 +4067,7 @@ const DrawRoom: React.FC = () => {
     const [toolSheetCollapsed, setToolSheetCollapsed] = useState(false);
     const [toolSheetOverlaysCanvas, setToolSheetOverlaysCanvas] = useState(false);
     const autoFitPendingRef = useRef(false);
+    const fitOnFurnitureStepRef = useRef(false);
     // Set when a whole room appears at once (template, converted room).
     const fitAfterSceneChangeRef = useRef(false);
     const [templateOpen, setTemplateOpen] = useState(false);
@@ -6258,6 +6289,38 @@ const DrawRoom: React.FC = () => {
         ],
     );
 
+    /**
+     * Camera motion must not run annotation collision/layout or reconcile the
+     * whole editor on every wheel tick or pinch frame. SVG applies the camera
+     * now; React settles screen-space annotations once the gesture ends.
+     */
+    const paintCamera = useCallback(
+        (next: CanvasViewBox) => {
+            const board = boardRef.current;
+            if (!board) return;
+            viewBoxRef.current = next;
+            board.setAttribute("viewBox", `${next.x} ${next.y} ${next.width} ${next.height}`);
+            board.setAttribute("data-camera-moving", "true");
+            if (zoomStatusRef.current) {
+                zoomStatusRef.current.textContent = `Масштаб: ${Math.max(1, Math.round((fitViewBox.width / next.width) * 100))}%`;
+            }
+            const bleed = renderedWallThickness;
+            board.querySelectorAll("[data-camera-envelope]").forEach((element) => {
+                element.setAttribute("x", String(next.x - bleed));
+                element.setAttribute("y", String(next.y - bleed));
+                element.setAttribute("width", String(next.width + bleed * 2));
+                element.setAttribute("height", String(next.height + bleed * 2));
+            });
+            if (wheelZoomSettleRef.current !== null) clearTimeout(wheelZoomSettleRef.current);
+            wheelZoomSettleRef.current = setTimeout(() => {
+                wheelZoomSettleRef.current = null;
+                board.removeAttribute("data-camera-moving");
+                setViewBox({ ...viewBoxRef.current });
+            }, 120);
+        },
+        [fitViewBox.width, renderedWallThickness],
+    );
+
     const flushPendingWheelZoom = useCallback(() => {
         wheelZoomFrameRef.current = null;
         const board = boardRef.current;
@@ -6295,29 +6358,8 @@ const DrawRoom: React.FC = () => {
             );
         }
 
-        // Camera motion must not run annotation collision/layout or reconcile
-        // the whole editor on every wheel tick. SVG applies the camera now;
-        // React settles screen-space annotations once the gesture ends.
-        viewBoxRef.current = next;
-        board.setAttribute("viewBox", `${next.x} ${next.y} ${next.width} ${next.height}`);
-        board.setAttribute("data-camera-moving", "true");
-        if (zoomStatusRef.current) {
-            zoomStatusRef.current.textContent = `Масштаб: ${Math.max(1, Math.round((fitViewBox.width / next.width) * 100))}%`;
-        }
-        const bleed = renderedWallThickness;
-        board.querySelectorAll("[data-camera-envelope]").forEach((element) => {
-            element.setAttribute("x", String(next.x - bleed));
-            element.setAttribute("y", String(next.y - bleed));
-            element.setAttribute("width", String(next.width + bleed * 2));
-            element.setAttribute("height", String(next.height + bleed * 2));
-        });
-        if (wheelZoomSettleRef.current !== null) clearTimeout(wheelZoomSettleRef.current);
-        wheelZoomSettleRef.current = setTimeout(() => {
-            wheelZoomSettleRef.current = null;
-            board.removeAttribute("data-camera-moving");
-            setViewBox({ ...viewBoxRef.current });
-        }, 120);
-    }, [fitViewBox, renderedWallThickness]);
+        paintCamera(next);
+    }, [fitViewBox, paintCamera]);
 
     const queueWheelZoom = useCallback(
         (clientX: number, clientY: number, deltaY: number, deltaMode: number) => {
@@ -6345,6 +6387,134 @@ const DrawRoom: React.FC = () => {
         board.addEventListener("wheel", handleNativeWheel, { passive: false });
         return () => board.removeEventListener("wheel", handleNativeWheel);
     }, [queueWheelZoom]);
+
+    /**
+     * Two fingers zoom and pan the plan on a touch screen. The first finger
+     * has already begun a wall, a drag or a pan by the time the second lands,
+     * so that gesture is cancelled the way the browser would cancel it; until
+     * both fingers lift, the editor sees none of their events.
+     */
+    useEffect(() => {
+        const board = boardRef.current;
+        const area = board?.closest("section");
+        if (!board || !area) return;
+        const touches = new Map<number, { x: number; y: number; target: EventTarget | null }>();
+        let pinch: { distance: number; focus: Point; view: CanvasViewBox } | null = null;
+        // Fingers of a finished pinch stay muted until they lift.
+        const muted = new Set<number>();
+        let cancelling = false;
+
+        const pair = () => {
+            const [first, second] = Array.from(touches.values());
+            return {
+                distance: Math.hypot(second.x - first.x, second.y - first.y),
+                middle: { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 },
+            };
+        };
+        const begin = () => {
+            const { distance, middle } = pair();
+            const view = viewBoxRef.current;
+            const rendered = getRenderedViewBounds(board.getBoundingClientRect(), view);
+            const ratioX = (middle.x - rendered.left) / rendered.width;
+            const ratioY = (middle.y - rendered.top) / rendered.height;
+            pinch = {
+                distance: Math.max(distance, 1),
+                focus: { x: view.x + ratioX * view.width, y: view.y + ratioY * view.height },
+                view,
+            };
+        };
+        const follow = () => {
+            if (!pinch) return;
+            const { distance, middle } = pair();
+            const width = clamp(
+                (pinch.view.width * pinch.distance) / Math.max(distance, 1),
+                fitViewBox.width / MAX_ZOOM,
+                fitViewBox.width / MIN_ZOOM,
+            );
+            const height = width / (fitViewBox.width / fitViewBox.height);
+            // The plan point that sat between the fingers stays between them.
+            const rendered = getRenderedViewBounds(board.getBoundingClientRect(), pinch.view);
+            const ratioX = (middle.x - rendered.left) / rendered.width;
+            const ratioY = (middle.y - rendered.top) / rendered.height;
+            paintCamera(
+                clampViewBox(
+                    {
+                        x: pinch.focus.x - ratioX * width,
+                        y: pinch.focus.y - ratioY * height,
+                        width,
+                        height,
+                    },
+                    fitViewBox,
+                ),
+            );
+        };
+        const swallow = (event: PointerEvent) => {
+            event.stopImmediatePropagation();
+            event.preventDefault();
+        };
+
+        const down = (event: PointerEvent) => {
+            if (event.pointerType !== "touch" || cancelling) return;
+            if (!board.contains(event.target as Node)) return;
+            // A third finger, or one landing beside a finger still muted, waits too.
+            if (pinch || muted.size) {
+                muted.add(event.pointerId);
+                swallow(event);
+                return;
+            }
+            touches.set(event.pointerId, {
+                x: event.clientX,
+                y: event.clientY,
+                target: event.target,
+            });
+            if (touches.size !== 2) return;
+            swallow(event);
+            const [firstId, first] = Array.from(touches.entries())[0];
+            cancelling = true;
+            (first.target ?? board).dispatchEvent(
+                new PointerEvent("pointercancel", {
+                    pointerId: firstId,
+                    pointerType: "touch",
+                    isPrimary: true,
+                    bubbles: true,
+                }),
+            );
+            cancelling = false;
+            begin();
+        };
+        const move = (event: PointerEvent) => {
+            if (muted.has(event.pointerId)) return swallow(event);
+            const touch = touches.get(event.pointerId);
+            if (!touch) return;
+            touch.x = event.clientX;
+            touch.y = event.clientY;
+            touch.target = event.target;
+            if (!pinch) return;
+            swallow(event);
+            follow();
+        };
+        const up = (event: PointerEvent) => {
+            if (cancelling) return;
+            if (muted.delete(event.pointerId)) return swallow(event);
+            if (!touches.delete(event.pointerId)) return;
+            if (!pinch) return;
+            swallow(event);
+            pinch = null;
+            touches.forEach((_, id) => muted.add(id));
+            touches.clear();
+        };
+
+        area.addEventListener("pointerdown", down, true);
+        area.addEventListener("pointermove", move, true);
+        area.addEventListener("pointerup", up, true);
+        area.addEventListener("pointercancel", up, true);
+        return () => {
+            area.removeEventListener("pointerdown", down, true);
+            area.removeEventListener("pointermove", move, true);
+            area.removeEventListener("pointerup", up, true);
+            area.removeEventListener("pointercancel", up, true);
+        };
+    }, [fitViewBox, paintCamera]);
 
     const cancelContourWallDrag = useCallback((message = "Перемещение стены отменено.") => {
         const drag = contourWallDragRef.current;
@@ -6486,6 +6656,20 @@ const DrawRoom: React.FC = () => {
         stopPan();
         stopWallDrawing();
         cancelContourWallDrag();
+        // A door or window moves only on release; a cancelled drag leaves it put.
+        if (openingDragRef.current) {
+            openingDragRef.current = null;
+            setOpeningDragSelection(null);
+            setOpeningDragPreview(null);
+            if (capturedPointerRef.current !== null) {
+                try {
+                    boardRef.current?.releasePointerCapture(capturedPointerRef.current);
+                } catch {
+                    // capture already released
+                }
+                capturedPointerRef.current = null;
+            }
+        }
     }, [cancelContourWallDrag, stopPan, stopWallDrawing]);
 
     useEffect(() => {
@@ -6600,17 +6784,41 @@ const DrawRoom: React.FC = () => {
         return clamp(right - boardBox.left, 0, boardBox.width / 2);
     }, []);
 
+    /** How much of the canvas a phone's docked bottom sheet (the furniture catalogue) covers. */
+    const getBottomSheetInset = useCallback(() => {
+        const board = boardRef.current;
+        const sheet = board?.closest("section")?.querySelector("[data-draw-room-bottom-sheet]");
+        if (!board || !sheet) return 0;
+        const boardBox = board.getBoundingClientRect();
+        const sheetBox = sheet.getBoundingClientRect();
+        // Wider screens lay the same element over the whole canvas, its cards at the side.
+        const docked =
+            sheetBox.height > 0 &&
+            sheetBox.width >= boardBox.width * 0.6 &&
+            sheetBox.top > boardBox.top + boardBox.height * 0.25;
+        if (!docked) return 0;
+        return clamp(boardBox.bottom - sheetBox.top, 0, boardBox.height * 0.7);
+    }, []);
+
     /** Frames the drawing like "Вместить"; returns false when there is nothing to frame. */
     const fitDrawingToView = useCallback(() => {
         const leftInset = getSideOverlayInset();
+        const bottomInset = getBottomSheetInset();
         const contourFit = preview
             ? getContourFitViewBox(
                   previewContourPoints,
                   renderedWallThickness,
                   canvasSize,
                   leftInset,
+                  bottomInset,
               )
-            : getSegmentsFitViewBox(scene.segments, renderedWallThickness, canvasSize, leftInset);
+            : getSegmentsFitViewBox(
+                  scene.segments,
+                  renderedWallThickness,
+                  canvasSize,
+                  leftInset,
+                  bottomInset,
+              );
         const next = contourFit
             ? clampViewBox(contourFit, fitViewBox)
             : clampViewBox(fitViewBox, fitViewBox);
@@ -6620,6 +6828,7 @@ const DrawRoom: React.FC = () => {
     }, [
         canvasSize,
         fitViewBox,
+        getBottomSheetInset,
         getSideOverlayInset,
         preview,
         previewContourPoints,
@@ -6708,6 +6917,16 @@ const DrawRoom: React.FC = () => {
         }, AUTO_FIT_SETTLE_MS);
         return () => window.clearTimeout(timer);
     }, [fitDrawingToView, preview, toolSheetOverlaysCanvas]);
+
+    // The furniture catalogue docks over the lower half of a phone's canvas;
+    // opening the step frames the room into the strip above it, once.
+    useEffect(() => {
+        if (!fitOnFurnitureStepRef.current) return;
+        fitOnFurnitureStepRef.current = false;
+        if (activeToolGroup === "furniture" && toolSheetOverlaysCanvas && preview) {
+            fitDrawingToView();
+        }
+    }, [activeToolGroup, fitDrawingToView, preview, toolSheetOverlaysCanvas]);
 
     const resetToOriginal = useCallback(() => {
         stopPan();
@@ -7166,6 +7385,8 @@ const DrawRoom: React.FC = () => {
             pieces: DrawFurniture[];
             /** What did not fit, left where the person had put it. */
             leftover: DrawFurniture[];
+            /** Furniture the variant leaves as it is: other rooms, pinned pieces. */
+            kept: DrawFurniture[];
             /** The rest was solved around the leftover. */
             around: boolean;
             observation?: PlannerObservationCreateInput;
@@ -7219,7 +7440,12 @@ const DrawRoom: React.FC = () => {
         () => autoLayoutPieces.filter((item) => !item.locked),
         [autoLayoutPieces],
     );
-    const autoLayoutSet = useMemo(() => roomFurnitureSet(autoLayoutMovable), [autoLayoutMovable]);
+    // A kitchen run rearranges its upper units too, so they are listed.
+    const autoLayoutKitchen = hasKitchenRun(autoLayoutMovable);
+    const autoLayoutSet = useMemo(
+        () => roomFurnitureSet(autoLayoutMovable, hasKitchenRun(autoLayoutMovable)),
+        [autoLayoutMovable],
+    );
     const autoLayoutSetKey = JSON.stringify(autoLayoutSet);
     // The solver knows catalogue sizes only.
     const autoLayoutResized = autoLayoutMovable.some((item) => {
@@ -7278,7 +7504,12 @@ const DrawRoom: React.FC = () => {
         setAutoLayoutApplied(null);
         try {
             // `around`: what found no spot stayed put and the rest was solved around it.
-            let solved: (PlannerObservationTarget & { label: string; around?: boolean })[] = [];
+            // `leftover`: a kitchen names its leftover pieces itself.
+            let solved: (PlannerObservationTarget & {
+                label: string;
+                around?: boolean;
+                leftover?: DrawFurniture[];
+            })[] = [];
             const nameOf = (definitionId: string) =>
                 furnitureDefinition(definitionId)?.label ?? definitionId;
             // The hand-placed pieces standing for unplaced instances, one per instance.
@@ -7292,14 +7523,46 @@ const DrawRoom: React.FC = () => {
                     return index === -1 ? [] : remaining.splice(index, 1);
                 });
             };
-            const response = await requestSolver({
-                action: "solve-variants",
-                room: target.room,
-                instances,
-                preferences: {},
-                limit: 3,
-            });
-            if (response.ok && response.action === "solve-variants") {
+            const fallbackSolve: FallbackSolve = async (room, pieces) => {
+                const response = await requestSolver({
+                    action: "solve-preferred-fallback",
+                    room,
+                    instances: pieces,
+                    preferences: {},
+                });
+                return response.ok && response.action === "solve-preferred-fallback"
+                    ? response.result
+                    : null;
+            };
+            if (autoLayoutKitchen) {
+                const kitchen = await solveKitchenVariants(
+                    target.room,
+                    autoLayoutMovable,
+                    fallbackSolve,
+                );
+                solved = kitchen.map((variant, index) => ({
+                    id: `kitchen-${index + 1}`,
+                    label: variant.label,
+                    placements: variant.placements,
+                    exploredNodes: 0,
+                    score: variant.score,
+                    notes: [],
+                    solverStatus: variant.leftover.length
+                        ? ("partial" as const)
+                        : ("success" as const),
+                    leftover: variant.leftover,
+                }));
+            }
+            const response = autoLayoutKitchen
+                ? null
+                : await requestSolver({
+                      action: "solve-variants",
+                      room: target.room,
+                      instances,
+                      preferences: {},
+                      limit: 3,
+                  });
+            if (response?.ok && response.action === "solve-variants") {
                 if (response.result.status === "success") {
                     solved = response.result.variants.map((variant) => ({
                         id: variant.variantId,
@@ -7318,17 +7581,7 @@ const DrawRoom: React.FC = () => {
                         target.room,
                         instances,
                         (ids) => solverFixedFurniture(leftoverFor(ids), target.offset),
-                        async (room, pieces) => {
-                            const response = await requestSolver({
-                                action: "solve-preferred-fallback",
-                                room,
-                                instances: pieces,
-                                preferences: {},
-                            });
-                            return response.ok && response.action === "solve-preferred-fallback"
-                                ? response.result
-                                : null;
-                        },
+                        fallbackSolve,
                     );
                     if (arranged) {
                         const { core, unplaced, around } = arranged;
@@ -7360,6 +7613,10 @@ const DrawRoom: React.FC = () => {
                     }
                 }
             }
+            // A kitchen moves its upper units as well; the rest of `kept` stays.
+            const kept = autoLayoutKitchen
+                ? target.kept.filter((item) => !autoLayoutMovable.includes(item))
+                : target.kept;
             // A variant must also hold in the whole apartment, as hand-placed pieces do.
             const variants = solved.flatMap((variant, index) => {
                 const pieces = solvedToDrawFurniture(
@@ -7367,7 +7624,7 @@ const DrawRoom: React.FC = () => {
                     target.offset,
                     `furniture-auto-${Date.now()}-${index + 1}`,
                 );
-                const all = [...target.kept, ...pieces];
+                const all = [...kept, ...pieces];
                 const fits = pieces.every(
                     (piece) =>
                         !furnitureError(
@@ -7381,13 +7638,15 @@ const DrawRoom: React.FC = () => {
                         ),
                 );
                 // Pieces that did not fit stay where the person had put them.
-                const leftover = leftoverFor(variant.workingCore?.unplacedInstanceIds ?? []);
+                const leftover =
+                    variant.leftover ?? leftoverFor(variant.workingCore?.unplacedInstanceIds ?? []);
                 return fits && pieces.length
                     ? [
                           {
                               summary: { label: variant.label, count: pieces.length },
                               pieces,
                               leftover,
+                              kept,
                               around: Boolean(variant.around),
                               target: variant,
                           },
@@ -7446,6 +7705,7 @@ const DrawRoom: React.FC = () => {
             setAutoLayoutSolving(false);
         }
     }, [
+        autoLayoutKitchen,
         autoLayoutMovable,
         autoLayoutSet,
         autoLayoutSetKey,
@@ -7474,15 +7734,17 @@ const DrawRoom: React.FC = () => {
             if (!variant || autoLayoutTarget?.status !== "ready") return;
             commitScene({
                 ...scene,
-                furniture: [...autoLayoutTarget.kept, ...variant.pieces, ...variant.leftover],
+                furniture: [...variant.kept, ...variant.pieces, ...variant.leftover],
             });
             setAutoLayoutApplied(index);
             // Say why each leftover found no spot, in the catalogue's own rules.
             const missed = Array.from(
                 new Set(variant.leftover.map((item) => item.definitionId)),
             ).map((definitionId) => {
+                const name = furnitureDefinition(definitionId)?.label ?? definitionId;
+                if (isKitchenRunUnit(definitionId)) return `${name}: не хватило места в кухне`;
                 const rules = placementRules(definitionId);
-                return `${furnitureDefinition(definitionId)?.label ?? definitionId}: нет подходящего места${rules.length ? ` (нужно ${rules.join(", ")})` : ""}`;
+                return `${name}: нет подходящего места${rules.length ? ` (нужно ${rules.join(", ")})` : ""}`;
             });
             const applied = missed.length
                 ? `Вариант ${index + 1} расставлен. ${missed.join("; ")} — ${
@@ -7527,6 +7789,7 @@ const DrawRoom: React.FC = () => {
         setSelectedOpening(null);
         setSelectedContourWallEdge(null);
         setSelectedSegmentWallId(null);
+        fitOnFurnitureStepRef.current = group === "furniture" && activeToolGroup !== group;
         setActiveToolGroup(group);
         setToolSheetCollapsed(false);
     };
