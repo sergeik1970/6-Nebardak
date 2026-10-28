@@ -67,8 +67,11 @@ export const registerByUi = async (page: Page, account: Account = newAccount()) 
     await dialog.getByPlaceholder("Введите ваше имя").fill(account.name);
     await dialog.getByPlaceholder("name@example.com").fill(account.email);
     await dialog.getByPlaceholder("Введите пароль").fill(account.password);
+    const submit = dialog.locator('button[type="submit"]');
+    await expect(submit).toBeDisabled();
     await dialog.getByText("Я даю согласие на обработку моих персональных данных").click();
-    await dialog.locator('button[type="submit"]').click();
+    await expect(submit).toBeEnabled();
+    await submit.click();
     await expect(dialog).toBeHidden();
     return account;
 };

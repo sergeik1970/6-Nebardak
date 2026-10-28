@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { evaluateProd, parseProdStatus } from "../src/prod.js";
+import { evaluateProd, formatRegistrations, parseProdStatus } from "../src/prod.js";
 
 const NOW = Date.UTC(2026, 9, 22, 12);
 const prod = {
@@ -83,4 +83,17 @@ test("flags unhealthy, stopped and missing containers", () => {
 test("a finished one-off container does not hide the running one", () => {
     const text = "container db running healthy\ncontainer db exited none\n";
     assert.equal(parseProdStatus(text).containers.get("db").state, "running");
+});
+
+test("sign-ups are announced only after the first poll and only when the last id grows", () => {
+    const users = parseProdStatus("users 42 57\n").users;
+    assert.deepEqual(users, { count: 42, lastId: 57 });
+    assert.equal(formatRegistrations(null, users), null);
+    assert.equal(formatRegistrations(57, users), null);
+    assert.equal(
+        formatRegistrations(56, users),
+        "🎉 Новая регистрация (id 57). Всего пользователей: 42.",
+    );
+    assert.match(formatRegistrations(54, users), /Новых регистраций: 3/);
+    assert.equal(formatRegistrations(56, parseProdStatus(output()).users), null);
 });
