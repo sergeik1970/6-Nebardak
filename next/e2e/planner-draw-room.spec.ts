@@ -5056,3 +5056,173 @@ test("a piece auto layout cannot fit stays on the plan for the next try", async 
     // The next try counts it again.
     await expect(auto.locator("[data-auto-layout-item='armchair']")).toBeVisible();
 });
+
+test("a carried piece turns to the wall and meets its neighbour, as in Remplanner", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Pointer placing is covered once");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    // Inner faces at x 4050..8950 and y 2050..5950.
+    await drawMeasuredRectangle(page, { x: 4000, y: 2000 }, 5000, 4000);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("living");
+    await page.locator("[data-draw-room-step='furniture']").click();
+    const saved = () =>
+        page.evaluate(
+            () =>
+                (
+                    JSON.parse(localStorage.getItem("stylefinder:draw-room-editor:v1") ?? "{}") as {
+                        furniture?: {
+                            definitionId: string;
+                            x: number;
+                            y: number;
+                            rotation: number;
+                            mirrored?: boolean;
+                        }[];
+                    }
+                ).furniture ?? [],
+        );
+    const carryTo = async (x: number, y: number) => {
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y, { steps: 6 });
+        await page.mouse.click(point.x, point.y);
+    };
+
+    // Carried up to the right wall, the sofa turns its back to it and stands flush.
+    await chooseFurniture(page, "sofa-three");
+    await carryTo(8500, 4400);
+    await expect
+        .poll(async () => (await saved())[0])
+        .toMatchObject({
+            definitionId: "sofa-three",
+            rotation: 90,
+            x: 8950 - 950,
+        });
+
+    // An armchair dropped 60 mm short of the sofa is pulled against it.
+    await page.keyboard.press("Escape");
+    await chooseFurniture(page, "armchair");
+    // The sofa spans y 3300..5500 now; the armchair goes just above it, against the wall.
+    await carryTo(8500, 3300 - 60 - 450);
+    await expect
+        .poll(async () => (await saved())[1])
+        .toMatchObject({ definitionId: "armchair", rotation: 90, x: 8950 - 900 });
+    const [sofa, armchair] = await saved();
+    // Flush against the sofa: no gap between the armchair's bottom and the sofa's top.
+    expect(armchair.y + 900).toBe(sofa.y);
+
+    // Cmd+C / Cmd+V puts a copy in hand; E mirrors a corner sofa before it is placed.
+    await page.keyboard.press("ControlOrMeta+c");
+    await page.keyboard.press("ControlOrMeta+v");
+    await carryTo(5000, 3000);
+    await expect.poll(async () => (await saved()).length).toBe(3);
+    await page.keyboard.press("Escape");
+    await chooseFurniture(page, "sofa-four-left");
+    await page.keyboard.press("e");
+    await carryTo(6500, 5300);
+    await expect
+        .poll(async () => (await saved()).find((item) => item.definitionId === "sofa-four-left"))
+        .toMatchObject({ rotation: 180, mirrored: true });
+
+    // The list of shortcuts is one tap away in the rail heading.
+    await page.keyboard.press("Escape");
+    await page.locator("[data-furniture-section]").first().hover();
+    await page.locator("[data-furniture-shortcuts]").click();
+    await expect(page.locator("[data-furniture-flyout='shortcuts']")).toContainText("Зеркально");
+});
+
+test("auto layout lays the kitchen units as one worktop with the uppers over it", async ({
+    page,
+}, testInfo) => {
+    test.skip(
+        testInfo.project.name !== "desktop-chromium",
+        "The solver worker is covered once in Chromium",
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    // A 3,4 × 3,6 m kitchen.
+    await drawMeasuredRectangle(page, { x: 3000, y: 2000 }, 3400, 3600);
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("kitchen");
+    await page.locator("[data-draw-room-step='furniture']").click();
+
+    // The person drops the units anywhere in the room.
+    const pieces = page.locator("[data-draw-furniture^='furniture-']");
+    const place = async (id: string, x: number, y: number) => {
+        const catalogue = page.getByRole("button", { name: "Закрыть", exact: true });
+        if (await catalogue.isVisible()) await catalogue.click();
+        await chooseFurniture(page, id);
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.click(point.x, point.y);
+    };
+    await place("kitchen-fridge", 4000, 3200);
+    await place("kitchen-sink", 5400, 3200);
+    await place("kitchen-cooker", 4000, 4400);
+    await place("kitchen-dishwasher", 5400, 4400);
+    await place("kitchen-base-600", 4700, 5000);
+    await place("kitchen-upper-600", 4700, 2600);
+    await place("kitchen-hood", 4000, 5000);
+    await expect(pieces).toHaveCount(7);
+
+    // The upper units are rearranged too, so they are listed.
+    await page.keyboard.press("Escape");
+    await page.locator("[data-furniture-auto-layout]").click();
+    const auto = page.locator("[data-draw-room-auto-layout='true']");
+    await expect(auto.locator("[data-auto-layout-item]")).toHaveCount(7);
+    await expect(auto.locator("[data-auto-layout-item='kitchen-hood']")).toBeVisible();
+    await auto.getByRole("button", { name: "Подобрать", exact: true }).click();
+    const variant = auto.locator("[data-auto-layout-variant='0']");
+    await expect(variant).toBeVisible({ timeout: 30_000 });
+    await expect(variant).toContainText(/кухня/i);
+    await variant.click();
+
+    await expect(pieces).toHaveCount(7);
+    await expect(
+        page.locator("[data-draw-furniture^='furniture-'][data-invalid='true']"),
+    ).toHaveCount(0);
+    // The floor units stand side by side: each one touches another.
+    const touching = await page.evaluate(() => {
+        const scene = JSON.parse(
+            localStorage.getItem("stylefinder:draw-room-editor:v1") ?? "{}",
+        ) as {
+            furniture?: {
+                definitionId: string;
+                x: number;
+                y: number;
+                width: number;
+                depth: number;
+                rotation: number;
+            }[];
+        };
+        const floor = (scene.furniture ?? [])
+            .filter(
+                (item) =>
+                    !item.definitionId.startsWith("kitchen-upper") &&
+                    item.definitionId !== "kitchen-hood",
+            )
+            .map((item) => {
+                const turned = item.rotation % 180 !== 0;
+                const width = turned ? item.depth : item.width;
+                const depth = turned ? item.width : item.depth;
+                return { left: item.x, top: item.y, right: item.x + width, bottom: item.y + depth };
+            });
+        const meet = (a: (typeof floor)[number], b: (typeof floor)[number]) =>
+            ((Math.abs(a.right - b.left) < 1 || Math.abs(b.right - a.left) < 1) &&
+                a.top < b.bottom &&
+                b.top < a.bottom) ||
+            ((Math.abs(a.bottom - b.top) < 1 || Math.abs(b.bottom - a.top) < 1) &&
+                a.left < b.right &&
+                b.left < a.right);
+        return floor.map((item) => floor.some((other) => other !== item && meet(item, other)));
+    });
+    expect(touching).toHaveLength(5);
+    expect(touching.every(Boolean)).toBe(true);
+});

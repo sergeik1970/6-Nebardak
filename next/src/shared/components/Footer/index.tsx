@@ -77,6 +77,7 @@ const Footer: React.FC = () => {
                 <p className={styles["footer-legal"]}>
                     <Link href="/privacy">Политика обработки персональных данных</Link>
                     <Link href="/consent">Согласие на обработку данных</Link>
+                    <Link href="/analytics-consent">Согласие на веб-аналитику</Link>
                 </p>
             </div>
         </footer>

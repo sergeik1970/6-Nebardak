@@ -31,7 +31,7 @@ export function fetchProdStatus(prod, timeoutMs) {
 }
 
 export function parseProdStatus(text) {
-    const status = { disks: [], memoryAvailable: null, containers: new Map(), backup: {} };
+    const status = { disks: [], memoryAvailable: null, containers: new Map(), backup: {}, users: null };
     for (const line of text.split("\n")) {
         const [kind, ...fields] = line.trim().split(/\s+/);
         if (kind === "disk") {
@@ -52,6 +52,8 @@ export function parseProdStatus(text) {
         } else if (kind === "backup_last_success") {
             status.backup.lastSuccess = Number(fields[0]) * 1000;
             status.backup.name = fields[1];
+        } else if (kind === "users") {
+            status.users = { count: Number(fields[0]), lastId: Number(fields[1]) };
         } else if (kind === "backup_last_result") {
             status.backup.lastResult = fields[0];
         }
@@ -78,6 +80,15 @@ export function detectRestarts(previous, containers, services) {
         );
     }
     return events;
+}
+
+// The first poll after the bot starts only remembers the last id, so a restart of the
+// bot does not announce old accounts.
+export function formatRegistrations(previousLastId, users) {
+    if (!users || previousLastId === null || users.lastId <= previousLastId) return null;
+    const added = users.lastId - previousLastId;
+    const head = added === 1 ? "🎉 Новая регистрация" : `🎉 Новых регистраций: ${added}`;
+    return `${head} (id ${users.lastId}). Всего пользователей: ${users.count}.`;
 }
 
 export function formatRestarts(events) {

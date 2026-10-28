@@ -19,5 +19,13 @@ docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" |
     xargs -r docker inspect --format \
         'container {{index .Config.Labels "com.docker.compose.service"}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} {{.RestartCount}} {{.State.StartedAt}}'
 
+# Only counts and ids leave the server: the bot announces sign-ups without personal data.
+db=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" --filter "label=com.docker.compose.service=db" | head -n 1)
+if [ -n "$db" ]; then
+    docker exec -i "$db" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -XAtq -F " "' <<'SQL' || true
+SELECT 'users', count(*), coalesce(max(id), 0) FROM "user";
+SQL
+fi
+
 if [ -r "$BACKUP_STAMP" ]; then echo "backup_last_success $(head -n 1 "$BACKUP_STAMP")"; fi
 echo "backup_last_result $(systemctl show -p Result --value stylefinder-backup.service)"

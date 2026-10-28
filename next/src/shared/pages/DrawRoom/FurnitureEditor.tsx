@@ -13,11 +13,12 @@ import {
     furnitureError,
     furnitureConflicts,
     furnitureWallDistances,
+    turnsToWall,
     furnitureGeometry,
     furniturePassages,
     passageBlocked,
     rotatedFurnitureCandidates,
-    snapFurnitureToWalls,
+    placeFurniture,
     type DrawFurniture,
     type FurnitureRoom,
 } from "./furniture";
@@ -34,6 +35,22 @@ import { isSchematicFurnitureSource } from "@/shared/lib/furniture-planner/catal
 const snap = (n: number) => Math.round(n / 10) * 10;
 /** The rail's last row: arranging what already stands in the room. */
 const AUTO_LAYOUT = "auto-layout";
+/** The rail's footer: the list of keyboard shortcuts. */
+const SHORTCUTS = "shortcuts";
+const AUTO_TURN_KEY = "stylefinder:furniture-auto-turn";
+const SHORTCUT_LIST: [string, string][] = [
+    ["R", "Повернуть на 90°"],
+    ["E", "Зеркально"],
+    ["← ↑ → ↓", "Сдвинуть на 1 см"],
+    ["Shift + стрелка", "Сдвинуть на 10 см"],
+    ["⌘C / Ctrl+C", "Копировать предмет"],
+    ["⌘V / Ctrl+V", "Поставить копию"],
+    ["Delete", "Удалить предмет"],
+    ["Shift + щелчок", "Поставить несколько одинаковых"],
+    ["⌥ / Alt при переносе", "Без магнитов и автоповорота"],
+    ["⌘Z / Ctrl+Z", "Отменить"],
+    ["Esc", "Снять выбор, отменить перенос"],
+];
 export default function FurnitureEditor({
     boardRef,
     active,
@@ -78,6 +95,18 @@ export default function FurnitureEditor({
     const drag = useRef<{ initial: DrawFurniture; start: DOMPoint; last: DrawFurniture } | null>(
         null,
     );
+    // «Автоповорот»: a carried piece turns its back to the nearest wall, as in Remplanner.
+    const [autoTurn, setAutoTurn] = useState(() => {
+        try {
+            return localStorage.getItem(AUTO_TURN_KEY) !== "off";
+        } catch {
+            return true;
+        }
+    });
+    // A piece the person turned with R keeps that turn while it is carried.
+    const turnedByHand = useRef(false);
+    // Cmd+C keeps a piece here for Cmd+V.
+    const clipboard = useRef<DrawFurniture | null>(null);
     const storedSelected = items.find((item) => item.id === selectedId);
     const selected = storedSelected && reposition?.id === selectedId ? reposition : storedSelected;
     useEffect(() => {
@@ -120,7 +149,24 @@ export default function FurnitureEditor({
     const error = (item: DrawFurniture) =>
         furnitureError(item, items, walls, thickness, doorObstacles, room, radiatorObstacles);
     const inRoom = (item: DrawFurniture) => !room || furnitureBelongsToRoom(item, room);
-    const settle = (item: DrawFurniture) => snapFurnitureToWalls(item, walls, thickness);
+    const settle = (item: DrawFurniture, free = false) =>
+        placeFurniture(item, items, walls, thickness, {
+            magnets: !free,
+            turn: autoTurn && !turnedByHand.current,
+        });
+    // Pick up a piece for placing; a new piece starts with the automatic turn.
+    const takeInHand = (piece: DrawFurniture) => {
+        turnedByHand.current = false;
+        setPending(piece);
+    };
+    const mirror = () => {
+        if (!editing || editing.locked) return;
+        const next = { ...editing, mirrored: !editing.mirrored };
+        if (pending) {
+            setPending(next);
+            setPreview(null);
+        } else update(next);
+    };
     const update = (item: DrawFurniture) => {
         if (items.find((old) => old.id === item.id)?.locked) {
             setMessage("Предмет закреплён. Разблокируйте его для редактирования.");
@@ -139,6 +185,7 @@ export default function FurnitureEditor({
     const rotate = () => {
         if (!editing || editing.locked) return;
         const next = { ...editing, rotation: ((editing.rotation + 90) % 360) as Rotation };
+        turnedByHand.current = true;
         if (pending) {
             setPending(next);
             setPreview(null);
@@ -160,11 +207,14 @@ export default function FurnitureEditor({
             const p = point(event.clientX, event.clientY);
             if (!p) return null;
             const geometry = furnitureGeometry(pending);
-            return settle({
-                ...pending,
-                x: snap(p.x - geometry.width / 2),
-                y: snap(p.y - geometry.depth / 2),
-            });
+            return settle(
+                {
+                    ...pending,
+                    x: snap(p.x - geometry.width / 2),
+                    y: snap(p.y - geometry.depth / 2),
+                },
+                event.altKey,
+            );
         };
         const move = (event: PointerEvent) => {
             if (event.buttons) return;
@@ -205,13 +255,25 @@ export default function FurnitureEditor({
         if (!active) return;
         const key = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement;
-            if (
-                target.closest('input,textarea,select,[contenteditable="true"]') ||
-                event.ctrlKey ||
-                event.metaKey ||
-                event.altKey
-            )
+            if (target.closest('input,textarea,select,[contenteditable="true"]')) return;
+            // Cmd+C / Cmd+V (Ctrl on Windows): copy the chosen piece, take a copy in hand.
+            if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey) {
+                if (event.code === "KeyC" && selected && !pending) {
+                    event.preventDefault();
+                    clipboard.current = selected;
+                    setMessage("Скопировано. ⌘V или Ctrl+V — поставить копию.");
+                } else if (event.code === "KeyV" && clipboard.current) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    takeInHand({ ...clipboard.current, id: "pending-copy", locked: false });
+                    setSelectedId(null);
+                    setReposition(null);
+                    setPreview(null);
+                    setMessage("Копия в руке. Укажите место на плане. Esc — отмена.");
+                }
                 return;
+            }
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
             if (event.key === "Escape") {
                 event.stopImmediatePropagation();
                 drag.current = null;
@@ -233,6 +295,10 @@ export default function FurnitureEditor({
                     "R",
                     "к",
                     "К",
+                    "e",
+                    "E",
+                    "у",
+                    "У",
                     "ArrowLeft",
                     "ArrowRight",
                     "ArrowUp",
@@ -246,6 +312,7 @@ export default function FurnitureEditor({
                     return;
                 }
                 if (["r", "R", "к", "К"].includes(event.key)) rotate();
+                else if (["e", "E", "у", "У"].includes(event.key)) mirror();
                 else if (event.key === "Delete" || event.key === "Backspace") {
                     if (pending) setPending(null);
                     else onChange(items.filter((item) => item.id !== selectedId));
@@ -296,7 +363,8 @@ export default function FurnitureEditor({
                   ),
         );
         const editable = active && own && !ghost;
-        const baseGeometry = furnitureGeometry({ ...item, rotation: 0 });
+        // The symbol is drawn unflipped and mirrored as a whole.
+        const baseGeometry = furnitureGeometry({ ...item, rotation: 0, mirrored: false });
         const transform =
             item.rotation === 90
                 ? `translate(${item.depth} 0) rotate(90)`
@@ -346,6 +414,7 @@ export default function FurnitureEditor({
                     // Pointer-event session; this assignment never runs during rendering.
                     // eslint-disable-next-line react-hooks/refs
                     drag.current = { initial: item, start: p, last: item };
+                    turnedByHand.current = false;
                     event.currentTarget.setPointerCapture(event.pointerId);
                 }}
                 onPointerMove={(event) => {
@@ -354,11 +423,16 @@ export default function FurnitureEditor({
                     event.stopPropagation();
                     const p = point(event.clientX, event.clientY);
                     if (!p) return;
-                    const next = settle({
-                        ...session.initial,
-                        x: snap(session.initial.x + p.x - session.start.x),
-                        y: snap(session.initial.y + p.y - session.start.y),
-                    });
+                    // Pointer-event handler; settle reads the hand-turn ref, never during rendering.
+                    // eslint-disable-next-line react-hooks/refs
+                    const next = settle(
+                        {
+                            ...session.initial,
+                            x: snap(session.initial.x + p.x - session.start.x),
+                            y: snap(session.initial.y + p.y - session.start.y),
+                        },
+                        event.altKey,
+                    );
                     const reason = error(next);
                     // Follow the pointer across obstacles; validate the destination on release.
                     session.last = next;
@@ -376,7 +450,12 @@ export default function FurnitureEditor({
                     setMoving(false);
                     if (event.currentTarget.hasPointerCapture(event.pointerId))
                         event.currentTarget.releasePointerCapture(event.pointerId);
-                    if (next.x !== initial.x || next.y !== initial.y) update(next);
+                    if (
+                        next.x !== initial.x ||
+                        next.y !== initial.y ||
+                        next.rotation !== initial.rotation
+                    )
+                        update(next);
                 }}
                 onPointerCancel={(event) => {
                     event.stopPropagation();
@@ -394,12 +473,20 @@ export default function FurnitureEditor({
                     {definition.label} · {item.width} × {item.depth} мм
                 </title>
                 <g transform={transform}>
-                    <FurnitureSymbol
-                        definitionId={item.definitionId}
-                        rects={baseGeometry.bodyRects}
-                        width={baseGeometry.width}
-                        depth={baseGeometry.depth}
-                    />
+                    <g
+                        transform={
+                            item.mirrored
+                                ? `translate(${baseGeometry.width} 0) scale(-1 1)`
+                                : undefined
+                        }
+                    >
+                        <FurnitureSymbol
+                            definitionId={item.definitionId}
+                            rects={baseGeometry.bodyRects}
+                            width={baseGeometry.width}
+                            depth={baseGeometry.depth}
+                        />
+                    </g>
                 </g>
                 {active &&
                     own &&
@@ -482,7 +569,8 @@ export default function FurnitureEditor({
         board?.querySelector<SVGGElement>("[data-draw-furniture-host='true']") ?? board;
     const openSection = FURNITURE_MENU.find((menuSection) => menuSection.id === section);
     const autoLayoutOpen = section === AUTO_LAYOUT && Boolean(autoLayout);
-    const flyoutOpen = Boolean(query.trim() || openSection || autoLayoutOpen);
+    const shortcutsOpen = section === SHORTCUTS;
+    const flyoutOpen = Boolean(query.trim() || openSection || autoLayoutOpen || shortcutsOpen);
     const furnitureButton = (definition: FurnitureDefinition) => {
         const geometry = getRotatedGeometry(definition, 0);
         return (
@@ -493,7 +581,7 @@ export default function FurnitureEditor({
                 data-add-furniture={definition.id}
                 aria-pressed={pending?.definitionId === definition.id}
                 onClick={() => {
-                    setPending({
+                    takeInHand({
                         id: "pending",
                         definitionId: definition.id,
                         x: 0,
@@ -643,7 +731,9 @@ export default function FurnitureEditor({
                     data-flyout-open={flyoutOpen}
                     data-moving={moving}
                     data-draw-room-bottom-sheet
-                    data-section-open={Boolean((openSection || autoLayoutOpen) && !query.trim())}
+                    data-section-open={Boolean(
+                        (openSection || autoLayoutOpen || shortcutsOpen) && !query.trim(),
+                    )}
                     data-searching={Boolean(query.trim())}
                     onPointerDown={(event) => event.stopPropagation()}
                 >
@@ -651,11 +741,31 @@ export default function FurnitureEditor({
                     <nav
                         className={styles.rail}
                         aria-label="Разделы каталога"
-                        data-open={Boolean(openSection || autoLayoutOpen || query.trim())}
+                        data-open={Boolean(
+                            openSection || autoLayoutOpen || shortcutsOpen || query.trim(),
+                        )}
                     >
-                        <span className={styles.railIntro} data-furniture-room>
-                            {room ? room.name : "Каталог мебели"}
-                        </span>
+                        <div className={styles.railIntro}>
+                            <span data-furniture-room>{room ? room.name : "Каталог мебели"}</span>
+                            <button
+                                type="button"
+                                className={styles.railKeys}
+                                data-furniture-shortcuts
+                                aria-expanded={shortcutsOpen}
+                                aria-label="Быстрые клавиши"
+                                title="Быстрые клавиши"
+                                onClick={() => {
+                                    setQuery("");
+                                    setSection(shortcutsOpen ? null : SHORTCUTS);
+                                }}
+                            >
+                                <svg viewBox="0 0 26 26" aria-hidden="true">
+                                    <rect x="2" y="7" width="22" height="13" rx="2" />
+                                    <path d="M6 11h2M10 11h2M14 11h2M18 11h2M8 15h10" />
+                                </svg>
+                                Клавиши
+                            </button>
+                        </div>
                         {/* The magnifier shows in the folded rail; the field opens with it. */}
                         <label className={styles.railSearch}>
                             <svg
@@ -749,6 +859,34 @@ export default function FurnitureEditor({
                             </header>
                             {searchFurnitureMenu(query).map(furnitureButton)}
                             {searchFurnitureMenu(query).length === 0 && <p>Ничего не найдено.</p>}
+                        </div>
+                    ) : shortcutsOpen ? (
+                        <div
+                            className={styles.flyout}
+                            role="region"
+                            aria-label="Быстрые клавиши"
+                            data-furniture-flyout={SHORTCUTS}
+                        >
+                            <header>
+                                <b>Быстрые клавиши</b>
+                                <button
+                                    type="button"
+                                    aria-label="Закрыть раздел"
+                                    onClick={() => setSection(null)}
+                                >
+                                    ×
+                                </button>
+                            </header>
+                            <dl className={styles.shortcuts}>
+                                {SHORTCUT_LIST.map(([keys, action]) => (
+                                    <div key={keys}>
+                                        <dt>
+                                            <kbd>{keys}</kbd>
+                                        </dt>
+                                        <dd>{action}</dd>
+                                    </div>
+                                ))}
+                            </dl>
                         </div>
                     ) : autoLayoutOpen ? (
                         <div
@@ -971,6 +1109,13 @@ export default function FurnitureEditor({
                                             Повернуть ↻
                                         </button>
                                         <button
+                                            onClick={mirror}
+                                            disabled={Boolean(editing.locked)}
+                                            aria-pressed={Boolean(editing.mirrored)}
+                                        >
+                                            Зеркально ⇋
+                                        </button>
+                                        <button
                                             disabled={Boolean(editing.locked)}
                                             onClick={() => {
                                                 if (pending) setPending(null);
@@ -992,7 +1137,7 @@ export default function FurnitureEditor({
                                         <div className={styles.actions}>
                                             <button
                                                 onClick={() => {
-                                                    setPending({
+                                                    takeInHand({
                                                         ...editing,
                                                         id: "pending-copy",
                                                         locked: false,
@@ -1031,6 +1176,27 @@ export default function FurnitureEditor({
                                     )}
                                 </section>
                             )}
+                            {turnsToWall(editing.definitionId) && (
+                                <label className={styles.toggle}>
+                                    <input
+                                        type="checkbox"
+                                        id="furniture-auto-turn"
+                                        checked={autoTurn}
+                                        onChange={(event) => {
+                                            setAutoTurn(event.target.checked);
+                                            try {
+                                                localStorage.setItem(
+                                                    AUTO_TURN_KEY,
+                                                    event.target.checked ? "on" : "off",
+                                                );
+                                            } catch {
+                                                // A private window keeps the choice for this visit only.
+                                            }
+                                        }}
+                                    />
+                                    Автоповорот к стене
+                                </label>
+                            )}
                             {passageWarnings.length > 0 && (
                                 <ul
                                     className={styles.passageWarnings}
@@ -1044,8 +1210,8 @@ export default function FurnitureEditor({
                             <p role="status">
                                 {message ||
                                     (pending
-                                        ? "Щёлкните по свободному месту. У стены предмет прилипнет к ней. R — поворот, Shift — несколько, Esc — отмена."
-                                        : "Потяните предмет, чтобы переместить. Delete — удалить, R — повернуть.")}
+                                        ? "Щёлкните по свободному месту. У стены предмет развернётся и прилипнет к ней. R — поворот, Shift — несколько, Alt — без магнитов, Esc — отмена."
+                                        : "Потяните предмет, чтобы переместить. Alt — без магнитов. R — повернуть, E — зеркально.")}
                             </p>
                         </div>
                     ) : (
