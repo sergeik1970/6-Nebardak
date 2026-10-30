@@ -1,6 +1,7 @@
 # Upstream caddy:2.11.7 ships a binary built with Go 1.26.8 and
 # golang.org/x/net v0.59.0 (CVE-2026-78667, CVE-2026-78669, CVE-2026-97031);
-# Go 1.26.10 also fixes CVE-2026-111943 in crypto/x509.
+# Go 1.26.10 also fixes CVE-2026-111943 in crypto/x509, and go-jose v4.1.6
+# fixes CVE-2026-116587 (DoS via crafted RSA parameters in JWKs).
 # Rebuild the same Caddy release with patched toolchain and x/net until an
 # upstream image includes the fixes, then drop this stage.
 FROM golang:1.26.10-alpine3.23@sha256:a07f231c19b03e6106cf442f02a5bcf262147e744d15b7b5e4b6d81d420c70a0 AS builder
@@ -14,6 +15,7 @@ RUN apk add --no-cache git \
 RUN xcaddy build v2.11.7 \
         --output /usr/bin/caddy \
         --replace golang.org/x/net=golang.org/x/net@v0.60.0 \
+        --replace github.com/go-jose/go-jose/v4=github.com/go-jose/go-jose/v4@v4.1.6 \
     && /usr/bin/caddy version
 
 FROM caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
