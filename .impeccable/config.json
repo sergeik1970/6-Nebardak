@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [
+      "cream-palette",
+      "side-tab"
+    ],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-10-28T06:50:52.360Z",
+        "reason": "User confirmed: Inter is the intentional brand font (good Cyrillic)"
+      }
+    ]
+  }
+}
