@@ -1,0 +1,12 @@
+# go-jose v3 has no fixed release for CVE-2026-116587 (DoS via crafted RSA
+# parameters in JWKs). Caddy pulls it in only through smallstep/certificates,
+# which backs the acme_server and `tls internal` CA; infra/Caddyfile uses
+# neither, so Caddy never parses an untrusted JWK with v3. The v4 copy is
+# patched in infra/caddy/Dockerfile. Drop this once go-jose v3 or Caddy ships
+# a fix; the expiry forces a re-check.
+vulnerabilities:
+  - id: CVE-2026-116587
+    purls:
+      - pkg:golang/github.com/go-jose/go-jose/v3
+    expired_at: 2026-12-31
+    statement: go-jose v3 is reachable only through the unused acme_server / tls internal CA
