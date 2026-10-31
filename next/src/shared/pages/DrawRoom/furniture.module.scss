@@ -133,6 +133,17 @@
         stroke: #d16b2e;
         fill: #fff0da;
     }
+    // An image has no lines to recolour: its body carries the outline.
+    &[data-selected="true"] [data-furniture-image] [data-symbol-hit] {
+        fill: rgb(209 107 46 / 12%);
+        stroke: #d16b2e;
+        stroke-width: 2;
+    }
+    &[data-invalid="true"] [data-furniture-image] [data-symbol-hit] {
+        fill: rgb(191 62 52 / 18%);
+        stroke: #bf3e34;
+        stroke-width: 2;
+    }
     &[data-invalid="true"] {
         stroke: #bf3e34;
         fill: #fbe5e0;

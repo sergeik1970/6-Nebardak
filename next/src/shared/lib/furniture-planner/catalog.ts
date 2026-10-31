@@ -9,6 +9,7 @@ import {
     FurnitureSelection,
     FurnitureShape,
     FurnitureSize,
+    Rect,
     RelationTemplate,
     Rotation,
     SchematicFurnitureCatalogSource,
@@ -260,13 +261,13 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         label: "Детская люлька",
         shortLabel: "Люлька",
         category: "children",
-        body: rectShape(640, 1200),
+        body: rectShape(650, 800),
         clearanceZones: [
             {
-                x: 640,
+                x: 650,
                 y: 0,
                 width: 700,
-                depth: 1200,
+                depth: 800,
                 label: "Доступ к люльке",
                 requirement: "hard",
             },
@@ -370,7 +371,7 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
             kind: "rects",
             rects: [
                 { x: 0, y: 0, width: 1200, depth: 600 },
-                { x: 375, y: 850, width: 450, depth: 450 },
+                { x: 370, y: 660, width: 480, depth: 440 },
             ],
         },
         clearanceZones: [
@@ -391,6 +392,7 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         removalPriority: 60,
         assetKey: "desk",
         visualKind: "surface",
+        sizes: [size(1200, 1100), size(1400, 1100)],
         source: designerSource(),
     },
     {
@@ -679,14 +681,14 @@ export const ADDITIONAL_FURNITURE_CATALOG: FurnitureDefinition[] = [
         id: "aquarium",
         label: "Аквариум с тумбой",
         width: 1000,
-        depth: 600,
+        depth: 500,
         category: "living" as const,
     },
     {
         id: "pet-bed",
         label: "Лежанка для питомца",
-        width: 800,
-        depth: 600,
+        width: 1000,
+        depth: 750,
         category: "living" as const,
     },
     {
@@ -921,6 +923,193 @@ export const KITCHEN_FURNITURE_CATALOG: FurnitureDefinition[] = [
 );
 
 FURNITURE_CATALOG.push(...KITCHEN_FURNITURE_CATALOG);
+
+const WALK_IN_PASSAGE = "Проход в гардеробной";
+
+const walkIn = (id: string, label: string, rects: Rect[], passage: Rect): FurnitureDefinition => ({
+    id,
+    label,
+    shortLabel: label,
+    category: "storage",
+    body: { kind: "rects", rects },
+    clearanceZones: [{ ...passage, label: WALK_IN_PASSAGE, requirement: "hard" }],
+    rotations: [0, 90, 180, 270],
+    equivalentRotationGroups: NO_EQUIVALENT_ROTATIONS,
+    placement: wallPlacement(true, false, ["back", "right", "left"], "forbidden"),
+    relations: [],
+    maxCount: 1,
+    removalPriority: 25,
+    visualKind: "wood",
+    source: schematicSource(),
+});
+
+const WORKPLACE_DEPTH = 700;
+
+const deskWith = (
+    id: string,
+    label: string,
+    table: Rect[],
+    chair: Rect,
+    workplace: Rect,
+): FurnitureDefinition => ({
+    id,
+    label,
+    shortLabel: label,
+    category: "work",
+    body: { kind: "rects", rects: [...table, chair] },
+    clearanceZones: [{ ...workplace, label: "Рабочая зона", requirement: "hard" }],
+    rotations: [0, 90, 180, 270],
+    equivalentRotationGroups: NO_EQUIVALENT_ROTATIONS,
+    placement: wallPlacement(true, false, ["back", "right", "left"], "preferred"),
+    relations: [],
+    maxCount: 1,
+    removalPriority: 60,
+    visualKind: "surface",
+    source: schematicSource(),
+});
+
+/** A corner desk: a run along the wall and a leg down its right side. */
+const cornerDesk = (
+    id: string,
+    width: number,
+    depth: number,
+    runDepth: number,
+    legWidth: number,
+    chair: Rect,
+): FurnitureDefinition =>
+    deskWith(
+        id,
+        `Угловой письменный стол ${width} × ${depth} мм`,
+        [
+            { x: 0, y: 0, width, depth: runDepth },
+            { x: width - legWidth, y: runDepth, width: legWidth, depth: depth - runDepth },
+        ],
+        chair,
+        { x: 0, y: runDepth, width: width - legWidth, depth: depth - runDepth },
+    );
+
+/**
+ * Walk-in wardrobes and desks from the designer's sheets (Гардероб.pdf,
+ * Туалетные и рабочие столы.pdf). Their sets are real L- and U-shaped bodies,
+ * so the passage inside stays free; sizes are read from Мебель набор.dwg (2dfa1c02…).
+ */
+export const DESIGNER_SET_CATALOG: FurnitureDefinition[] = [
+    {
+        id: "wardrobe-corner",
+        label: "Угловой шкаф для одежды",
+        shortLabel: "Шкаф угловой",
+        category: "storage",
+        // Мебель набор.dwg: 890 mm along both walls; these steps cover its faceted front.
+        body: {
+            kind: "rects",
+            rects: [
+                { x: 0, y: 0, width: 890, depth: 456 },
+                { x: 0, y: 456, width: 795, depth: 338 },
+                { x: 0, y: 794, width: 471, depth: 96 },
+            ],
+        },
+        // The door opens across the corner, so a person may stand on either side of it.
+        clearanceZones: [
+            { x: 890, y: 0, width: 800, depth: 890, label: "Зона доступа", requirement: "one-of" },
+            { x: 0, y: 890, width: 890, depth: 800, label: "Зона доступа", requirement: "one-of" },
+        ],
+        rotations: [0, 90, 180, 270],
+        equivalentRotationGroups: NO_EQUIVALENT_ROTATIONS,
+        placement: wallPlacement(false, true, ["back", "left"], "forbidden"),
+        relations: [],
+        maxCount: 1,
+        removalPriority: 80,
+        visualKind: "wood",
+        source: schematicSource(),
+    },
+    walkIn(
+        "walk-in-u",
+        "Гардеробная П-образная",
+        [
+            { x: 0, y: 0, width: 2000, depth: 600 },
+            { x: 0, y: 600, width: 600, depth: 900 },
+            { x: 1400, y: 600, width: 600, depth: 900 },
+        ],
+        { x: 600, y: 600, width: 800, depth: 900 },
+    ),
+    walkIn(
+        "walk-in-l",
+        "Гардеробная Г-образная",
+        [
+            { x: 0, y: 0, width: 2000, depth: 600 },
+            { x: 0, y: 600, width: 600, depth: 900 },
+        ],
+        { x: 600, y: 600, width: 1400, depth: 900 },
+    ),
+    walkIn(
+        "walk-in-rows",
+        "Гардеробная в два ряда",
+        [
+            { x: 0, y: 0, width: 2000, depth: 600 },
+            { x: 0, y: 1400, width: 2000, depth: 600 },
+        ],
+        { x: 0, y: 600, width: 2000, depth: 800 },
+    ),
+    walkIn(
+        "walk-in-wardrobes",
+        "Гардеробная с двумя малыми шкафами",
+        [
+            { x: 0, y: 0, width: 2000, depth: 600 },
+            { x: 0, y: 1400, width: 600, depth: 400 },
+            { x: 1400, y: 1400, width: 600, depth: 400 },
+        ],
+        { x: 0, y: 600, width: 2000, depth: 800 },
+    ),
+    walkIn(
+        "walk-in-dressers",
+        "Гардеробная с двумя комодами",
+        [
+            { x: 0, y: 0, width: 2000, depth: 600 },
+            { x: 0, y: 1400, width: 600, depth: 400 },
+            { x: 1400, y: 1400, width: 600, depth: 400 },
+        ],
+        { x: 0, y: 600, width: 2000, depth: 800 },
+    ),
+    deskWith(
+        "desk-pedestal",
+        "Письменный стол с тумбой",
+        [{ x: 0, y: 0, width: 1200, depth: 600 }],
+        { x: 360, y: 670, width: 480, depth: 430 },
+        { x: 0, y: 600, width: 1200, depth: WORKPLACE_DEPTH },
+    ),
+    cornerDesk("desk-corner-narrow", 1200, 1400, 600, 240, {
+        x: 240,
+        y: 760,
+        width: 480,
+        depth: 430,
+    }),
+    cornerDesk("desk-corner-1200", 1200, 1200, 550, 550, {
+        x: 95,
+        y: 670,
+        width: 480,
+        depth: 435,
+    }),
+    cornerDesk("desk-corner-1600", 1600, 1200, 550, 600, {
+        x: 270,
+        y: 670,
+        width: 480,
+        depth: 435,
+    }),
+    cornerDesk("desk-corner-1600-1400", 1600, 1400, 550, 600, {
+        x: 265,
+        y: 675,
+        width: 490,
+        depth: 440,
+    }),
+    cornerDesk("desk-corner-1800", 1800, 1200, 600, 600, {
+        x: 330,
+        y: 655,
+        width: 480,
+        depth: 435,
+    }),
+];
+
+FURNITURE_CATALOG.push(...DESIGNER_SET_CATALOG);
 
 export const FURNITURE_BY_ID = new Map(
     FURNITURE_CATALOG.map((definition) => [definition.id, definition]),

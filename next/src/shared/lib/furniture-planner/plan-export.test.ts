@@ -55,7 +55,7 @@ describe("plan export", () => {
         expect(result.room).not.toBe(room);
         expect(result.items[0]).toMatchObject({
             name: "Письменный стол",
-            width: 1300,
+            width: 1100,
             depth: 1200,
             priority: "required",
             x: 0,

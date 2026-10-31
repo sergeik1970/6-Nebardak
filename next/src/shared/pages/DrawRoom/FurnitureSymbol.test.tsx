@@ -17,13 +17,13 @@ const shapes = (definitionId: string) => {
             />
         </svg>,
     );
-    return (markup.match(/<(rect|path|circle|ellipse|polygon)\b/g) ?? []).length;
+    return (markup.match(/<(rect|path|circle|ellipse|polygon|image)\b/g) ?? []).length;
 };
 
 describe("furniture plan symbols", () => {
     // A plain dining table is the one piece drawn as its outline alone.
     it.each(FURNITURE_CATALOG.filter((definition) => definition.id !== "dining-table"))(
-        "draws $id in lines, not as a bare block",
+        "draws $id as an image or in lines, not as a bare block",
         ({ id }) => {
             expect(shapes(id)).toBeGreaterThan(1);
         },

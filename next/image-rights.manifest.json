@@ -52,6 +52,16 @@
             "source": "designer-supplied",
             "rightsStatus": "cleared",
             "rightsEvidence": "record:docs/image-rights/2026-10-20-owner-attestation"
+        },
+        {
+            "id": "planner-furniture-plan-images",
+            "path": "furniture-20261031",
+            "excludePrefixes": [],
+            "expectedFileCount": 61,
+            "contentDigestSha256": "609e64d9833785c5df4e775f9f95acdc91f02382450b3ed7c022de13fb5076e3",
+            "source": "designer-supplied",
+            "rightsStatus": "cleared",
+            "rightsEvidence": "record:docs/image-rights/2026-10-31-owner-attestation"
         }
     ]
 }

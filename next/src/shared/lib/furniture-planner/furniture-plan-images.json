@@ -1,0 +1,1405 @@
+[
+    {
+        "id": "wardrobe-small-600",
+        "definitionId": "wardrobe-small",
+        "src": "/images/furniture-20261031/wardrobe-small-600-c1ce40320673.webp",
+        "source": "Гардероб-1.png",
+        "sourceSha256": "6fa4376448bf9923bd64067c71f8d3c894c54b4010cb190d8cea1327ea35a691",
+        "size": {
+            "width": 600,
+            "depth": 450
+        },
+        "pixelSize": {
+            "width": 507,
+            "height": 623
+        },
+        "body": {
+            "x": 1,
+            "y": 2,
+            "width": 505,
+            "height": 378.75
+        },
+        "encodedBytes": 33900,
+        "sha256": "c1ce40320673f28d2115470f686693291b878c33ab8a290edfc6e9b5128151ed"
+    },
+    {
+        "id": "wardrobe-small-700",
+        "definitionId": "wardrobe-small",
+        "src": "/images/furniture-20261031/wardrobe-small-700-81e746c880ae.webp",
+        "source": "Гардероб-1 5.png",
+        "sourceSha256": "78514e8bc4db190d3ef0f12613f4b6958073896ac9fab09e27d14b1c9cbcd0ca",
+        "size": {
+            "width": 700,
+            "depth": 500
+        },
+        "pixelSize": {
+            "width": 867,
+            "height": 1017
+        },
+        "body": {
+            "x": 3,
+            "y": 3,
+            "width": 862,
+            "height": 615.71
+        },
+        "encodedBytes": 68988,
+        "sha256": "81e746c880ae23a6f20820e7acdeaf47522813c36881bdc071b954123c97d6a5"
+    },
+    {
+        "id": "wardrobe-medium-900",
+        "definitionId": "wardrobe-medium",
+        "src": "/images/furniture-20261031/wardrobe-medium-900-29717b5cc475.webp",
+        "source": "Гардероб-1 2.png",
+        "sourceSha256": "68838714622ec4ca80ae0c3211eb098e09347429de04f2f374b45bfeb740c96d",
+        "size": {
+            "width": 900,
+            "depth": 600
+        },
+        "pixelSize": {
+            "width": 1001,
+            "height": 893
+        },
+        "body": {
+            "x": 3,
+            "y": 3,
+            "width": 975,
+            "height": 650
+        },
+        "encodedBytes": 75026,
+        "sha256": "29717b5cc4759080d5829edeca5adae3126ef2b39a472ffaad613212cb24b277"
+    },
+    {
+        "id": "wardrobe-medium-1350",
+        "definitionId": "wardrobe-medium",
+        "src": "/images/furniture-20261031/wardrobe-medium-1350-82bb4868e5b0.webp",
+        "source": "Гардероб-1 6.png",
+        "sourceSha256": "61c0ba2a80c9c0f4c48b6c51cd5fd94ac4679a5925866fa616952aa9710d4f2e",
+        "size": {
+            "width": 1350,
+            "depth": 600
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 632
+        },
+        "body": {
+            "x": 1.47,
+            "y": 1.47,
+            "width": 1021.07,
+            "height": 453.81
+        },
+        "encodedBytes": 72994,
+        "sha256": "82bb4868e5b04b1617ef8377e84e4b1aeef80627034ae3fb5ab729cff1a8e7ea"
+    },
+    {
+        "id": "wardrobe-medium-1500",
+        "definitionId": "wardrobe-medium",
+        "src": "/images/furniture-20261031/wardrobe-medium-1500-894bcb74e4c6.webp",
+        "source": "Гардероб-1 3.png",
+        "sourceSha256": "6fe1eb44e26795f9c0be7f0cba7a6405da6ffb373a0ef3b58ef62f7f7838584b",
+        "size": {
+            "width": 1500,
+            "depth": 600
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 608
+        },
+        "body": {
+            "x": 2.02,
+            "y": 2.02,
+            "width": 1020.63,
+            "height": 408.25
+        },
+        "encodedBytes": 74406,
+        "sha256": "894bcb74e4c651b396b8f8f63965783ebe1b7813c68440f586032201ce9dbd2d"
+    },
+    {
+        "id": "wardrobe-large-2000",
+        "definitionId": "wardrobe-large",
+        "src": "/images/furniture-20261031/wardrobe-large-2000-8e7f943d1026.webp",
+        "source": "Гардероб-1 4.png",
+        "sourceSha256": "9fdb63ef7be5348a9e20b1c0ef0a52f28ed516fb8aca2b2462fc65d4ff368bf6",
+        "size": {
+            "width": 2000,
+            "depth": 600
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 442
+        },
+        "body": {
+            "x": 1.03,
+            "y": 1.55,
+            "width": 1021.93,
+            "height": 306.58
+        },
+        "encodedBytes": 68180,
+        "sha256": "8e7f943d10264110ad2e1a6c74c5ea53ea4133d0b5bd2ed8bdc41e33ea4afef4"
+    },
+    {
+        "id": "dresser-600",
+        "definitionId": "dresser",
+        "src": "/images/furniture-20261031/dresser-600-0acbabd351b6.webp",
+        "source": "Гардероб-1 7.png",
+        "sourceSha256": "09115dc9d8d42ee91a93c177e6b7aca01f3e639b8d2a300b6b56473734399c7f",
+        "size": {
+            "width": 600,
+            "depth": 400
+        },
+        "pixelSize": {
+            "width": 783,
+            "height": 555
+        },
+        "body": {
+            "x": 0,
+            "y": 1,
+            "width": 782,
+            "height": 553
+        },
+        "encodedBytes": 77264,
+        "sha256": "0acbabd351b671066fb7893991d7749e95dc528dcd39750972bae0417279b743"
+    },
+    {
+        "id": "dresser-900",
+        "definitionId": "dresser",
+        "src": "/images/furniture-20261031/dresser-900-16d48dd73331.webp",
+        "source": "Гардероб-1 8.png",
+        "sourceSha256": "c98445684b5207807dde1c01b67dc57e3f190b0a9f692c5626055e14d559dda0",
+        "size": {
+            "width": 900,
+            "depth": 400
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 480
+        },
+        "body": {
+            "x": 0,
+            "y": 0.86,
+            "width": 1023.14,
+            "height": 478.73
+        },
+        "encodedBytes": 87576,
+        "sha256": "16d48dd73331df83ba35e60224f88cd7741dcef35bf72f711a4d58a28d3608a1"
+    },
+    {
+        "id": "walk-in-u",
+        "definitionId": "walk-in-u",
+        "src": "/images/furniture-20261031/walk-in-u-d953afb83768.webp",
+        "source": "Гардероб-1 9.png",
+        "sourceSha256": "a0f7f89200a2c649bf3817366d2cbb1da393e0b2b88b908c565bd8d9717c0bea",
+        "size": {
+            "width": 2000,
+            "depth": 1500
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 765
+        },
+        "body": {
+            "x": 0,
+            "y": 1.23,
+            "width": 1022.15,
+            "height": 761.23
+        },
+        "encodedBytes": 104470,
+        "sha256": "d953afb83768b4fd4ddd66022faffc475ff7cec1804162cd6b4e28cbb4a1cbaf"
+    },
+    {
+        "id": "walk-in-l",
+        "definitionId": "walk-in-l",
+        "src": "/images/furniture-20261031/walk-in-l-9b5517d716f5.webp",
+        "source": "Гардероб-1 10.png",
+        "sourceSha256": "0bcd99d344d25e45410da247a9d444957c8f345a007f50cf791b619c4fca5c24",
+        "size": {
+            "width": 2000,
+            "depth": 1500
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 765
+        },
+        "body": {
+            "x": 0,
+            "y": 1.23,
+            "width": 1022.15,
+            "height": 761.23
+        },
+        "encodedBytes": 59208,
+        "sha256": "9b5517d716f557875731bc16af995150711934b80a845c2d7b15a41afe6e4897"
+    },
+    {
+        "id": "walk-in-wardrobes",
+        "definitionId": "walk-in-wardrobes",
+        "src": "/images/furniture-20261031/walk-in-wardrobes-228930a58bc1.webp",
+        "source": "Гардероб-1 11.png",
+        "sourceSha256": "321a1a80a6b6655757475c961bb7e8156218c13f94e35f35ce0ba859443edd9f",
+        "size": {
+            "width": 2000,
+            "depth": 1800
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 918
+        },
+        "body": {
+            "x": 0,
+            "y": 1.23,
+            "width": 1022.77,
+            "height": 915.89
+        },
+        "encodedBytes": 60446,
+        "sha256": "228930a58bc1d1235564a23e21ec456cfe01bd75309d195b87fea81b9462e09d"
+    },
+    {
+        "id": "walk-in-dressers",
+        "definitionId": "walk-in-dressers",
+        "src": "/images/furniture-20261031/walk-in-dressers-0372e294285a.webp",
+        "source": "Гардероб-1 12.png",
+        "sourceSha256": "6f192081dbff2ef52b8bda71e08d48570712e401f81982cb55ed14565f172fa2",
+        "size": {
+            "width": 2000,
+            "depth": 1800
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 922
+        },
+        "body": {
+            "x": 0.67,
+            "y": 1.34,
+            "width": 1022.66,
+            "height": 920.26
+        },
+        "encodedBytes": 68180,
+        "sha256": "0372e294285a435881e69068c531b235dc5ebf1a2a599b8366ac12218860e855"
+    },
+    {
+        "id": "walk-in-rows",
+        "definitionId": "walk-in-rows",
+        "src": "/images/furniture-20261031/walk-in-rows-96d9add26303.webp",
+        "source": "Гардероб-1 13.png",
+        "sourceSha256": "f1843f4d4e3de850f5e53423bd9441f9a8ee544fbdf232df8ea427472f4d68e9",
+        "size": {
+            "width": 2000,
+            "depth": 2000
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 1024
+        },
+        "body": {
+            "x": 0.67,
+            "y": 1.34,
+            "width": 1022.66,
+            "height": 1021.32
+        },
+        "encodedBytes": 76528,
+        "sha256": "96d9add26303e36a78ff68525d404f8416500461db64cbbef18acc6dac0c7695"
+    },
+    {
+        "id": "bookcase-800",
+        "definitionId": "bookcase",
+        "src": "/images/furniture-20261031/bookcase-800-cbb1a522044b.webp",
+        "source": "Гардероб-1 14.png",
+        "sourceSha256": "c36019c28811521b3cf2078ec32193a6347ffaa0d2594b9ff4c9a0e4c035832a",
+        "size": {
+            "width": 800,
+            "depth": 300
+        },
+        "pixelSize": {
+            "width": 823,
+            "height": 324
+        },
+        "body": {
+            "x": 1,
+            "y": 1,
+            "width": 821,
+            "height": 322
+        },
+        "encodedBytes": 34532,
+        "sha256": "cbb1a522044b14aa59db3110a7b102e4f233eeab14dfdc9a44e1d7a253a44e19"
+    },
+    {
+        "id": "sofa-two-1600",
+        "definitionId": "sofa-two",
+        "src": "/images/furniture-20261031/sofa-two-1600-6c4c5217f44e.webp",
+        "source": "Диваны.png",
+        "sourceSha256": "580fdd163ec8354683ff528c818002ec7bd1b555ec579ae521f1f5aa58bc68d7",
+        "size": {
+            "width": 1600,
+            "depth": 950
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 609
+        },
+        "body": {
+            "x": 0,
+            "y": 0.75,
+            "width": 1023.25,
+            "height": 607.46
+        },
+        "encodedBytes": 162206,
+        "sha256": "6c4c5217f44ee8b6285c87c90504039657bd4ded70e4b9d16d2d85fdef178b74"
+    },
+    {
+        "id": "sofa-two-1800",
+        "definitionId": "sofa-two",
+        "src": "/images/furniture-20261031/sofa-two-1800-7f17c9de2fb5.webp",
+        "source": "Диваны 2.png",
+        "sourceSha256": "4909b32fcf4417af5c10bb55f6bb421cd4a30fc6701bc38845d735bfe2300781",
+        "size": {
+            "width": 1800,
+            "depth": 1000
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 574
+        },
+        "body": {
+            "x": 0,
+            "y": 0.75,
+            "width": 1023.25,
+            "height": 571.99
+        },
+        "encodedBytes": 150504,
+        "sha256": "7f17c9de2fb5d7b7ebfdc78444d7bdd833d69f985893484646205c1c02eb6058"
+    },
+    {
+        "id": "sofa-two-2000",
+        "definitionId": "sofa-two",
+        "src": "/images/furniture-20261031/sofa-two-2000-17ec77425c8e.webp",
+        "source": "Диваны 3.png",
+        "sourceSha256": "62026ad74db822e5cbe74e6e87bcd522b9714407028a79c90e89332daf190175",
+        "size": {
+            "width": 2000,
+            "depth": 1000
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 519
+        },
+        "body": {
+            "x": 0,
+            "y": 1.51,
+            "width": 1023.25,
+            "height": 516.9
+        },
+        "encodedBytes": 137674,
+        "sha256": "17ec77425c8e4712a8c7740796ab9dac5747cfbad7dfe137b888909bc01c7ffc"
+    },
+    {
+        "id": "armchair-800",
+        "definitionId": "armchair",
+        "src": "/images/furniture-20261031/armchair-800-4c5fc28336f7.webp",
+        "source": "Диваны 4.png",
+        "sourceSha256": "439fb0cbd427f8b7a5e726133ac2f1f489a7d480b1457a29779124227f958401",
+        "size": {
+            "width": 800,
+            "depth": 790
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 987
+        },
+        "body": {
+            "x": 0,
+            "y": 0.9,
+            "width": 1024,
+            "height": 985.34
+        },
+        "encodedBytes": 277184,
+        "sha256": "4c5fc28336f77950136afb55b803f9e93b55fd2ae441a18440d26bff8bcca9aa"
+    },
+    {
+        "id": "armchair-1000",
+        "definitionId": "armchair",
+        "src": "/images/furniture-20261031/armchair-1000-2f340a8cb12e.webp",
+        "source": "Диваны 5.png",
+        "sourceSha256": "bf01f14ecd5e27defbbc0ecb682f07f0f9b7d955bc4864d39810ff672c79ae21",
+        "size": {
+            "width": 1000,
+            "depth": 950
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 970
+        },
+        "body": {
+            "x": 0,
+            "y": 0.9,
+            "width": 1024,
+            "height": 968.26
+        },
+        "encodedBytes": 274032,
+        "sha256": "2f340a8cb12e74b1e6a9f76615380c07ac9b91738aa4eb0796d7acbd36855b23"
+    },
+    {
+        "id": "sofa-three-2500",
+        "definitionId": "sofa-three",
+        "src": "/images/furniture-20261031/sofa-three-2500-65925b108bf5.webp",
+        "source": "Диваны 6.png",
+        "sourceSha256": "a27d46710de83be701e380daa2d0cb57b466eedb769a58bdb0cfddad6b945a02",
+        "size": {
+            "width": 2500,
+            "depth": 1200
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 495
+        },
+        "body": {
+            "x": 0,
+            "y": 0.73,
+            "width": 1023.27,
+            "height": 493.44
+        },
+        "encodedBytes": 124580,
+        "sha256": "65925b108bf5f26b220c0389436ddce8230efb98f43c73891ae644aad228149d"
+    },
+    {
+        "id": "sofa-three-2700",
+        "definitionId": "sofa-three",
+        "src": "/images/furniture-20261031/sofa-three-2700-7f07cdb8a5aa.webp",
+        "source": "Диваны 7.png",
+        "sourceSha256": "bb084376a8440eefbf705e0c51315a16d633fd0cb1d066f4fdf3851c94ad276d",
+        "size": {
+            "width": 2700,
+            "depth": 1200
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 457
+        },
+        "body": {
+            "x": 0,
+            "y": 0.73,
+            "width": 1023.27,
+            "height": 455.6
+        },
+        "encodedBytes": 115086,
+        "sha256": "7f07cdb8a5aa8884bea16e9f890903a692a1e03775e54945a3f2ba9ced6180fa"
+    },
+    {
+        "id": "sofa-bed-1400",
+        "definitionId": "sofa-bed",
+        "src": "/images/furniture-20261031/sofa-bed-1400-fc41416d4f46.webp",
+        "source": "Диваны 8.png",
+        "sourceSha256": "e89a9f59e3bd31fd215686937d93fca6b61588abe2f7b654447329edaa3e2f43",
+        "size": {
+            "width": 1400,
+            "depth": 1000
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 735
+        },
+        "body": {
+            "x": 0.75,
+            "y": 1.51,
+            "width": 1022.49,
+            "height": 732.94
+        },
+        "encodedBytes": 162464,
+        "sha256": "fc41416d4f4665ab0cc885631a2a07296ec6aaae88f562ccbe36f9e05a1a567c"
+    },
+    {
+        "id": "sofa-bed-2000",
+        "definitionId": "sofa-bed",
+        "src": "/images/furniture-20261031/sofa-bed-2000-11638256080c.webp",
+        "source": "Диваны 9.png",
+        "sourceSha256": "124f99197db960ddaf2ed1c0dc77f02eae95463bf8f068a1346b29a9bf3c535e",
+        "size": {
+            "width": 2000,
+            "depth": 1000
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 517
+        },
+        "body": {
+            "x": 0,
+            "y": 0.75,
+            "width": 1023.25,
+            "height": 516.15
+        },
+        "encodedBytes": 138864,
+        "sha256": "11638256080cc1843059e8f69ebeb36536ca2f11e250831090185f104761168c"
+    },
+    {
+        "id": "sofa-four-left-2200",
+        "definitionId": "sofa-four-left",
+        "src": "/images/furniture-20261031/sofa-four-left-2200-94538f6c15ef.webp",
+        "source": "Диваны 10.png",
+        "sourceSha256": "adf868e12d2aa760efb26089500e6d8bfdd381eab190b440ff6b6cefd4b2d1f0",
+        "size": {
+            "width": 2200,
+            "depth": 1500
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 695
+        },
+        "body": {
+            "x": 1.54,
+            "y": 0.77,
+            "width": 1021.69,
+            "height": 693.18
+        },
+        "encodedBytes": 118196,
+        "sha256": "94538f6c15ef8a82e75ecce88257fa2842ba0782e87fae1613b8af153482ed73"
+    },
+    {
+        "id": "sofa-three-2200",
+        "definitionId": "sofa-three",
+        "src": "/images/furniture-20261031/sofa-three-2200-7a5efc3efe35.webp",
+        "source": "Диваны 11.png",
+        "sourceSha256": "cafcb0248e15f6cc1a7e3fd466949bae28742c6935dd11595e917e7f98f26fee",
+        "size": {
+            "width": 2200,
+            "depth": 950
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 458
+        },
+        "body": {
+            "x": 0,
+            "y": 1.46,
+            "width": 1023.27,
+            "height": 455.6
+        },
+        "encodedBytes": 116496,
+        "sha256": "7a5efc3efe3523f5baf0d6989efff684bbbcb13d6300863b03f43741c40f12f5"
+    },
+    {
+        "id": "coffee-table-500",
+        "definitionId": "coffee-table",
+        "src": "/images/furniture-20261031/coffee-table-500-7a1ed2a676c5.webp",
+        "source": "Диваны 12.png",
+        "sourceSha256": "e4fc66a4b1d45ced54f292b79faf136ac56b82a142ecee6ea5bfb6a8011d855c",
+        "size": {
+            "width": 500,
+            "depth": 500
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 1020
+        },
+        "body": {
+            "x": 0.92,
+            "y": 0,
+            "width": 1022.15,
+            "height": 1019.38
+        },
+        "encodedBytes": 35746,
+        "sha256": "7a1ed2a676c5f422fb179a13d7edb308d5bda1b02bd1897f8733b1f510a8c13c"
+    },
+    {
+        "id": "tv-console-925",
+        "definitionId": "tv-console",
+        "src": "/images/furniture-20261031/tv-console-925-107997291491.webp",
+        "source": "Диваны 13.png",
+        "sourceSha256": "fde22bb7ff5ff10a1a6092541392de14f2897b6ab15972de75254f51a1425534",
+        "size": {
+            "width": 925,
+            "depth": 400
+        },
+        "pixelSize": {
+            "width": 977,
+            "height": 455
+        },
+        "body": {
+            "x": 1,
+            "y": 1,
+            "width": 974,
+            "height": 431
+        },
+        "encodedBytes": 61048,
+        "sha256": "10799729149104dffdff301608bc40b54c593aeac0642434e251b9402b2c41ea"
+    },
+    {
+        "id": "tv-console-1165",
+        "definitionId": "tv-console",
+        "src": "/images/furniture-20261031/tv-console-1165-4df0d95b4e5d.webp",
+        "source": "Диваны 14.png",
+        "sourceSha256": "2a59b1ddfedd89a56cf00476a516cd08c7b054bfd8260772006531b8b6b53406",
+        "size": {
+            "width": 1165,
+            "depth": 400
+        },
+        "pixelSize": {
+            "width": 977,
+            "height": 359
+        },
+        "body": {
+            "x": 1,
+            "y": 1,
+            "width": 974,
+            "height": 339
+        },
+        "encodedBytes": 44260,
+        "sha256": "4df0d95b4e5da19c1d7dea8eae430f553fddcfe456eae44160501256391cb828"
+    },
+    {
+        "id": "tv-console-1325",
+        "definitionId": "tv-console",
+        "src": "/images/furniture-20261031/tv-console-1325-d098749011eb.webp",
+        "source": "Диваны 15.png",
+        "sourceSha256": "e422a7eac06ea8e8eb11808711d529de675470bf68c564752bf52631c0827645",
+        "size": {
+            "width": 1325,
+            "depth": 400
+        },
+        "pixelSize": {
+            "width": 927,
+            "height": 297
+        },
+        "body": {
+            "x": 0,
+            "y": 1,
+            "width": 926,
+            "height": 281
+        },
+        "encodedBytes": 34350,
+        "sha256": "d098749011eb490ed59a244002488a6e01e7a4f235b2afb20004272a5e35e3a8"
+    },
+    {
+        "id": "tv-console-1435",
+        "definitionId": "tv-console",
+        "src": "/images/furniture-20261031/tv-console-1435-b9176fd4d26d.webp",
+        "source": "Диваны 16.png",
+        "sourceSha256": "8b2d135d2700c8fb1fda145efab078133e3c3cf46a9cf1d5d401de09af1aad3a",
+        "size": {
+            "width": 1435,
+            "depth": 400
+        },
+        "pixelSize": {
+            "width": 987,
+            "height": 297
+        },
+        "body": {
+            "x": 1,
+            "y": 1,
+            "width": 985,
+            "height": 281
+        },
+        "encodedBytes": 28656,
+        "sha256": "b9176fd4d26d3e609283f390d96eac93b2f66d990ef72dd54288240d746d1792"
+    },
+    {
+        "id": "tv-console-1655",
+        "definitionId": "tv-console",
+        "src": "/images/furniture-20261031/tv-console-1655-0cef26dcecfd.webp",
+        "source": "Диваны 17.png",
+        "sourceSha256": "3fdce008f439a2ee93de0ad3036bb7ed84b0bf932cb98392fb0b5ea3ecd264bc",
+        "size": {
+            "width": 1655,
+            "depth": 400
+        },
+        "pixelSize": {
+            "width": 937,
+            "height": 240
+        },
+        "body": {
+            "x": 1,
+            "y": 1,
+            "width": 935,
+            "height": 227
+        },
+        "encodedBytes": 27282,
+        "sha256": "0cef26dcecfd133d811f927566e27480ae8ba88ef6fe3fc3fec6109d8261abde"
+    },
+    {
+        "id": "tv-console-1875",
+        "definitionId": "tv-console",
+        "src": "/images/furniture-20261031/tv-console-1875-f0fe887b7720.webp",
+        "source": "Диваны 18.png",
+        "sourceSha256": "a8a791a87c91ab84075ce0a1a5225c6f7d28e04bac726de0cccf79cb0991d912",
+        "size": {
+            "width": 1875,
+            "depth": 400
+        },
+        "pixelSize": {
+            "width": 845,
+            "height": 195
+        },
+        "body": {
+            "x": 1,
+            "y": 1,
+            "width": 843,
+            "height": 184
+        },
+        "encodedBytes": 23310,
+        "sha256": "f0fe887b7720e3345e3506b92d5ade699fc3333232bb88d5fd388ac9d46fced8"
+    },
+    {
+        "id": "single-bed-1000",
+        "definitionId": "single-bed",
+        "src": "/images/furniture-20261031/single-bed-1000-7a1f6abbf3ee.webp",
+        "source": "Кровати 5.png",
+        "sourceSha256": "5407d77259a7d6fc23b64d8424b58fcfa0b88cb5bd0f70423fe071b45943f45e",
+        "size": {
+            "width": 1000,
+            "depth": 1800
+        },
+        "pixelSize": {
+            "width": 635,
+            "height": 1024
+        },
+        "body": {
+            "x": 33.04,
+            "y": 0.75,
+            "width": 568.47,
+            "height": 1023.25
+        },
+        "encodedBytes": 183924,
+        "sha256": "7a1f6abbf3ee8c242553380ef9426473eda94ae31ef501fcb9fa9551e9190caf"
+    },
+    {
+        "id": "single-bed-900",
+        "definitionId": "single-bed",
+        "src": "/images/furniture-20261031/single-bed-900-c52c745da43c.webp",
+        "source": "Кровати 7.png",
+        "sourceSha256": "87b7fda485505f4a0325d6cfd3f31b7eb2e4cff38b399474ca36af871abfb482",
+        "size": {
+            "width": 900,
+            "depth": 2000
+        },
+        "pixelSize": {
+            "width": 523,
+            "height": 1024
+        },
+        "body": {
+            "x": 31.9,
+            "y": 1.41,
+            "width": 459.85,
+            "height": 1021.88
+        },
+        "encodedBytes": 158504,
+        "sha256": "c52c745da43c7fcb694d163522297a2bc31e864ac4bb598436cccda0b44d6340"
+    },
+    {
+        "id": "double-bed-1400",
+        "definitionId": "double-bed",
+        "src": "/images/furniture-20261031/double-bed-1400-b00c0fb65ea1.webp",
+        "source": "Кровати 10.png",
+        "sourceSha256": "5c8e6298772fff792096d6506cfc235cfef16c22f28481bbf2ef6216e2b47f61",
+        "size": {
+            "width": 1400,
+            "depth": 2000
+        },
+        "pixelSize": {
+            "width": 799,
+            "height": 1024
+        },
+        "body": {
+            "x": 41.7,
+            "y": 1.11,
+            "width": 715.64,
+            "height": 1022.34
+        },
+        "encodedBytes": 195542,
+        "sha256": "b00c0fb65ea197895ed133401475e763e7e34db6a87a8b250f1cb3a741ccf406"
+    },
+    {
+        "id": "double-bed-1600",
+        "definitionId": "double-bed",
+        "src": "/images/furniture-20261031/double-bed-1600-4a23c0f6896d.webp",
+        "source": "Кровати 12.png",
+        "sourceSha256": "9bcf923c307958ecf85e96607c841b4363d5685865f6ce0fc0bb6f029a51f3f4",
+        "size": {
+            "width": 1600,
+            "depth": 2000
+        },
+        "pixelSize": {
+            "width": 927,
+            "height": 1024
+        },
+        "body": {
+            "x": 54.94,
+            "y": 0.71,
+            "width": 817.51,
+            "height": 1021.88
+        },
+        "encodedBytes": 94776,
+        "sha256": "4a23c0f6896d1ecac096ce8ee1de4a946bef85680f595bc4e230969c20a23cce"
+    },
+    {
+        "id": "double-bed-1800",
+        "definitionId": "double-bed",
+        "src": "/images/furniture-20261031/double-bed-1800-f499396c47b4.webp",
+        "source": "Кровати 14.png",
+        "sourceSha256": "750060c5816454c8012c6d12bc2f7ed6131f3b8947e331d09ac6abaa4d0deebd",
+        "size": {
+            "width": 1800,
+            "depth": 2000
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 997
+        },
+        "body": {
+            "x": 64.89,
+            "y": 0.76,
+            "width": 894.98,
+            "height": 994.42
+        },
+        "encodedBytes": 104598,
+        "sha256": "f499396c47b41cd74570060dcc98cf4372ce4a98444602d7a638c4ad12843e6d"
+    },
+    {
+        "id": "bedside-table-400",
+        "definitionId": "bedside-table",
+        "src": "/images/furniture-20261031/bedside-table-400-28192817ee10.webp",
+        "source": "Кровати 16.png",
+        "sourceSha256": "d4292bde6c63990b0a1fc00ee1904e6244b34352e0f7e8adc5c35c6d750ba9da",
+        "size": {
+            "width": 400,
+            "depth": 350
+        },
+        "pixelSize": {
+            "width": 392,
+            "height": 401
+        },
+        "body": {
+            "x": 0,
+            "y": 0,
+            "width": 392,
+            "height": 361
+        },
+        "encodedBytes": 17168,
+        "sha256": "28192817ee10ed1c8c30eb8481c10a7bd700cfd18a7e4f02787f720519e7f44a"
+    },
+    {
+        "id": "cradle-650",
+        "definitionId": "cradle",
+        "src": "/images/furniture-20261031/cradle-650-f6d41d06007d.webp",
+        "source": "Кровати 3.png",
+        "sourceSha256": "4c673d9bdc49eb32c149689d726e7a3946f22f758735d5474207138c29e06efc",
+        "size": {
+            "width": 650,
+            "depth": 800
+        },
+        "pixelSize": {
+            "width": 312,
+            "height": 369
+        },
+        "body": {
+            "x": 2,
+            "y": 2,
+            "width": 308,
+            "height": 366
+        },
+        "encodedBytes": 22008,
+        "sha256": "f6d41d06007d10aea8e00a56b054788f5ae5a5f50749b2c8f565fe6d954a0934"
+    },
+    {
+        "id": "dining-oval-six",
+        "definitionId": "dining-oval-six",
+        "src": "/images/furniture-20261031/dining-oval-six-9e4d1136e46c.webp",
+        "source": "Столы_обеденные.png",
+        "sourceSha256": "89c0101a57c782974eb80563365c660f8682546ecbd45155667e015d66ca5e67",
+        "size": {
+            "width": 2960,
+            "depth": 2090
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 661
+        },
+        "body": {
+            "x": -125.57,
+            "y": -119.59,
+            "width": 1275.87,
+            "height": 900.87
+        },
+        "encodedBytes": 84242,
+        "sha256": "9e4d1136e46c7450e6203e6c8aa44472ed54e7cff6319d2f0b8c5976f55491b1"
+    },
+    {
+        "id": "dining-round-four",
+        "definitionId": "dining-round-four",
+        "src": "/images/furniture-20261031/dining-round-four-7c48ef14e8b9.webp",
+        "source": "Столы_обеденные 2.png",
+        "sourceSha256": "cce0245a5b15b41b90ca51c31185a5b1bbca1bd8ac0e8c051fda028ba7c03ed3",
+        "size": {
+            "width": 2260,
+            "depth": 2260
+        },
+        "pixelSize": {
+            "width": 1013,
+            "height": 1024
+        },
+        "body": {
+            "x": -246.84,
+            "y": -242.03,
+            "width": 1508.06,
+            "height": 1508.06
+        },
+        "encodedBytes": 158308,
+        "sha256": "7c48ef14e8b9e3aef82b86c7f6795e78bfcd1e8ef8d06ca2e68613b0e10aa973"
+    },
+    {
+        "id": "dining-rect-six",
+        "definitionId": "dining-rect-six",
+        "src": "/images/furniture-20261031/dining-rect-six-074e73ec86d8.webp",
+        "source": "Столы_обеденные 3.png",
+        "sourceSha256": "84e7ad5b319f86d24c30f42459b490978150bbfb45a5282d9fa23635e8d9ab21",
+        "size": {
+            "width": 3000,
+            "depth": 2200
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 642
+        },
+        "body": {
+            "x": -53.66,
+            "y": -93.23,
+            "width": 1131.32,
+            "height": 829.63
+        },
+        "encodedBytes": 86134,
+        "sha256": "074e73ec86d88bfa5f0d71c617fe5ff213fa0a1a9ced0580503905eaa22da847"
+    },
+    {
+        "id": "dining-square-four",
+        "definitionId": "dining-square-four",
+        "src": "/images/furniture-20261031/dining-square-four-2493a1737eed.webp",
+        "source": "Столы_обеденные 4.png",
+        "sourceSha256": "0081489ae62ad98e35cea67dc6fdb998b134f05b931af24a7ffd9a9f0af0c143",
+        "size": {
+            "width": 2340,
+            "depth": 2340
+        },
+        "pixelSize": {
+            "width": 999,
+            "height": 1024
+        },
+        "body": {
+            "x": -88.86,
+            "y": -76.94,
+            "width": 1177.87,
+            "height": 1177.87
+        },
+        "encodedBytes": 118384,
+        "sha256": "2493a1737eedbad3f59d38fb6f88b32f557d14126106d28d440e3030691b8051"
+    },
+    {
+        "id": "dressing-table-900-350",
+        "definitionId": "dressing-table",
+        "src": "/images/furniture-20261031/dressing-table-900-350-2970ea5c3dc5.webp",
+        "source": "Туалетные_и_рабочие_столы.png",
+        "sourceSha256": "85ae9a089e715b242c1c50e31fc1a2c06ec31423d7df6bc1e2832b7c59c76188",
+        "size": {
+            "width": 900,
+            "depth": 350
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 899
+        },
+        "body": {
+            "x": 0.87,
+            "y": 0.87,
+            "width": 1021.4,
+            "height": 397.21
+        },
+        "encodedBytes": 59144,
+        "sha256": "2970ea5c3dc5d40ed7a0b4925ca43913727690900ab88fe925531b22f07812e0"
+    },
+    {
+        "id": "dressing-table-900-400",
+        "definitionId": "dressing-table",
+        "src": "/images/furniture-20261031/dressing-table-900-400-f6f272022cfb.webp",
+        "source": "Туалетные_и_рабочие_столы 2.png",
+        "sourceSha256": "f17b93a604cae88399dbabfd788f9f5f7b0b710042e2da43ac51d712b1195a81",
+        "size": {
+            "width": 900,
+            "depth": 400
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 940
+        },
+        "body": {
+            "x": 0.78,
+            "y": 0.78,
+            "width": 1022.44,
+            "height": 454.42
+        },
+        "encodedBytes": 66216,
+        "sha256": "f6f272022cfbb17e5a4804c561abe9714817ab5646b7c29deb47d710e62a76f5"
+    },
+    {
+        "id": "dressing-table-1100",
+        "definitionId": "dressing-table",
+        "src": "/images/furniture-20261031/dressing-table-1100-82cbc13d21bd.webp",
+        "source": "Туалетные_и_рабочие_столы 3.png",
+        "sourceSha256": "412c7be203d0e7387c10022b30554a599be18d990f62a01af8db3ab2ad382764",
+        "size": {
+            "width": 1100,
+            "depth": 450
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 827
+        },
+        "body": {
+            "x": 0.78,
+            "y": 0.78,
+            "width": 1022.44,
+            "height": 418.27
+        },
+        "encodedBytes": 66832,
+        "sha256": "82cbc13d21bd257489d058a7ae45754cb0c417c6b541bb56e7a6d24c6a7a406a"
+    },
+    {
+        "id": "dressing-table-950",
+        "definitionId": "dressing-table",
+        "src": "/images/furniture-20261031/dressing-table-950-26f119b5a739.webp",
+        "source": "Туалетные_и_рабочие_столы 4.png",
+        "sourceSha256": "7d456497b863987e9f7e59f97666ef4aff00ddac942dc5fcd15fa0e87cfad6ad",
+        "size": {
+            "width": 950,
+            "depth": 450
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 958
+        },
+        "body": {
+            "x": 0,
+            "y": 0.99,
+            "width": 1023.01,
+            "height": 484.58
+        },
+        "encodedBytes": 83942,
+        "sha256": "26f119b5a739529f8e1d76509f021292cd9fb19e4106f24011016c6771743e2d"
+    },
+    {
+        "id": "desk-1200",
+        "definitionId": "desk",
+        "src": "/images/furniture-20261031/desk-1200-a2d60f9d8f7c.webp",
+        "source": "Туалетные_и_рабочие_столы 5.png",
+        "sourceSha256": "da243717d6133734932197643ba5ff95a1035f24b35c1dbc7de22f7fc5ad1454",
+        "size": {
+            "width": 1200,
+            "depth": 1100
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 939
+        },
+        "body": {
+            "x": 0.81,
+            "y": 0,
+            "width": 1022.39,
+            "height": 937.19
+        },
+        "encodedBytes": 43138,
+        "sha256": "a2d60f9d8f7c0052a7fc995f55efa532bc6ef2e79e6bd995165e51fd405780ce"
+    },
+    {
+        "id": "desk-1400",
+        "definitionId": "desk",
+        "src": "/images/furniture-20261031/desk-1400-0c1ebd3da37e.webp",
+        "source": "Туалетные_и_рабочие_столы 6.png",
+        "sourceSha256": "3b6ce07e7fceb74788b5752b3b43e9cf63e85676a8c37f0961a90c913a07fbc6",
+        "size": {
+            "width": 1400,
+            "depth": 1100
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 800
+        },
+        "body": {
+            "x": 0.7,
+            "y": 0.7,
+            "width": 1022.61,
+            "height": 803.48
+        },
+        "encodedBytes": 36432,
+        "sha256": "0c1ebd3da37e3ae7d02152eb022b68ed10206818fb68cb7768e23fdc025fe74e"
+    },
+    {
+        "id": "desk-corner-narrow",
+        "definitionId": "desk-corner-narrow",
+        "src": "/images/furniture-20261031/desk-corner-narrow-516804fb136f.webp",
+        "source": "Туалетные_и_рабочие_столы 7.png",
+        "sourceSha256": "ea45f481c354538fbeba7176cea137251bff1cadde9770351aa2d27e9ee6badb",
+        "size": {
+            "width": 1200,
+            "depth": 1400
+        },
+        "pixelSize": {
+            "width": 884,
+            "height": 1024
+        },
+        "body": {
+            "x": 0.81,
+            "y": 0,
+            "width": 878.17,
+            "height": 1023.19
+        },
+        "encodedBytes": 41860,
+        "sha256": "516804fb136f58272553c38305174ef7345b65a07dc074fb5285d6d3a87b5f5c"
+    },
+    {
+        "id": "desk-pedestal",
+        "definitionId": "desk-pedestal",
+        "src": "/images/furniture-20261031/desk-pedestal-a6f2580441fc.webp",
+        "source": "Туалетные_и_рабочие_столы 8.png",
+        "sourceSha256": "383ff37b0d7ef2b85c38561c3cd142d51e71b1372046a482552fdcf9d2f1ae79",
+        "size": {
+            "width": 1200,
+            "depth": 1100
+        },
+        "pixelSize": {
+            "width": 1017,
+            "height": 944
+        },
+        "body": {
+            "x": 1,
+            "y": 1,
+            "width": 1016,
+            "height": 931.33
+        },
+        "encodedBytes": 53120,
+        "sha256": "a6f2580441fceea8267f1e7bc29d73a210ceaadc00f27baaa1b9d247f4e6aade"
+    },
+    {
+        "id": "desk-corner-1600",
+        "definitionId": "desk-corner-1600",
+        "src": "/images/furniture-20261031/desk-corner-1600-ad7218834aa9.webp",
+        "source": "Туалетные_и_рабочие_столы 9.png",
+        "sourceSha256": "133303c040236ee6397dc3d893f28264dd00ab79b990a746ef90d03f6a02049b",
+        "size": {
+            "width": 1600,
+            "depth": 1200
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 795
+        },
+        "body": {
+            "x": 0.63,
+            "y": 0.63,
+            "width": 1018.35,
+            "height": 769.73
+        },
+        "encodedBytes": 34412,
+        "sha256": "ad7218834aa95756e9f4120603c757754b17748064a2ac6643bc584326e237ff"
+    },
+    {
+        "id": "desk-corner-1200",
+        "definitionId": "desk-corner-1200",
+        "src": "/images/furniture-20261031/desk-corner-1200-eaa7df616adc.webp",
+        "source": "Туалетные_и_рабочие_столы 10.png",
+        "sourceSha256": "326db150b24246edaebe68b675d142e27040e33fc8a67c4da83f67dba3eeb037",
+        "size": {
+            "width": 1200,
+            "depth": 1200
+        },
+        "pixelSize": {
+            "width": 997,
+            "height": 1024
+        },
+        "body": {
+            "x": 0.8,
+            "y": 0,
+            "width": 991.85,
+            "height": 991.85
+        },
+        "encodedBytes": 43192,
+        "sha256": "eaa7df616adc76a3034a452d8df6f854f6944fc9ea116139722c092e92602f2a"
+    },
+    {
+        "id": "desk-corner-1800",
+        "definitionId": "desk-corner-1800",
+        "src": "/images/furniture-20261031/desk-corner-1800-a6ad769cf4de.webp",
+        "source": "Туалетные_и_рабочие_столы 11.png",
+        "sourceSha256": "ce58012c97074fe42fceee80f5029c85b4cd92a6fd02311a99169c4b295119ce",
+        "size": {
+            "width": 1800,
+            "depth": 1200
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 715
+        },
+        "body": {
+            "x": 0.69,
+            "y": 3.46,
+            "width": 1019.85,
+            "height": 683.36
+        },
+        "encodedBytes": 33720,
+        "sha256": "a6ad769cf4de300f8985105eabec30c90b72a2f286033cdc2f1c9096a4117b10"
+    },
+    {
+        "id": "desk-corner-1600-1400",
+        "definitionId": "desk-corner-1600-1400",
+        "src": "/images/furniture-20261031/desk-corner-1600-1400-61d6c750752e.webp",
+        "source": "Туалетные_и_рабочие_столы 12.png",
+        "sourceSha256": "da0ea8a80935024d78ffe444099b0cc0868cd704149e7b9cd6cda85156db239a",
+        "size": {
+            "width": 1600,
+            "depth": 1400
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 902
+        },
+        "body": {
+            "x": 0,
+            "y": 4.79,
+            "width": 1019.21,
+            "height": 895.4
+        },
+        "encodedBytes": 35476,
+        "sha256": "61d6c750752ef5ae554069d14a9ad704910142f5ff260306ecd33aa4af3dea5d"
+    },
+    {
+        "id": "aquarium-1000",
+        "definitionId": "aquarium",
+        "src": "/images/furniture-20261031/aquarium-1000-85799bcdf361.webp",
+        "source": "5.png",
+        "sourceSha256": "e963a44752a8e03c58877f5fb63a5960b2370d8f8609d4eb2c1a67a29db72b97",
+        "size": {
+            "width": 1000,
+            "depth": 500
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 629
+        },
+        "body": {
+            "x": 0.79,
+            "y": 0.39,
+            "width": 1022.82,
+            "height": 511.41
+        },
+        "encodedBytes": 58162,
+        "sha256": "85799bcdf361ff2a237c5786f78cd2d9476e7b1347d31c33e57df831aa76d475"
+    },
+    {
+        "id": "coffee-table-rect-1000",
+        "definitionId": "coffee-table-rect",
+        "src": "/images/furniture-20261031/coffee-table-rect-1000-1e9276400c41.webp",
+        "source": "10.png",
+        "sourceSha256": "91cc685091efc0a1d1d0a3a595ab7c1fffebd870897e92d30ff3ecd6c64a0e26",
+        "size": {
+            "width": 1000,
+            "depth": 550
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 562
+        },
+        "body": {
+            "x": 0.69,
+            "y": 0.34,
+            "width": 1022.28,
+            "height": 561.14
+        },
+        "encodedBytes": 77144,
+        "sha256": "1e9276400c41cee102b62e2d368165877392754eb9f015d68a137a7f676fcae4"
+    },
+    {
+        "id": "child-bed-800",
+        "definitionId": "child-bed",
+        "src": "/images/furniture-20261031/child-bed-800-bec3445b4c45.webp",
+        "source": "11.png",
+        "sourceSha256": "3c7d78e84aa33f06bbec7d28bf08c6dad2dddbb5b94803953a97e6cb0180f34c",
+        "size": {
+            "width": 800,
+            "depth": 1600
+        },
+        "pixelSize": {
+            "width": 586,
+            "height": 1024
+        },
+        "body": {
+            "x": 37.64,
+            "y": 0.32,
+            "width": 511.37,
+            "height": 1022.73
+        },
+        "encodedBytes": 103382,
+        "sha256": "bec3445b4c45b4112d1b301a315cddbb19ffc39a2e65086f39d81ee33a117b04"
+    },
+    {
+        "id": "pet-bed-1000",
+        "definitionId": "pet-bed",
+        "src": "/images/furniture-20261031/pet-bed-1000-aa80fd66daca.webp",
+        "source": "12.png",
+        "sourceSha256": "dc3f8efa18a8468ae9a288e21ec7840eed83f3434889b9be53d3c06bad3b2a48",
+        "size": {
+            "width": 1000,
+            "depth": 750
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 747
+        },
+        "body": {
+            "x": 0.31,
+            "y": 0.31,
+            "width": 1023.37,
+            "height": 734.16
+        },
+        "encodedBytes": 218886,
+        "sha256": "aa80fd66daca531ea4db35df951146ab9b8eea2a5f8836859e29255532c1927d"
+    },
+    {
+        "id": "tv-750",
+        "definitionId": "tv",
+        "src": "/images/furniture-20261031/tv-750-94c4f82cd3d6.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (9).png",
+        "sourceSha256": "dac0aa8c95521a00c56d0f5c5b791b2ee2864980c250aac837d43f6e5964e4ae",
+        "size": {
+            "width": 750,
+            "depth": 100
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 181
+        },
+        "body": {
+            "x": 0,
+            "y": 22.34,
+            "width": 1023.69,
+            "height": 136.49
+        },
+        "encodedBytes": 6372,
+        "sha256": "94c4f82cd3d60fb6e00ccc485636a9ab0281d60d5c3de773b33ffb41fe5e3616"
+    },
+    {
+        "id": "litter-box-550",
+        "definitionId": "litter-box",
+        "src": "/images/furniture-20261031/litter-box-550-869dd42bcbd5.webp",
+        "source": "909926c27c35d8b2ce372ede03583b4b_3b1cc180_0a7c_42f2_a92f_41a7708a22a4 (11).png",
+        "sourceSha256": "6b72ce0238a98e6cf46848d1a26f40a315d886ba797fe968db2f5999bdb0c40e",
+        "size": {
+            "width": 550,
+            "depth": 400
+        },
+        "pixelSize": {
+            "width": 1024,
+            "height": 771
+        },
+        "body": {
+            "x": 0.36,
+            "y": 0,
+            "width": 1023.28,
+            "height": 770.17
+        },
+        "encodedBytes": 251012,
+        "sha256": "869dd42bcbd5de72e3cc1e5dee89c706e90838bac9c590d7d49a48cb1ae5a7e5"
+    }
+]
