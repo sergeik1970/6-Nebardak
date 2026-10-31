@@ -81,7 +81,17 @@ export const FURNITURE_MENU: FurnitureMenuSection[] = [
         groups: [
             {
                 label: "Шкафы для одежды",
-                ids: ["wardrobe-small", "wardrobe-medium", "wardrobe-large"],
+                ids: ["wardrobe-small", "wardrobe-medium", "wardrobe-large", "wardrobe-corner"],
+            },
+            {
+                label: "Гардеробные",
+                ids: [
+                    "walk-in-u",
+                    "walk-in-l",
+                    "walk-in-rows",
+                    "walk-in-wardrobes",
+                    "walk-in-dressers",
+                ],
             },
         ],
     },
@@ -96,7 +106,17 @@ export const FURNITURE_MENU: FurnitureMenuSection[] = [
         label: "Кабинет и офис",
         icon: "desk",
         groups: [
-            { label: "Столы", ids: ["desk"] },
+            { label: "Столы", ids: ["desk", "desk-pedestal"] },
+            {
+                label: "Угловые столы",
+                ids: [
+                    "desk-corner-narrow",
+                    "desk-corner-1200",
+                    "desk-corner-1600",
+                    "desk-corner-1600-1400",
+                    "desk-corner-1800",
+                ],
+            },
             { label: "Стеллажи", ids: ["bookcase"] },
         ],
     },

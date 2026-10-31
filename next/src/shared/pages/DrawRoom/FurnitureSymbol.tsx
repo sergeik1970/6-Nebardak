@@ -6,6 +6,7 @@ import {
     type FurnitureDefinition,
     type Rect,
 } from "@/shared/lib/furniture-planner";
+import { getFurniturePlanImage } from "@/shared/lib/furniture-planner/furniture-plan-images";
 import styles from "./furniture.module.scss";
 
 /**
@@ -14,7 +15,8 @@ import styles from "./furniture.module.scss";
  * turned-down blanket, a wardrobe its rail and hangers. Everything is drawn
  * in the piece's own frame in millimetres with the back (the wall side) at
  * the top, so a resized piece keeps arms, rails and handles at their real
- * size instead of stretching them.
+ * size instead of stretching them. Pieces with a designer image show it
+ * instead; the lines remain for everything else.
  */
 
 type Side = "top" | "right" | "bottom" | "left";
@@ -107,6 +109,19 @@ const wardrobe = (b: Rect): Shapes => {
         ...line(`M ${b.x} ${b.y + b.depth - 25} H ${b.x + b.width}`),
     ];
 };
+
+/** The corner wardrobe, traced from the designer's drawing in its 890 × 890 mm frame. */
+const cornerWardrobe = (width: number, depth: number): Shapes => [
+    <g transform={`scale(${width / 890} ${depth / 890})`}>
+        <path d="M 0 0 H 890 L 795 456 L 471 794 L 0 890 Z" />
+        <path d="M 0 584 L 319 519 L 519 311 L 584 0" />
+        <path d="M 112 269 L 84 282 L 335 779 L 363 765 Z" />
+        <path d="M 181 175 L 163 201 L 628 516 L 646 490 Z" />
+        <path d="M 146 226 L 128 252 L 593 567 L 611 541 Z" />
+        {/* The open door and its swing. */}
+        <path d="M 471 794 L 937 741 A 409 409 0 0 0 797 458" />
+    </g>,
+];
 
 /** A cabinet with a handle on its front edge. */
 const cabinet = (b: Rect): Shapes => {
@@ -309,6 +324,8 @@ const symbolShapes = (
                 ),
             ];
         }
+        case "wardrobe-corner":
+            return cornerWardrobe(width, depth);
         case "tv":
             return [
                 ...box(b, Math.min(30, b.depth / 2)),
@@ -439,6 +456,35 @@ export default function FurnitureSymbol({
     width: number;
     depth: number;
 }) {
+    const image = getFurniturePlanImage(definitionId, width, depth);
+    if (image) {
+        // The picture's body fills the piece; doors or a seat may reach past it.
+        const scaleX = width / image.body.width;
+        const scaleY = depth / image.body.height;
+        return (
+            <g data-furniture-symbol={definitionId} data-furniture-image={image.id}>
+                <image
+                    href={image.src}
+                    x={-image.body.x * scaleX}
+                    y={-image.body.y * scaleY}
+                    width={image.pixelSize.width * scaleX}
+                    height={image.pixelSize.height * scaleY}
+                    preserveAspectRatio="none"
+                    pointerEvents="none"
+                />
+                {rects.map((rect, key) => (
+                    <rect
+                        key={key}
+                        x={rect.x}
+                        y={rect.y}
+                        width={rect.width}
+                        height={rect.depth}
+                        data-symbol-hit=""
+                    />
+                ))}
+            </g>
+        );
+    }
     return (
         <g data-furniture-symbol={definitionId}>
             {symbolShapes(definitionId, rects, width, depth).map((shape, key) =>

@@ -23,14 +23,14 @@ import {
 const BODY_MANIFEST: Record<string, Rect[]> = {
     "single-bed": [{ x: 0, y: 0, width: 900, depth: 2000 }],
     "double-bed": [{ x: 0, y: 0, width: 1800, depth: 2000 }],
-    cradle: [{ x: 0, y: 0, width: 640, depth: 1200 }],
+    cradle: [{ x: 0, y: 0, width: 650, depth: 800 }],
     bookcase: [{ x: 0, y: 0, width: 800, depth: 300 }],
     "wardrobe-small": [{ x: 0, y: 0, width: 700, depth: 500 }],
     "wardrobe-medium": [{ x: 0, y: 0, width: 1500, depth: 600 }],
     "wardrobe-large": [{ x: 0, y: 0, width: 2000, depth: 600 }],
     desk: [
         { x: 0, y: 0, width: 1200, depth: 600 },
-        { x: 375, y: 850, width: 450, depth: 450 },
+        { x: 370, y: 660, width: 480, depth: 440 },
     ],
     "bedside-table": [{ x: 0, y: 0, width: 400, depth: 350 }],
     dresser: [{ x: 0, y: 0, width: 600, depth: 400 }],
@@ -122,10 +122,10 @@ const CLEARANCE_MANIFEST: Record<string, ClearanceZone[]> = {
     ],
     cradle: [
         {
-            x: 640,
+            x: 650,
             y: 0,
             width: 700,
-            depth: 1200,
+            depth: 800,
             label: "Доступ к люльке",
             requirement: "hard",
         },
@@ -621,8 +621,8 @@ const suppliedFurniture: [string, string, number, number, FurnitureCategory, str
     ["dining-oval-six", "Овальный стол и 6 стульев", 2960, 2090, "living", "wood"],
     ["dining-rect-six", "Прямоугольный стол и 6 стульев", 3000, 2200, "living", "wood"],
     ["coffee-table-rect", "Журнальный столик", 1000, 550, "living", "wood"],
-    ["aquarium", "Аквариум с тумбой", 1000, 600, "living", "wood"],
-    ["pet-bed", "Лежанка для питомца", 800, 600, "living", "fabric"],
+    ["aquarium", "Аквариум с тумбой", 1000, 500, "living", "wood"],
+    ["pet-bed", "Лежанка для питомца", 1000, 750, "living", "fabric"],
     ["litter-box", "Кошачий лоток", 550, 400, "living", "wood"],
     ["child-bed", "Детская кровать", 800, 1600, "children", "fabric"],
     ["dressing-table", "Туалетный столик", 900, 400, "work", "wood"],
@@ -708,6 +708,126 @@ for (const [id, label, shortLabel, width, depth, count, kind] of kitchenFurnitur
     if (kind === "base" || kind === "island") WINDOW_ALLOWED.push(id);
 }
 
+// The corner wardrobe stands in a corner: both walls, either side of its door.
+BODY_MANIFEST["wardrobe-corner"] = [
+    { x: 0, y: 0, width: 890, depth: 456 },
+    { x: 0, y: 456, width: 795, depth: 338 },
+    { x: 0, y: 794, width: 471, depth: 96 },
+];
+WALL_EDGE_MANIFEST["wardrobe-corner"] = ["back", "left"];
+CLEARANCE_MANIFEST["wardrobe-corner"] = [
+    { x: 890, y: 0, width: 800, depth: 890, label: "Зона доступа", requirement: "one-of" },
+    { x: 0, y: 890, width: 890, depth: 800, label: "Зона доступа", requirement: "one-of" },
+];
+DEFINITION_METADATA_MANIFEST["wardrobe-corner"] = {
+    label: "Угловой шкаф для одежды",
+    shortLabel: "Шкаф угловой",
+    category: "storage",
+    centerAllowed: false,
+    requiredWallContact: true,
+    removalPriority: 80,
+};
+RELATION_MANIFEST["wardrobe-corner"] = [];
+MAX_COUNT_MANIFEST["wardrobe-corner"] = 1;
+VISUAL_KIND_MANIFEST["wardrobe-corner"] = "wood";
+
+// Walk-in wardrobes and desks from the designer's sheets, with real L- and U-shaped bodies.
+const WARDROBE_RUN = { x: 0, y: 0, width: 2000, depth: 600 };
+const REAR_BLOCKS = [
+    { x: 0, y: 1400, width: 600, depth: 400 },
+    { x: 1400, y: 1400, width: 600, depth: 400 },
+];
+const designerSets: [string, string, Rect[], Rect, string][] = [
+    [
+        "walk-in-u",
+        "Гардеробная П-образная",
+        [
+            WARDROBE_RUN,
+            { x: 0, y: 600, width: 600, depth: 900 },
+            { x: 1400, y: 600, width: 600, depth: 900 },
+        ],
+        { x: 600, y: 600, width: 800, depth: 900 },
+        "Проход в гардеробной",
+    ],
+    [
+        "walk-in-l",
+        "Гардеробная Г-образная",
+        [WARDROBE_RUN, { x: 0, y: 600, width: 600, depth: 900 }],
+        { x: 600, y: 600, width: 1400, depth: 900 },
+        "Проход в гардеробной",
+    ],
+    [
+        "walk-in-rows",
+        "Гардеробная в два ряда",
+        [WARDROBE_RUN, { x: 0, y: 1400, width: 2000, depth: 600 }],
+        { x: 0, y: 600, width: 2000, depth: 800 },
+        "Проход в гардеробной",
+    ],
+    [
+        "walk-in-wardrobes",
+        "Гардеробная с двумя малыми шкафами",
+        [WARDROBE_RUN, ...REAR_BLOCKS],
+        { x: 0, y: 600, width: 2000, depth: 800 },
+        "Проход в гардеробной",
+    ],
+    [
+        "walk-in-dressers",
+        "Гардеробная с двумя комодами",
+        [WARDROBE_RUN, ...REAR_BLOCKS],
+        { x: 0, y: 600, width: 2000, depth: 800 },
+        "Проход в гардеробной",
+    ],
+    [
+        "desk-pedestal",
+        "Письменный стол с тумбой",
+        [
+            { x: 0, y: 0, width: 1200, depth: 600 },
+            { x: 360, y: 670, width: 480, depth: 430 },
+        ],
+        { x: 0, y: 600, width: 1200, depth: 700 },
+        "Рабочая зона",
+    ],
+    ...(
+        [
+            ["desk-corner-narrow", 1200, 1400, 600, 240, 240, 760, 480, 430],
+            ["desk-corner-1200", 1200, 1200, 550, 550, 95, 670, 480, 435],
+            ["desk-corner-1600", 1600, 1200, 550, 600, 270, 670, 480, 435],
+            ["desk-corner-1600-1400", 1600, 1400, 550, 600, 265, 675, 490, 440],
+            ["desk-corner-1800", 1800, 1200, 600, 600, 330, 655, 480, 435],
+        ] as const
+    ).map(([id, width, depth, run, leg, x, y, chairWidth, chairDepth]) => {
+        const row: [string, string, Rect[], Rect, string] = [
+            id,
+            `Угловой письменный стол ${width} × ${depth} мм`,
+            [
+                { x: 0, y: 0, width, depth: run },
+                { x: width - leg, y: run, width: leg, depth: depth - run },
+                { x, y, width: chairWidth, depth: chairDepth },
+            ],
+            { x: 0, y: run, width: width - leg, depth: depth - run },
+            "Рабочая зона",
+        ];
+        return row;
+    }),
+];
+for (const [id, label, rects, zone, zoneLabel] of designerSets) {
+    const isDesk = id.startsWith("desk");
+    BODY_MANIFEST[id] = rects;
+    WALL_EDGE_MANIFEST[id] = ["back", "right", "left"];
+    CLEARANCE_MANIFEST[id] = [{ ...zone, label: zoneLabel, requirement: "hard" }];
+    DEFINITION_METADATA_MANIFEST[id] = {
+        label,
+        shortLabel: label,
+        category: isDesk ? "work" : "storage",
+        centerAllowed: true,
+        requiredWallContact: false,
+        removalPriority: isDesk ? 60 : 25,
+    };
+    RELATION_MANIFEST[id] = [];
+    MAX_COUNT_MANIFEST[id] = 1;
+    VISUAL_KIND_MANIFEST[id] = isDesk ? "surface" : "wood";
+}
+
 // Standard sizes from the designer's sheets of 2026-10-25, offered as presets.
 const SIZE_MANIFEST: Record<string, [number, number][]> = {
     "single-bed": [
@@ -756,6 +876,10 @@ const SIZE_MANIFEST: Record<string, [number, number][]> = {
     "sofa-bed": [
         [1400, 1000],
         [2000, 1000],
+    ],
+    desk: [
+        [1200, 1100],
+        [1400, 1100],
     ],
 };
 
@@ -892,7 +1016,9 @@ describe("furniture catalog golden manifest", () => {
                 ? definition.id === "desk"
                     ? "preferred"
                     : "allowed"
-                : "forbidden";
+                : definition.id.startsWith("desk-")
+                  ? "preferred"
+                  : "forbidden";
 
             expect(definition.placement.windowPolicy, definition.id).toBe(expected);
         }

@@ -970,7 +970,9 @@ export default function FurnitureEditor({
                                             Типовые габариты. Уточните размеры вашего предмета
                                             {editing.definitionId.startsWith("dining-")
                                                 ? ": вместе со стульями"
-                                                : ""}
+                                                : editing.definitionId.startsWith("desk")
+                                                  ? ": вместе со стулом"
+                                                  : ""}
                                             .
                                         </small>
                                     )}
