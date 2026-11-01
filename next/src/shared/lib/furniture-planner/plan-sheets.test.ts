@@ -123,6 +123,36 @@ describe("drawing sheets", () => {
         expect(schedule).not.toContain("Тип открывания");
     });
 
+    it("warns in red under the door table only when an opening is narrow", () => {
+        const schedule = (doors: DoorOpening[]) =>
+            buildPlanSheets({ ...specification(), room: { ...room, doors } })[2].svg;
+        expect(schedule(room.doors)).not.toContain("разобранном виде");
+        const narrow = schedule([door({ id: "narrow", width: 650 }), ...room.doors]);
+        expect(narrow).toContain(">650×2100<");
+        expect(narrow).toContain(">550×2000<");
+        expect(narrow).toContain("разобранном виде");
+        expect(narrow).toContain('fill="#d0342c"');
+        expect(narrow).toContain(">Д1: проём меньше 700 мм.");
+    });
+
+    it("fills walls by whether they bear load", () => {
+        const plan = (changes: Partial<Room>) =>
+            buildPlanSheets({ ...specification(), room: { ...room, ...changes } })[0].svg;
+        const dark = /<rect [^>]*fill="#6f6f6f"/;
+        const light = /<rect [^>]*fill="#d4d4d4"/;
+        // A partition is non-load-bearing until marked otherwise.
+        expect(plan({})).toMatch(dark);
+        const bearing = plan({
+            partitions: room.partitions?.map((partition) => ({ ...partition, loadBearing: true })),
+        });
+        expect(bearing).toMatch(light);
+        // The legend's dark swatch is the only dark rectangle left.
+        expect(bearing.match(/<rect [^>]*fill="#6f6f6f"/g)).toHaveLength(1);
+        expect(plan({ nonBearingWalls: ["rect-top"], partitions: [] })).toMatch(
+            /<path d="[^"]+" fill="#6f6f6f"/,
+        );
+    });
+
     it("prints the reveal the person entered", () => {
         const windows = room.windows.map((window) => ({ ...window, revealDepth: 180 }));
         const schedule = buildPlanSheets({ ...specification(), room: { ...room, windows } })[2].svg;

@@ -275,6 +275,16 @@ export const getFixedFurnitureBodies = (room: Room): Rect[] => room.fixedFurnitu
 export const getPartitionObstacleRects = (room: Room): Rect[] =>
     getPartitionMaterialObstacles(room).map((obstacle) => obstacle.rect);
 
+/** The same material, each piece knowing whether its partition bears load. */
+export const getPartitionMaterial = (room: Room): { rect: Rect; loadBearing: boolean }[] =>
+    getPartitionMaterialObstacles(room).map(({ rect, anchorId }) => ({
+        rect,
+        loadBearing: Boolean(
+            room.partitions?.find((partition) => `partition:${partition.id}` === anchorId)
+                ?.loadBearing,
+        ),
+    }));
+
 /** Full closed-to-open travel, using the same 35 mm leaf and 25 mm gap as the drawing. */
 export const getSlidingDoorTravel = (door: DoorOpening, room: Room): Rect[] => {
     const host = getRoomSegment(room, door);

@@ -122,3 +122,45 @@ export const moveWallEnd = <Segment extends { start: WallEntryPoint; end: WallEn
     });
     return moved ? next : null;
 };
+
+const onEdge = (point: WallEntryPoint, start: WallEntryPoint, end: WallEntryPoint) =>
+    point.x >= Math.min(start.x, end.x) &&
+    point.x <= Math.max(start.x, end.x) &&
+    point.y >= Math.min(start.y, end.y) &&
+    point.y <= Math.max(start.y, end.y);
+
+/**
+ * Thickens the outer walls without touching the rooms. The graph runs along
+ * wall centres, so each side's centre line moves out by half the change and
+ * the inner face stays where it was: a measured room keeps its size, and
+ * everything placed from that face keeps its position.
+ */
+export const pushContourWallsOut = <Segment extends { start: WallEntryPoint; end: WallEntryPoint }>(
+    segments: Segment[],
+    contour: WallEntryPoint[],
+    change: number,
+): Segment[] => {
+    const area = contour.reduce((sum, point, index) => {
+        const next = contour[(index + 1) % contour.length];
+        return sum + point.x * next.y - next.x * point.y;
+    }, 0);
+    const outward = area > 0 ? 1 : -1;
+    const moved = (point: WallEntryPoint) => {
+        const shift = { x: 0, y: 0 };
+        contour.forEach((start, index) => {
+            const end = contour[(index + 1) % contour.length];
+            if (!onEdge(point, start, end)) return;
+            const direction = wallDirection(start, end);
+            if (!direction) return;
+            // Each axis moves once: at a corner the two sides supply one each.
+            if (direction.x === 0) shift.x = (direction.y * outward * change) / 2;
+            else shift.y = (-direction.x * outward * change) / 2;
+        });
+        return { x: point.x + shift.x, y: point.y + shift.y };
+    };
+    return segments.map((segment) => ({
+        ...segment,
+        start: moved(segment.start),
+        end: moved(segment.end),
+    }));
+};

@@ -1,4 +1,4 @@
-import { MAX_DRAWN_CONTOUR_MM } from "./draw-room-grid";
+import { MAX_DRAWN_CONTOUR_MM, WALL_THICKNESS_RANGE_MM } from "./draw-room-grid";
 import { getProjectStorage } from "@/shared/lib/project-scope/storage";
 import { drawingBlockingIssues } from "./draw-furniture-handoff";
 import { getFurniturePhotos } from "./furniture-photos";
@@ -345,8 +345,11 @@ const normalizeRoom = (input: unknown, allowDrawingWithoutDoor = false): Room | 
         !isSafeNumber(input.width, MIN_ROOM_MM, MAX_ROOM_MM) ||
         !isSafeNumber(input.depth, MIN_ROOM_MM, MAX_ROOM_MM) ||
         (input.wallThickness !== undefined &&
-            input.wallThickness !== 50 &&
-            input.wallThickness !== 100) ||
+            !isSafeNumber(
+                input.wallThickness,
+                WALL_THICKNESS_RANGE_MM.minimum,
+                WALL_THICKNESS_RANGE_MM.maximum,
+            )) ||
         !Array.isArray(input.doors) ||
         !Array.isArray(input.windows) ||
         (input.partitions !== undefined && !Array.isArray(input.partitions)) ||
@@ -360,8 +363,7 @@ const normalizeRoom = (input: unknown, allowDrawingWithoutDoor = false): Room | 
 
     const width = input.width as number;
     const depth = input.depth as number;
-    const wallThickness =
-        input.wallThickness === 50 || input.wallThickness === 100 ? input.wallThickness : undefined;
+    const wallThickness = typeof input.wallThickness === "number" ? input.wallThickness : undefined;
     const geometry = normalizeRoomGeometry(input.geometry, width, depth);
     if (!geometry) return null;
 

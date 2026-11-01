@@ -13,6 +13,8 @@ export const DRAW_ROOM_GRID_ORIGIN_MM = 25;
 /** A drawn contour can be a whole flat, far wider than any single room. */
 export const MAX_DRAWN_CONTOUR_MM = 30_000;
 
+export const WALL_THICKNESS_RANGE_MM = { minimum: 50, maximum: 600 };
+
 export const DRAW_ROOM_GRID_SNAP_MM = 50;
 /** New 10 cm-wall drawings retain 10 mm architectural coordinates. */
 export const DRAW_ROOM_CONSTRUCTION_SNAP_MM = 10;

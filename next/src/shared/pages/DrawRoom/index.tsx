@@ -36,6 +36,9 @@ import {
     buildDrawingPlanSpecification,
     getPlanExportFilename,
     buildPlanSheets,
+    NARROW_DOOR_OPENING_MM,
+    NARROW_DOOR_WARNING,
+    WALL_THICKNESS_RANGE_MM,
     rasterizeSheet,
     renderPlanSheetsPdf,
     getDrawRoomGridPresentation,
@@ -117,6 +120,7 @@ import {
     MAX_TYPED_WALL_DIGITS,
     moveWallEnd,
     nextWallChainStep,
+    pushContourWallsOut,
     resolveTypedWall,
     wallDirection,
     type TypedWallRequest,
@@ -137,7 +141,7 @@ import {
     getWindowHeight,
     getWindowSillHeight,
 } from "@/shared/lib/furniture-planner/opening-heights";
-import { OpeningHeightFields } from "./OpeningHeightFields";
+import { HeightInput, OpeningHeightFields } from "./OpeningHeightFields";
 
 type Tool = "select" | "wall" | "door" | "window" | "radiator";
 type ToolGroup = "walls" | "openings" | "rooms" | "furniture" | "result";
@@ -354,9 +358,9 @@ const AUTO_FIT_SETTLE_MS = 400;
 const getSceneWallThickness = (scene: Pick<Scene, "wallThickness">) =>
     scene.wallThickness ?? DRAW_ROOM_WALL_LANE_MM;
 const getSceneSnapMm = (scene: Pick<Scene, "wallThickness">) =>
-    getSceneWallThickness(scene) === WALL_THICKNESS_MM
-        ? DRAW_ROOM_CONSTRUCTION_SNAP_MM
-        : DRAW_ROOM_GRID_SNAP_MM;
+    getSceneWallThickness(scene) === DRAW_ROOM_WALL_LANE_MM
+        ? DRAW_ROOM_GRID_SNAP_MM
+        : DRAW_ROOM_CONSTRUCTION_SNAP_MM;
 /**
  * Graph nodes sit on the wall centre line, but the user aims at the drawn
  * material. Measuring the magnet from the face rather than the axis keeps a
@@ -383,7 +387,7 @@ const DOOR_CATALOG: Array<{
         label: "Распашная",
         description: "Одна створка",
         defaultWidth: 900,
-        minimum: 700,
+        minimum: 600,
         maximum: 1200,
     },
     {
@@ -391,7 +395,7 @@ const DOOR_CATALOG: Array<{
         label: "Балконная",
         description: "Распашная дверь наружу",
         defaultWidth: 900,
-        minimum: 700,
+        minimum: 600,
         maximum: 1200,
     },
     {
@@ -407,7 +411,7 @@ const DOOR_CATALOG: Array<{
         label: "Раздвижная",
         description: "Одно полотно по направляющей",
         defaultWidth: 900,
-        minimum: 700,
+        minimum: 600,
         maximum: 1400,
     },
     {
@@ -501,7 +505,7 @@ const readEditorSession = (): Scene | null => {
                     ? { radiators: parsed.radiators.filter(isDraftRadiator) }
                     : {}),
                 furniture: readFurniture(parsed.furniture),
-                ...(parsed.wallThickness === 50 || parsed.wallThickness === 100
+                ...(Number.isFinite(parsed.wallThickness)
                     ? { wallThickness: parsed.wallThickness }
                     : {}),
                 ...(parsed.regions ? { regions: parsed.regions } : {}),
@@ -826,6 +830,12 @@ const resolveDragEnd = (
     return wall && wall.distance <= 260 ? wall.target : candidate;
 };
 
+const graphPointOnWall = (point: Point, wall: DrawWallSegment) =>
+    point.x >= Math.min(wall.start.x, wall.end.x) &&
+    point.x <= Math.max(wall.start.x, wall.end.x) &&
+    point.y >= Math.min(wall.start.y, wall.end.y) &&
+    point.y <= Math.max(wall.start.y, wall.end.y);
+
 const getSingleRoomPreview = (scene: Scene): RoomPreview | null => {
     const wallThickness = getSceneWallThickness(scene);
     const result = deriveDrawWallGraphRoom(scene.segments, wallThickness);
@@ -861,10 +871,29 @@ const getSingleRoomPreview = (scene: Scene): RoomPreview | null => {
                 id: `partition-${segment.id}`,
                 start,
                 end,
-                thickness: wallThickness,
+                thickness: segment.thickness ?? wallThickness,
+                ...(segment.loadBearing ? { loadBearing: true } : {}),
             },
         ];
     });
+    // Each side of the room looks out over half a wall to the graph's centre line.
+    const nonBearingWalls = getRoomBoundarySegments(result.room)
+        .filter((side) => {
+            const point = {
+                x:
+                    result.origin.x +
+                    (side.start.x + side.end.x) / 2 -
+                    (side.inwardNormal.x * wallThickness) / 2,
+                y:
+                    result.origin.y +
+                    (side.start.y + side.end.y) / 2 -
+                    (side.inwardNormal.y * wallThickness) / 2,
+            };
+            return scene.segments.some(
+                (segment) => segment.loadBearing === false && graphPointOnWall(point, segment),
+            );
+        })
+        .map((side) => side.id);
     // A closed drafting contour is useful even when it is too small for the
     // furniture planner. Keep its canonical RoomGeometry here so the editor
     // can show the room, area and both dimension chains. Handoff eligibility
@@ -872,6 +901,7 @@ const getSingleRoomPreview = (scene: Scene): RoomPreview | null => {
     const roomWithoutRegionMaterialization: Room = {
         ...result.room,
         ...(wallThickness === DRAW_ROOM_WALL_LANE_MM ? {} : { wallThickness }),
+        ...(nonBearingWalls.length ? { nonBearingWalls } : {}),
         partitions,
         doors: scene.doors,
         windows: scene.windows,
@@ -1827,7 +1857,7 @@ const getWallStripPolygonFromPoints = (start: Point, end: Point, thickness: numb
 };
 
 const getWallUnionRect = (segment: DrawWallSegment, thickness: number): WallUnionRect =>
-    getWallEnvelopeFromPoints(segment.start, segment.end, thickness)!;
+    getWallEnvelopeFromPoints(segment.start, segment.end, segment.thickness ?? thickness)!;
 
 /**
  * Builds the outline of an axis-aligned rectangle union. The fill and stroke
@@ -4118,6 +4148,7 @@ const DrawRoom: React.FC = () => {
     const fitAfterSceneChangeRef = useRef(false);
     const [templateOpen, setTemplateOpen] = useState(false);
     const [roomDesignNoticeOpen, setRoomDesignNoticeOpen] = useState(false);
+    const [narrowDoorNoticeOpen, setNarrowDoorNoticeOpen] = useState(false);
     const [templateError, setTemplateError] = useState("");
     const [newerPlannerRoom, setNewerPlannerRoom] = useState<Room | null>(null);
     const [selectedDoorKind, setSelectedDoorKind] = useState<DoorKind>("room");
@@ -4418,7 +4449,7 @@ const DrawRoom: React.FC = () => {
         };
     }, [renderedWallThickness, viewBox.height, viewBox.width, viewBox.x, viewBox.y]);
     const constructionGridOrigin =
-        renderedWallThickness === WALL_THICKNESS_MM ? 0 : DRAW_ROOM_GRID_ORIGIN_MM;
+        renderedWallThickness === DRAW_ROOM_WALL_LANE_MM ? DRAW_ROOM_GRID_ORIGIN_MM : 0;
     const previewContourPoints = useMemo(
         () => (preview ? getPreviewContourPoints(preview) : []),
         [preview],
@@ -4492,6 +4523,28 @@ const DrawRoom: React.FC = () => {
             middle: wallMoveGrip(segment.start, segment.end),
         };
     }, [scene.segments, selectedSegmentWallId, wallMoveGrip]);
+    /** The drawing segments of the selected wall; an outer wall can span several. */
+    const selectedWallSegments = useMemo(() => {
+        if (selectedSegmentWall) {
+            return scene.segments.filter((segment) =>
+                selectedSegmentWall.segmentIds.includes(segment.id),
+            );
+        }
+        if (!selectedContourWall) return [];
+        const { start, end } = selectedContourWall;
+        const edge = { id: "edge", start, end };
+        return scene.segments.filter(
+            (segment) =>
+                graphPointOnWall(segment.start, edge) && graphPointOnWall(segment.end, edge),
+        );
+    }, [scene.segments, selectedContourWall, selectedSegmentWall]);
+    // On a closed plan a free wall is a partition with its own thickness. Before
+    // the contour closes every wall may end up on it, so they share one.
+    const selectedWallIsPartition = Boolean(preview && selectedSegmentWall);
+    const selectedWallBears = selectedWallSegments[0]?.loadBearing ?? !selectedWallIsPartition;
+    const selectedWallThickness = selectedWallIsPartition
+        ? selectedWallSegments[0]?.thickness ?? getSceneWallThickness(scene)
+        : getSceneWallThickness(scene);
     const selectedWallInspector =
         tool === "select" &&
         !selectedOpening &&
@@ -5537,7 +5590,19 @@ const DrawRoom: React.FC = () => {
                 );
                 return null;
             }
-            commitScene({ ...snapshot, segments: added.segments });
+            const known = new Set(snapshot.segments.map((segment) => segment.id));
+            const partitionThickness = getSceneWallThickness(snapshot);
+            commitScene({
+                ...snapshot,
+                segments:
+                    preview && partitionThickness > WALL_THICKNESS_MM
+                        ? added.segments.map((segment) =>
+                              known.has(segment.id) || segment.thickness
+                                  ? segment
+                                  : { ...segment, thickness: WALL_THICKNESS_MM },
+                          )
+                        : added.segments,
+            });
             if (!preview && completedRoom) {
                 setTool("select");
                 autoFitPendingRef.current = true;
@@ -5960,6 +6025,45 @@ const DrawRoom: React.FC = () => {
         return null;
     }, [previews, selectedRadiatorId]);
 
+    const updateSelectedWall = useCallback(
+        (patch: { loadBearing?: boolean; thickness?: number }) => {
+            const ids = new Set(selectedWallSegments.map((segment) => segment.id));
+            const { thickness, ...flags } = patch;
+            const marked = scene.segments.map((segment) =>
+                ids.has(segment.id)
+                    ? {
+                          ...segment,
+                          ...flags,
+                          ...(thickness !== undefined && selectedWallIsPartition
+                              ? { thickness }
+                              : {}),
+                      }
+                    : segment,
+            );
+            if (thickness === undefined || selectedWallIsPartition) {
+                commitScene({ ...scene, segments: marked });
+                return;
+            }
+            const current = getSceneWallThickness(scene);
+            if (!preview) {
+                commitScene({ ...scene, segments: marked, wallThickness: thickness });
+                return;
+            }
+            // Partitions keep the thickness they have; only the outer walls change.
+            const pinned = marked.map((segment) =>
+                isGraphSegmentOnClosedContour(segment, preview.contour)
+                    ? segment
+                    : { ...segment, thickness: segment.thickness ?? current },
+            );
+            commitScene({
+                ...scene,
+                segments: pushContourWallsOut(pinned, preview.contour, thickness - current),
+                wallThickness: thickness,
+            });
+        },
+        [commitScene, preview, scene, selectedWallIsPartition, selectedWallSegments],
+    );
+
     const updateSelectedRadiator = useCallback(
         (patch: Partial<Pick<RadiatorObstacle, "width" | "offset" | "depth">>) => {
             if (!selectedRadiatorData) return;
@@ -6137,6 +6241,8 @@ const DrawRoom: React.FC = () => {
                     ...scene,
                     doors: scene.doors.map((door) => (door.id === item.id ? candidate : door)),
                 });
+                if (nextWidth < NARROW_DOOR_OPENING_MM && item.width >= NARROW_DOOR_OPENING_MM)
+                    setNarrowDoorNoticeOpen(true);
             } else {
                 commitScene({
                     ...scene,
@@ -8392,6 +8498,23 @@ const DrawRoom: React.FC = () => {
                         );
                     }}
                 />
+
+                <Dialog
+                    open={narrowDoorNoticeOpen}
+                    title={`Проём меньше ${NARROW_DOOR_OPENING_MM} мм`}
+                    onCancel={() => setNarrowDoorNoticeOpen(false)}
+                    actions={
+                        <button
+                            data-variant="primary"
+                            type="button"
+                            onClick={() => setNarrowDoorNoticeOpen(false)}
+                        >
+                            Понятно
+                        </button>
+                    }
+                >
+                    <p>{NARROW_DOOR_WARNING}</p>
+                </Dialog>
 
                 <Dialog
                     open={roomDesignNoticeOpen}
@@ -11125,6 +11248,50 @@ const DrawRoom: React.FC = () => {
                                         ×
                                     </button>
                                 </div>
+                                <label className={styles.wallBearingControl}>
+                                    <input
+                                        type="checkbox"
+                                        aria-label="Несущая стена"
+                                        checked={selectedWallBears}
+                                        onChange={(event) =>
+                                            updateSelectedWall({
+                                                loadBearing: event.target.checked,
+                                            })
+                                        }
+                                    />
+                                    <span>Несущая</span>
+                                </label>
+                                <HeightInput
+                                    key={selectedWallThickness}
+                                    label={
+                                        selectedWallIsPartition
+                                            ? "Толщина, мм"
+                                            : "Толщина внешних стен, мм"
+                                    }
+                                    value={selectedWallThickness}
+                                    minimum={WALL_THICKNESS_RANGE_MM.minimum}
+                                    maximum={WALL_THICKNESS_RANGE_MM.maximum}
+                                    step={10}
+                                    onCommit={(next) => {
+                                        const { minimum, maximum } = WALL_THICKNESS_RANGE_MM;
+                                        if (next < minimum || next > maximum) {
+                                            setNotice(
+                                                `Толщина стены: от ${minimum} до ${maximum} мм.`,
+                                            );
+                                            return false;
+                                        }
+                                        // Even tens: half of a change must stay whole millimetres.
+                                        updateSelectedWall({
+                                            thickness: snapDrawRoomCoordinate(next, 10),
+                                        });
+                                        return true;
+                                    }}
+                                />
+                                {!selectedWallIsPartition && (
+                                    <small className={styles.openingWidthHint}>
+                                        Одна на весь внешний контур.
+                                    </small>
+                                )}
                                 <p className={styles.openingInspectorNote}>
                                     Тяните точки на стене, чтобы сдвинуть её или изменить длину.
                                     Delete или Backspace удаляет стену вместе с её дверями и окнами.

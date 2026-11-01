@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
     moveWallEnd,
     nextWallChainStep,
+    pushContourWallsOut,
     resolveTypedWall,
     type WallChainStep,
     type WallEntryPoint,
@@ -53,6 +54,36 @@ const typeChain = (
 const span = (values: number[]) => Math.max(...values) - Math.min(...values);
 
 describe("typed wall lengths", () => {
+    it("keeps the rooms and a partition's ends when the outer walls thicken", () => {
+        const flat = typeChain([
+            [right, 6000],
+            [down, 4000],
+            [left, 6000],
+            [up, 4000],
+        ]).segments;
+        const before = deriveDrawWallGraphRoom(flat, 100)!;
+        const wall = { x: 4000, y: before.contour[0].y };
+        const added = addDrawWallSegment(flat, wall, { x: 4000, y: before.contour[2].y }, 1);
+        if (added.status === "invalid") throw new Error(added.message);
+
+        const thick = pushContourWallsOut(added.segments, before.contour, 200);
+        const after = deriveDrawWallGraphRoom(thick, 300)!;
+        const inner = getDrawRoomWallFaceContours(after.contour, 300)!.innerFaceContour;
+        const innerBefore = getDrawRoomWallFaceContours(before.contour, 100)!.innerFaceContour;
+        expect(span(inner.map((point) => point.x))).toBe(6000);
+        expect(span(inner.map((point) => point.y))).toBe(4000);
+        // The clear corner stays put, so furniture and openings do too.
+        expect(Math.min(...inner.map((point) => point.x))).toBe(
+            Math.min(...innerBefore.map((point) => point.x)),
+        );
+        // The partition's ends follow the walls it meets, still along its line.
+        const partition = thick.find(
+            (segment) => segment.start.x === 4000 && segment.end.x === 4000,
+        )!;
+        expect(partition.end.x).toBe(4000);
+        expect(Math.abs(partition.end.y - partition.start.y)).toBe(4300);
+    });
+
     it("builds a room of exactly the typed clear size, to the millimetre", () => {
         const { segments, end } = typeChain([
             [right, 4213],
