@@ -35,7 +35,9 @@ import {
     getRadiatorServiceObstacle,
     buildDrawingPlanSpecification,
     getPlanExportFilename,
-    renderPlanSpecificationPng,
+    buildPlanSheets,
+    rasterizeSheet,
+    renderPlanSheetsPdf,
     getDrawRoomGridPresentation,
     getDrawRoomWallFaceContours,
     ensureUniqueDrawWallSegmentIds,
@@ -332,8 +334,9 @@ type SolverPayload = SolverWorkerRequest extends infer Request
         : never
     : never;
 
-const RADIATOR_DEFAULT_WIDTH_MM = 800;
-const RADIATOR_DEPTH_MM = 100;
+const RADIATOR_DEFAULT_WIDTH_MM = 850;
+const RADIATOR_DEFAULT_DEPTH_MM = 80;
+const RADIATOR_DEPTH_RANGE_MM = { minimum: 20, maximum: 300 };
 /** Free air in front of a radiator; furniture must not stand in it. */
 const RADIATOR_CLEARANCE_MM = 300;
 
@@ -5927,7 +5930,7 @@ const DrawRoom: React.FC = () => {
                 segmentId: target.segment.id,
                 offset,
                 width,
-                depth: RADIATOR_DEPTH_MM,
+                depth: RADIATOR_DEFAULT_DEPTH_MM,
                 clearanceDepth: RADIATOR_CLEARANCE_MM,
             };
             const problem = validateRoomGeometry({
@@ -5958,11 +5961,11 @@ const DrawRoom: React.FC = () => {
     }, [previews, selectedRadiatorId]);
 
     const updateSelectedRadiator = useCallback(
-        (patch: Partial<Pick<RadiatorObstacle, "width" | "offset">>) => {
+        (patch: Partial<Pick<RadiatorObstacle, "width" | "offset" | "depth">>) => {
             if (!selectedRadiatorData) return;
             const { owner, radiator } = selectedRadiatorData;
             if (
-                ![patch.width, patch.offset].every(
+                ![patch.width, patch.offset, patch.depth].every(
                     (value) => value === undefined || Number.isFinite(value),
                 )
             )
@@ -7612,8 +7615,9 @@ const DrawRoom: React.FC = () => {
     ]);
     const [resultStatus, setResultStatus] = useState("");
     const [resultBusy, setResultBusy] = useState(false);
-    const [printImageUrl, setPrintImageUrl] = useState<string | null>(null);
-    const renderResultPng = useCallback(async () => {
+    const [printImageUrls, setPrintImageUrls] = useState<string[]>([]);
+    const printImagesLoadedRef = useRef(0);
+    const buildResultSheets = useCallback(async () => {
         if (!preview || !resultSummary) throw new Error("Сначала замкните контур квартиры.");
         const specification = buildDrawingPlanSpecification({
             room: preview.room,
@@ -7625,6 +7629,7 @@ const DrawRoom: React.FC = () => {
                 rotation: item.rotation,
                 width: item.width,
                 depth: item.depth,
+                ...(item.mirrored ? { mirrored: true } : {}),
                 ...(roomName ? { roomName } : {}),
             })),
             conflictCount: resultSummary.conflictCount,
@@ -7634,17 +7639,21 @@ const DrawRoom: React.FC = () => {
                     : [],
             generatedAt: new Date().toISOString(),
         });
+        const { buildFurnitureArt } = await import("./plan-sheet-art");
         return {
-            blob: await renderPlanSpecificationPng(specification),
+            sheets: buildPlanSheets(specification, {
+                furnitureArt: await buildFurnitureArt(specification.items),
+            }),
             filename: getPlanExportFilename(specification.generatedAt),
             items: specification.items.length,
         };
     }, [preview, previews.length, resultSummary]);
     const downloadResult = useCallback(async () => {
         setResultBusy(true);
-        setResultStatus("Готовим PNG…");
+        setResultStatus("Готовим чертежи…");
         try {
-            const { blob, filename, items } = await renderResultPng();
+            const { sheets, filename, items } = await buildResultSheets();
+            const blob = await renderPlanSheetsPdf(sheets);
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
@@ -7653,21 +7662,30 @@ const DrawRoom: React.FC = () => {
             link.click();
             link.remove();
             window.setTimeout(() => URL.revokeObjectURL(url), 0);
-            setResultStatus("PNG сохранён.");
+            setResultStatus("PDF сохранён.");
+            // The goal keeps its name: the monitor bot counts downloads by it.
             trackGoal("plan_png_export", { items, source: "drawing" });
         } catch (error) {
-            setResultStatus(error instanceof Error ? error.message : "Не удалось сохранить PNG.");
+            setResultStatus(error instanceof Error ? error.message : "Не удалось сохранить PDF.");
         } finally {
             setResultBusy(false);
         }
-    }, [renderResultPng]);
+    }, [buildResultSheets]);
     const printResult = useCallback(async () => {
         setResultBusy(true);
         setResultStatus("Готовим лист для печати…");
         try {
-            const { blob } = await renderResultPng();
-            // The print sheet shows this image only; the dialog opens once it loads.
-            setPrintImageUrl(URL.createObjectURL(blob));
+            const { sheets } = await buildResultSheets();
+            const urls: string[] = [];
+            for (const sheet of sheets) {
+                const page = await rasterizeSheet(sheet);
+                urls.push(
+                    URL.createObjectURL(new Blob([page.jpeg.slice()], { type: "image/jpeg" })),
+                );
+            }
+            // The print pages show these images only; the dialog opens once all load.
+            printImagesLoadedRef.current = 0;
+            setPrintImageUrls(urls);
             trackGoal("plan_print", { source: "drawing" });
         } catch (error) {
             setResultBusy(false);
@@ -7675,18 +7693,18 @@ const DrawRoom: React.FC = () => {
                 error instanceof Error ? error.message : "Не удалось подготовить печать.",
             );
         }
-    }, [renderResultPng]);
+    }, [buildResultSheets]);
     useEffect(() => {
-        if (!printImageUrl) return;
+        if (!printImageUrls.length) return;
         const done = () => {
-            URL.revokeObjectURL(printImageUrl);
-            setPrintImageUrl(null);
+            printImageUrls.forEach((url) => URL.revokeObjectURL(url));
+            setPrintImageUrls([]);
             setResultBusy(false);
-            setResultStatus("Лист отправлен в системный диалог печати.");
+            setResultStatus("Листы отправлены в системный диалог печати.");
         };
         window.addEventListener("afterprint", done, { once: true });
         return () => window.removeEventListener("afterprint", done);
-    }, [printImageUrl]);
+    }, [printImageUrls]);
     const furnitureRoom = useMemo<FurnitureRoom | null>(
         () =>
             furnitureRegion
@@ -10958,20 +10976,30 @@ const DrawRoom: React.FC = () => {
                                 onPrint={() => void printResult()}
                             />
                         )}
-                        {printImageUrl &&
+                        {printImageUrls.length > 0 &&
                             // On the body, so the editor's clipped panes never cut the sheet.
                             createPortal(
                                 <div
                                     className={styles.printSheet}
                                     data-draw-room-print-sheet="true"
                                 >
-                                    {/* A generated object URL; next/image cannot optimise it. */}
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img
-                                        src={printImageUrl}
-                                        alt="План квартиры для печати"
-                                        onLoad={() => window.print()}
-                                    />
+                                    {printImageUrls.map((url, index) => (
+                                        // A generated object URL; next/image cannot optimise it.
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                            key={url}
+                                            src={url}
+                                            alt={`Лист ${index + 1} для печати`}
+                                            onLoad={() => {
+                                                printImagesLoadedRef.current += 1;
+                                                if (
+                                                    printImagesLoadedRef.current ===
+                                                    printImageUrls.length
+                                                )
+                                                    window.print();
+                                            }}
+                                        />
+                                    ))}
                                 </div>,
                                 document.body,
                             )}
@@ -11017,6 +11045,23 @@ const DrawRoom: React.FC = () => {
                                             onChange={(event) =>
                                                 updateSelectedRadiator({
                                                     width: Number(event.target.value),
+                                                })
+                                            }
+                                        />
+                                    </label>
+                                    <label className={styles.openingControl}>
+                                        <span>Глубина, мм</span>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            aria-label="Глубина радиатора, мм"
+                                            min={RADIATOR_DEPTH_RANGE_MM.minimum}
+                                            max={RADIATOR_DEPTH_RANGE_MM.maximum}
+                                            step={sceneSnapMm}
+                                            value={selectedRadiatorData.radiator.depth}
+                                            onChange={(event) =>
+                                                updateSelectedRadiator({
+                                                    depth: Number(event.target.value),
                                                 })
                                             }
                                         />

@@ -100,8 +100,8 @@ test("desktop golden path reaches an editable and exportable plan", async ({ pag
     const result = page.locator("[data-draw-room-result='true']");
     await expect(result).toContainText("Двуспальная кровать");
     const downloadPromise = page.waitForEvent("download");
-    await result.getByRole("button", { name: "Скачать PNG" }).click();
-    expect((await downloadPromise).suggestedFilename()).toMatch(/\.png$/i);
+    await result.getByRole("button", { name: "Скачать чертежи (PDF)" }).click();
+    expect((await downloadPromise).suggestedFilename()).toMatch(/\.pdf$/i);
 
     await page.evaluate(() => {
         window.print = () => {

@@ -8,6 +8,8 @@ export * from "./handoff";
 export * from "./kitchen-layout";
 export * from "./placement-history";
 export * from "./plan-export";
+export * from "./plan-pdf";
+export * from "./plan-sheets";
 export * from "./project-draft";
 export * from "./removal";
 export * from "./room";

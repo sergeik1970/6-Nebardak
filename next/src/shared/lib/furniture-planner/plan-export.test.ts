@@ -4,7 +4,6 @@ import {
     buildDrawingPlanSpecification,
     buildPlanSpecification,
     getPlanExportFilename,
-    renderPlanSpecificationPng,
 } from "./plan-export";
 import { Placement, Room } from "./types";
 import { applyRoomGeometry, createLRoomGeometry } from "./room-geometry";
@@ -204,23 +203,9 @@ describe("plan export", () => {
 
     it("creates a stable UTC filename and falls back safely for a bad date", () => {
         expect(getPlanExportFilename("2026-07-17T22:30:00-03:00")).toBe(
-            "stylefinder-plan-2026-07-18.png",
+            "stylefinder-plan-2026-07-18.pdf",
         );
-        expect(getPlanExportFilename("bad-date")).toBe("stylefinder-plan-1970-01-01.png");
-    });
-
-    it("fails visibly when PNG export is called outside a browser", async () => {
-        const result = buildPlanSpecification({
-            room,
-            placements,
-            priorities: {},
-            validation: { valid: true, issues: [] },
-            generatedAt: "2026-07-17T07:00:00.000Z",
-        });
-
-        await expect(renderPlanSpecificationPng(result)).rejects.toThrow(
-            "доступен только в браузере",
-        );
+        expect(getPlanExportFilename("bad-date")).toBe("stylefinder-plan-1970-01-01.pdf");
     });
 });
 
