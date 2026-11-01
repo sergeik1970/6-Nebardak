@@ -67,7 +67,7 @@ import {
     type WindowOpening,
 } from "@/shared/lib/furniture-planner";
 import styles from "./index.module.scss";
-import { byPointer } from "./pointer-wording";
+import { byPointer, isTouchFirst } from "./pointer-wording";
 import FurnitureEditor from "./FurnitureEditor";
 import MeasureTool from "./MeasureTool";
 import {
@@ -111,6 +111,20 @@ import type {
     SolverWorkerResponse,
 } from "@/shared/lib/furniture-planner/solver.worker";
 import Dialog from "@/shared/components/Dialog";
+import {
+    MAX_TYPED_WALL_DIGITS,
+    moveWallEnd,
+    nextWallChainStep,
+    resolveTypedWall,
+    wallDirection,
+    type TypedWallRequest,
+    type WallChainStep,
+} from "./wall-entry";
+import {
+    isRoomDesignAvailable,
+    ROOM_DESIGN_UNAVAILABLE_MESSAGE,
+    ROOM_DESIGN_UNAVAILABLE_TITLE,
+} from "./room-availability";
 import { RECT_TEMPLATE_LIMITS, createRectTemplateRoom, roomToDrawingScene } from "./room-template";
 
 import ProjectTools, { DEFAULT_DRAWING_LAYERS } from "./ProjectTools";
@@ -246,6 +260,22 @@ type WallDrag = ContourWallDrag | SegmentWallDrag;
 const BOARD_WIDTH_MM = 16_000;
 const BOARD_HEIGHT_MM = 10_000;
 const LEGACY_SNAP_MM = DRAW_ROOM_GRID_SNAP_MM;
+/** A mouse press that travels less than this is a click, not a dragged wall. */
+const WALL_CLICK_SLOP_PX = 6;
+
+/** The wall a typed length gives, aimed where the cursor points; null if it points nowhere. */
+const resolveTypedWallAim = (
+    text: string,
+    start: Point,
+    aim: Point | null,
+    wall: Pick<TypedWallRequest, "thickness" | "partition" | "attached" | "previous">,
+) => {
+    const innerLength = Number(text);
+    const direction = aim ? wallDirection(start, aim) : null;
+    return direction && innerLength
+        ? resolveTypedWall({ ...wall, start, direction, innerLength })
+        : null;
+};
 const MAX_HISTORY = 40;
 const DOOR_WIDTH_MM = 900;
 const WINDOW_WIDTH_MM = 1200;
@@ -489,8 +519,16 @@ const largeAreaFormatter = new Intl.NumberFormat("ru-RU", {
 });
 const formatMeters = (millimeters: number) => `${decimalFormatter.format(millimeters / 1000)} м`;
 /** Architectural drawing labels are deliberately compact: centimetres, no duplicate unit. */
-const formatWallLength = (millimeters: number) => `${Math.round(millimeters / 10)}`;
-const formatWallLengthWithUnit = (millimeters: number) => `${Math.round(millimeters / 10)} см`;
+const formatWallLength = (millimeters: number) => `${Math.round(millimeters)}`;
+const formatWallLengthWithUnit = (millimeters: number) => `${Math.round(millimeters)} мм`;
+/** The tape-measure length of a wall on an open contour, between its two corners' inner faces. */
+const getClearWallLength = (segment: { start: Point; end: Point }, thickness: number) =>
+    Math.max(
+        0,
+        Math.abs(segment.end.x - segment.start.x) +
+            Math.abs(segment.end.y - segment.start.y) -
+            thickness,
+    );
 const formatWallThickness = (millimeters: number) =>
     millimeters % 10 === 0 ? `${millimeters / 10} см` : `${millimeters} мм`;
 const getWallCursorCellOrigin = (point: Point, thickness: number): Point => ({
@@ -2104,6 +2142,7 @@ const getLiveWallDimensions = (
     attachment: WallAnchorAttachment | null,
     obstacles: LiveDimensionObstacle[] = [],
     viewport: CanvasViewBox = DEFAULT_VIEW_BOX,
+    displayLength?: number,
 ): LiveWallDimension[] => {
     const envelope = getWallEnvelopeFromPoints(segment.start, segment.end, thickness);
     if (!envelope) return [];
@@ -2113,7 +2152,7 @@ const getLiveWallDimensions = (
     const thicknessLength = horizontal
         ? envelope.bottom - envelope.top
         : envelope.right - envelope.left;
-    const lengthValue = formatWallLength(length);
+    const lengthValue = formatWallLength(displayLength ?? length);
     const thicknessValue = formatWallLength(thicknessLength);
     const lengthLabel = getLiveWallDimensionLabelSize(lengthValue, millimetersPerPixel);
     const thicknessLabel = getLiveWallDimensionLabelSize(thicknessValue, millimetersPerPixel);
@@ -2342,7 +2381,8 @@ const getOpenCornerClearDimensions = (
         if (length <= 0) return null;
         const dimensionStart = verticalAxis ? { x: axis, y: start.y } : { x: start.x, y: axis };
         const dimensionEnd = verticalAxis ? { x: axis, y: end.y } : { x: end.x, y: axis };
-        const labelValue = formatWallLength(length);
+        // Agrees with the wall's own length until the contour closes.
+        const labelValue = formatWallLength(Math.max(0, length - thickness));
         return {
             id: "length-first",
             segmentId: `${segment.id}-${dimensionId}`,
@@ -2562,6 +2602,9 @@ const getPersistentWallDimensions = (
                     null,
                     [],
                     view,
+                    includeCornerClearReferences
+                        ? getClearWallLength(segment, thickness)
+                        : undefined,
                 ),
                 primaryLengthRole: null,
             },
@@ -4071,6 +4114,7 @@ const DrawRoom: React.FC = () => {
     // Set when a whole room appears at once (template, converted room).
     const fitAfterSceneChangeRef = useRef(false);
     const [templateOpen, setTemplateOpen] = useState(false);
+    const [roomDesignNoticeOpen, setRoomDesignNoticeOpen] = useState(false);
     const [templateError, setTemplateError] = useState("");
     const [newerPlannerRoom, setNewerPlannerRoom] = useState<Room | null>(null);
     const [selectedDoorKind, setSelectedDoorKind] = useState<DoorKind>("room");
@@ -4105,6 +4149,20 @@ const DrawRoom: React.FC = () => {
         startViewBox: CanvasViewBox;
     } | null>(null);
     const sceneForInteractionRef = useRef<Scene>(EMPTY_SCENE);
+    // Click-to-draw: after a plain click the wall follows the cursor with no
+    // button held, and each next click or typed length continues the chain.
+    const wallChainRef = useRef(false);
+    const wallChainStepRef = useRef<WallChainStep | null>(null);
+    const [wallChainStep, setWallChainStep] = useState<WallChainStep | null>(null);
+    const rememberWallChainStep = useCallback((step: WallChainStep | null) => {
+        wallChainStepRef.current = step;
+        setWallChainStep(step);
+    }, []);
+    const wallPressRef = useRef<{ x: number; y: number } | null>(null);
+    const wallAimRef = useRef<Point | null>(null);
+    const wallRawPointRef = useRef<Point | null>(null);
+    const [wallChainPointer, setWallChainPointer] = useState<{ x: number; y: number } | null>(null);
+    const [typedWallLength, setTypedWallLength] = useState("");
     const [wallDrawingAnchorPoint, setWallDrawingAnchorPoint] = useState<Point | null>(null);
     const [wallDrawingAnchorAttachment, setWallDrawingAnchorAttachment] =
         useState<WallAnchorAttachment | null>(null);
@@ -4131,7 +4189,7 @@ const DrawRoom: React.FC = () => {
     const [openingDragPreview, setOpeningDragPreview] = useState<OpeningPreview | null>(null);
     const [notice, setNotice] = useState(() =>
         byPointer(
-            "Зажмите левую кнопку и ведите по сетке — стена рисуется сразу под курсором.",
+            "Зажмите левую кнопку и ведите по сетке — или кликните и наберите длину в мм.",
             "Ведите пальцем по сетке — стена рисуется сразу за ним.",
         ),
     );
@@ -4958,6 +5016,10 @@ const DrawRoom: React.FC = () => {
             setMeasuring(false);
             const doorKind = nextDoorKind ?? selectedDoorKind;
             if (nextTool !== "wall") {
+                wallChainRef.current = false;
+                rememberWallChainStep(null);
+                setWallChainPointer(null);
+                setTypedWallLength("");
                 wallDrawingRef.current = false;
                 wallDrawingAnchorRef.current = null;
                 setWallDrawingAnchorPoint(null);
@@ -4987,7 +5049,7 @@ const DrawRoom: React.FC = () => {
                               "Ведите пальцем по сетке — новая внутренняя стена станет перегородкой автоматически.",
                           )
                         : byPointer(
-                              "Зажмите левую кнопку и ведите по сетке — стройте внешний контур комнаты.",
+                              "Зажмите левую кнопку и ведите по сетке или кликните и наберите длину в мм — стройте внешний контур комнаты.",
                               "Ведите пальцем по сетке — стройте внешний контур комнаты.",
                           )
                     : nextTool === "door"
@@ -5003,7 +5065,7 @@ const DrawRoom: React.FC = () => {
                           : "Перемещайте поле ЛКМ. Для рисования выберите «Стена».",
             );
         },
-        [preview, selectedDoorKind],
+        [preview, selectedDoorKind, rememberWallChainStep],
     );
 
     const selectContourWall = useCallback(
@@ -5354,14 +5416,18 @@ const DrawRoom: React.FC = () => {
                 const activeScene = sceneForInteractionRef.current;
                 const activeDrawing = wallDrawingAnchorRef.current;
                 if (wallDrawingRef.current && activeDrawing) {
-                    setHoverPoint(
-                        resolveDragEnd(
-                            activeScene.segments,
-                            activeDrawing.start,
-                            point,
-                            getSceneSnapMm(activeScene),
-                        ),
+                    const aim = resolveDragEnd(
+                        activeScene.segments,
+                        activeDrawing.start,
+                        point,
+                        getSceneSnapMm(activeScene),
                     );
+                    wallRawPointRef.current = point;
+                    wallAimRef.current = aim;
+                    if (wallChainRef.current) {
+                        setWallChainPointer({ x: event.clientX, y: event.clientY });
+                    }
+                    setHoverPoint(aim);
                     return;
                 }
                 setHoverPoint(point);
@@ -5373,7 +5439,7 @@ const DrawRoom: React.FC = () => {
     );
 
     const startPan = useCallback((event: React.PointerEvent<SVGSVGElement>) => {
-        if (wallDrawingRef.current || panningRef.current) return;
+        if ((wallDrawingRef.current && !wallChainRef.current) || panningRef.current) return;
         panningRef.current = true;
         panStartRef.current = {
             pointerId: event.pointerId,
@@ -5410,6 +5476,84 @@ const DrawRoom: React.FC = () => {
             panPointerRef.current = null;
         }
     }, []);
+
+    /** Adds one wall to the plan; returns null, with a notice, if it cannot go there. */
+    const placeWall = useCallback(
+        (
+            anchor: { start: Point; segmentCount: number; attachment: WallAnchorAttachment },
+            end: Point,
+            placement?: { snapMm: number; segments?: DrawWallSegment[] },
+        ) => {
+            const length = Math.abs(end.x - anchor.start.x) + Math.abs(end.y - anchor.start.y);
+            if (length === 0) {
+                setNotice("Нужно потянуть стену дальше по сетке.");
+                return null;
+            }
+            const snapshot = sceneForInteractionRef.current;
+            if (snapshot.segments.length !== anchor.segmentCount) {
+                setNotice("Контур изменился во время рисования. Повторите стену.");
+                return null;
+            }
+            const added = addDrawWallSegment(
+                placement?.segments ?? snapshot.segments,
+                anchor.start,
+                end,
+                placement?.snapMm ?? getSceneSnapMm(snapshot),
+            );
+            if (added.status === "invalid") {
+                setNotice(added.message);
+                return null;
+            }
+            if (wouldOrphanPartitionDoor(snapshot, added.segments)) {
+                setNotice(
+                    "Новая стена изменила бы перегородку с дверью. Сначала перенесите или удалите этот проём.",
+                );
+                return null;
+            }
+            const endAttachment = getWallAnchorFeedback(
+                snapshot.segments,
+                end,
+                getWallMagnetRadius(snapshot, sceneSnapMm, millimetersPerPixel),
+                sceneSnapMm,
+            ).attachment;
+            const completedRoom = deriveDrawWallGraphRoom(
+                added.segments,
+                getSceneWallThickness(snapshot),
+            );
+            // Before the exterior perimeter is complete, a wall that joins two
+            // existing wall sides can close an accidental small pocket. That
+            // must never silently redefine the whole room as a partition bay.
+            if (
+                !preview &&
+                anchor.attachment === "side" &&
+                endAttachment === "side" &&
+                completedRoom
+            ) {
+                setNotice(
+                    "Сначала замкните внешний контур. Новая стена не должна превращать часть незавершённого эскиза в комнату.",
+                );
+                return null;
+            }
+            commitScene({ ...snapshot, segments: added.segments });
+            if (!preview && completedRoom) {
+                setTool("select");
+                autoFitPendingRef.current = true;
+            }
+            setNotice(
+                !preview && completedRoom
+                    ? "Контур замкнут. Режим «Выбрать» включён: нажмите на стену, чтобы открыть три точки перемещения."
+                    : snapshot.segments.length === 0
+                      ? "Первая стена добавлена. Её размеры остаются на чертеже; следующую стену можно начать в любой точке."
+                      : "Сегмент добавлен. Его размеры остаются на чертеже; новую стену можно начать в любой точке или от существующей.",
+            );
+            return {
+                closed: !preview && Boolean(completedRoom),
+                endAttachment,
+                segments: added.segments,
+            };
+        },
+        [commitScene, millimetersPerPixel, preview, sceneSnapMm],
+    );
 
     const commitWallSegmentFromDrag = useCallback(
         (event: React.PointerEvent<SVGSVGElement>) => {
@@ -5449,68 +5593,7 @@ const DrawRoom: React.FC = () => {
             // finished endpoint. The idle affordance returns on the next real
             // pointer move, while the committed material stays clean.
             setHoverPoint(null);
-            const length = Math.abs(end.x - anchor.start.x) + Math.abs(end.y - anchor.start.y);
-            if (length === 0) {
-                setNotice("Нужно потянуть стену дальше по сетке.");
-                return;
-            }
-            const snapshot = sceneForInteractionRef.current;
-            if (snapshot.segments.length !== anchor.segmentCount) {
-                setNotice("Контур изменился во время рисования. Повторите стену.");
-                return;
-            }
-            const added = addDrawWallSegment(
-                snapshot.segments,
-                anchor.start,
-                end,
-                getSceneSnapMm(snapshot),
-            );
-            if (added.status === "invalid") {
-                setNotice(added.message);
-                return;
-            }
-            if (wouldOrphanPartitionDoor(snapshot, added.segments)) {
-                setNotice(
-                    "Новая стена изменила бы перегородку с дверью. Сначала перенесите или удалите этот проём.",
-                );
-                return;
-            }
-            const endAttachment = getWallAnchorFeedback(
-                snapshot.segments,
-                end,
-                getWallMagnetRadius(snapshot, sceneSnapMm, millimetersPerPixel),
-                sceneSnapMm,
-            ).attachment;
-            const completedRoom = deriveDrawWallGraphRoom(
-                added.segments,
-                getSceneWallThickness(snapshot),
-            );
-            // Before the exterior perimeter is complete, a wall that joins two
-            // existing wall sides can close an accidental small pocket. That
-            // must never silently redefine the whole room as a partition bay.
-            if (
-                !preview &&
-                anchor.attachment === "side" &&
-                endAttachment === "side" &&
-                completedRoom
-            ) {
-                setNotice(
-                    "Сначала замкните внешний контур. Новая стена не должна превращать часть незавершённого эскиза в комнату.",
-                );
-                return;
-            }
-            commitScene({ ...snapshot, segments: added.segments });
-            if (!preview && completedRoom) {
-                setTool("select");
-                autoFitPendingRef.current = true;
-            }
-            setNotice(
-                !preview && completedRoom
-                    ? "Контур замкнут. Режим «Выбрать» включён: нажмите на стену, чтобы открыть три точки перемещения."
-                    : snapshot.segments.length === 0
-                      ? "Первая стена добавлена. Её размеры остаются на чертеже; следующую стену можно начать в любой точке."
-                      : "Сегмент добавлен. Его размеры остаются на чертеже; новую стену можно начать в любой точке или от существующей.",
-            );
+            placeWall(anchor, end);
             if (pointerId !== null) {
                 try {
                     event.currentTarget.releasePointerCapture(pointerId);
@@ -5519,7 +5602,7 @@ const DrawRoom: React.FC = () => {
                 }
             }
         },
-        [commitScene, millimetersPerPixel, pointFromEvent, preview, sceneSnapMm],
+        [placeWall, pointFromEvent],
     );
 
     const beginWallDrawing = useCallback(
@@ -5557,6 +5640,143 @@ const DrawRoom: React.FC = () => {
             }
         },
         [millimetersPerPixel, sceneSnapMm],
+    );
+
+    const endWallChain = useCallback(
+        (message: string) => {
+            wallChainRef.current = false;
+            rememberWallChainStep(null);
+            wallDrawingRef.current = false;
+            wallDrawingAnchorRef.current = null;
+            wallAimRef.current = null;
+            setWallChainPointer(null);
+            setTypedWallLength("");
+            setWallDrawingAnchorPoint(null);
+            setWallDrawingAnchorAttachment(null);
+            setHoverPoint(null);
+            setNotice(message);
+        },
+        [rememberWallChainStep],
+    );
+
+    const continueWallChain = useCallback(
+        (
+            placed: NonNullable<ReturnType<typeof placeWall>>,
+            start: Point,
+            end: Point,
+            typed: boolean,
+        ) => {
+            setTypedWallLength("");
+            // A partition is done once it reaches another wall.
+            if (placed.closed || (preview && placed.endAttachment !== "free")) {
+                wallChainRef.current = false;
+                rememberWallChainStep(null);
+                wallDrawingRef.current = false;
+                wallDrawingAnchorRef.current = null;
+                wallAimRef.current = null;
+                setWallChainPointer(null);
+                setWallDrawingAnchorPoint(null);
+                setWallDrawingAnchorAttachment(null);
+                setHoverPoint(null);
+                return;
+            }
+            const direction = wallDirection(start, end);
+            if (direction) {
+                rememberWallChainStep(
+                    nextWallChainStep(wallChainStepRef.current, direction, typed),
+                );
+            }
+            wallDrawingAnchorRef.current = {
+                start: end,
+                segmentCount: placed.segments.length,
+                attachment: "endpoint",
+            };
+            setWallDrawingAnchorPoint(end);
+            setWallDrawingAnchorAttachment("endpoint");
+            const raw = wallRawPointRef.current;
+            const aim = raw
+                ? resolveDragEnd(
+                      placed.segments,
+                      end,
+                      raw,
+                      getSceneSnapMm(sceneForInteractionRef.current),
+                  )
+                : end;
+            const aimed = aim.x !== end.x || aim.y !== end.y;
+            wallAimRef.current = aimed ? aim : null;
+            setHoverPoint(aim);
+            setNotice("Стена добавлена. Следующая точка или длина в мм; Enter — закончить.");
+        },
+        [preview, rememberWallChainStep],
+    );
+
+    useEffect(() => {
+        if (tool !== "wall" && wallChainRef.current) endWallChain("Рисование стены закончено.");
+    }, [endWallChain, tool]);
+
+    const wallChainIsStale = useCallback(() => {
+        const anchor = wallDrawingAnchorRef.current;
+        if (anchor && sceneForInteractionRef.current.segments.length === anchor.segmentCount) {
+            return false;
+        }
+        endWallChain("Чертёж изменился во время рисования. Начните стену заново.");
+        return true;
+    }, [endWallChain]);
+
+    const clickNextWallPoint = useCallback(
+        (point: Point) => {
+            const anchor = wallDrawingAnchorRef.current;
+            if (!anchor || wallChainIsStale()) return;
+            const snapshot = sceneForInteractionRef.current;
+            const end = resolveDragEnd(
+                snapshot.segments,
+                anchor.start,
+                point,
+                getSceneSnapMm(snapshot),
+            );
+            const placed = placeWall(anchor, end, { snapMm: 1 });
+            if (placed) continueWallChain(placed, anchor.start, end, false);
+        },
+        [continueWallChain, placeWall, wallChainIsStale],
+    );
+
+    const commitTypedWall = useCallback(
+        (text: string) => {
+            const anchor = wallDrawingAnchorRef.current;
+            if (!anchor || wallChainIsStale()) return;
+            const wall = resolveTypedWallAim(text, anchor.start, wallAimRef.current, {
+                thickness: getSceneWallThickness(sceneForInteractionRef.current),
+                partition: Boolean(preview),
+                attached: anchor.attachment !== "free",
+                previous: wallChainStepRef.current,
+            });
+            if (!wall) {
+                setNotice("Сначала поведите курсор в сторону, куда пойдёт стена.");
+                return;
+            }
+            const step = wallChainStepRef.current;
+            const trimmed =
+                step && (wall.start.x !== anchor.start.x || wall.start.y !== anchor.start.y)
+                    ? moveWallEnd(
+                          sceneForInteractionRef.current.segments,
+                          anchor.start,
+                          step.direction,
+                          wall.start,
+                      )
+                    : null;
+            const start = trimmed ? wall.start : anchor.start;
+            const shift = {
+                x: wall.end.x - wall.start.x,
+                y: wall.end.y - wall.start.y,
+            };
+            const end = { x: start.x + shift.x, y: start.y + shift.y };
+            const placed = placeWall({ ...anchor, start }, end, {
+                snapMm: 1,
+                ...(trimmed ? { segments: trimmed } : {}),
+            });
+            if (placed) continueWallChain(placed, start, end, true);
+        },
+        [continueWallChain, placeWall, preview, wallChainIsStale],
     );
 
     const addOpening = useCallback(
@@ -5948,6 +6168,7 @@ const DrawRoom: React.FC = () => {
                 return toRoomRegionMetadata({ signature, name: nextName, kind });
             });
             commitScene({ ...scene, regions: { version: 1, items } });
+            if (patch.kind && !isRoomDesignAvailable(patch.kind)) setRoomDesignNoticeOpen(true);
             const updated = items.find((item) => item.signature === signature);
             if (updated)
                 setNotice(
@@ -6269,6 +6490,11 @@ const DrawRoom: React.FC = () => {
             const point = pointFromEvent(event, tool === "wall" ? false : true);
             if (!point) return;
             if (tool === "wall") {
+                if (wallChainRef.current) {
+                    clickNextWallPoint(point);
+                    return;
+                }
+                wallPressRef.current = { x: event.clientX, y: event.clientY };
                 beginWallDrawing(event, point);
                 return;
             }
@@ -6280,6 +6506,7 @@ const DrawRoom: React.FC = () => {
             addOpening,
             addRadiator,
             beginWallDrawing,
+            clickNextWallPoint,
             pointFromEvent,
             renderedRoomRegions,
             spacePan,
@@ -6621,14 +6848,53 @@ const DrawRoom: React.FC = () => {
                 setNotice("Перемещение поля завершено.");
                 return;
             }
-            if (!wallDrawingRef.current) return;
+            if (!wallDrawingRef.current || wallChainRef.current) return;
+            const press = wallPressRef.current;
+            wallPressRef.current = null;
+            const clicked =
+                event.pointerType === "mouse" &&
+                !isTouchFirst() &&
+                press &&
+                Math.hypot(event.clientX - press.x, event.clientY - press.y) < WALL_CLICK_SLOP_PX;
+            if (clicked) {
+                // No drag: stay in the wall and let it follow the cursor.
+                wallChainRef.current = true;
+                rememberWallChainStep(null);
+                wallAimRef.current = null;
+                wallRawPointRef.current = null;
+                if (capturedPointerRef.current !== null) {
+                    try {
+                        event.currentTarget.releasePointerCapture(capturedPointerRef.current);
+                    } catch {
+                        // Capture may already have been released by the browser.
+                    }
+                    capturedPointerRef.current = null;
+                }
+                setWallChainPointer({ x: event.clientX, y: event.clientY });
+                setNotice(
+                    "Кликните вторую точку или наберите длину в мм и нажмите Enter. Esc — отмена.",
+                );
+                return;
+            }
             commitWallSegmentFromDrag(event);
         },
-        [commitScene, commitWallSegmentFromDrag, openingDragPreview, scene, sceneSnapMm, stopPan],
+        [
+            commitScene,
+            commitWallSegmentFromDrag,
+            openingDragPreview,
+            rememberWallChainStep,
+            scene,
+            sceneSnapMm,
+            stopPan,
+        ],
     );
 
     const stopWallDrawing = useCallback(() => {
         if (!wallDrawingRef.current) return;
+        wallChainRef.current = false;
+        rememberWallChainStep(null);
+        setWallChainPointer(null);
+        setTypedWallLength("");
         wallDrawingRef.current = false;
         wallDrawingAnchorRef.current = null;
         setWallDrawingAnchorPoint(null);
@@ -6643,13 +6909,14 @@ const DrawRoom: React.FC = () => {
             }
             capturedPointerRef.current = null;
         }
-    }, []);
+    }, [rememberWallChainStep]);
 
     const handleBoardPointerLeave = useCallback(() => {
         setHoverPoint(null);
         setCursorPoint(null);
         stopPan();
-        stopWallDrawing();
+        // A click-drawn wall waits for the cursor to come back.
+        if (!wallChainRef.current) stopWallDrawing();
     }, [stopPan, stopWallDrawing]);
 
     const handleBoardPointerCancel = useCallback(() => {
@@ -6750,7 +7017,7 @@ const DrawRoom: React.FC = () => {
         setTool("wall");
         setNotice(
             byPointer(
-                "Поле очищено. Зажмите левую кнопку и ведите по сетке, чтобы нарисовать стену.",
+                "Поле очищено. Кликните и наберите длину в мм или зажмите левую кнопку и ведите по сетке.",
                 "Поле очищено. Ведите пальцем по сетке, чтобы нарисовать стену.",
             ),
         );
@@ -6967,7 +7234,7 @@ const DrawRoom: React.FC = () => {
         }
         setNotice(
             byPointer(
-                "Чистый лист восстановлен. Зажмите левую кнопку и ведите по сетке, чтобы нарисовать стену.",
+                "Чистый лист восстановлен. Кликните и наберите длину в мм или зажмите левую кнопку и ведите по сетке.",
                 "Чистый лист восстановлен. Ведите пальцем по сетке, чтобы нарисовать стену.",
             ),
         );
@@ -7006,6 +7273,38 @@ const DrawRoom: React.FC = () => {
                 return;
             }
             if (isTyping) return;
+            if (wallChainRef.current && tool === "wall") {
+                const plain = !event.ctrlKey && !event.metaKey && !event.altKey;
+                if (plain && /^[0-9]$/.test(event.key)) {
+                    event.preventDefault();
+                    setTypedWallLength((current) =>
+                        current.length < MAX_TYPED_WALL_DIGITS
+                            ? `${current}${event.key}`.replace(/^0+/, "")
+                            : current,
+                    );
+                    return;
+                }
+                if (plain && event.key === "Backspace") {
+                    event.preventDefault();
+                    setTypedWallLength((current) => current.slice(0, -1));
+                    return;
+                }
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    if (typedWallLength) commitTypedWall(typedWallLength);
+                    else endWallChain("Рисование стены закончено.");
+                    return;
+                }
+                if (event.key === "Escape") {
+                    event.preventDefault();
+                    if (typedWallLength) setTypedWallLength("");
+                    else endWallChain("Незавершённый сегмент отменён.");
+                    return;
+                }
+                if (!plain && event.key.toLowerCase() === "z") {
+                    endWallChain("Рисование стены закончено.");
+                }
+            }
             if (
                 (event.key === "Delete" || event.key === "Backspace") &&
                 selectedRadiatorData &&
@@ -7092,6 +7391,9 @@ const DrawRoom: React.FC = () => {
         };
     }, [
         cancelContourWallDrag,
+        commitTypedWall,
+        endWallChain,
+        typedWallLength,
         deleteSelectedOpening,
         deleteSelectedRadiator,
         deleteSelectedWall,
@@ -7108,12 +7410,34 @@ const DrawRoom: React.FC = () => {
         undo,
     ]);
 
+    const typedWall = useMemo(
+        () =>
+            tool === "wall" && typedWallLength && wallDrawingAnchorPoint
+                ? resolveTypedWallAim(typedWallLength, wallDrawingAnchorPoint, hoverPoint, {
+                      thickness: renderedWallThickness,
+                      partition: Boolean(preview),
+                      attached: wallDrawingAnchorAttachment !== "free",
+                      previous: wallChainStep,
+                  })
+                : null,
+        [
+            hoverPoint,
+            preview,
+            renderedWallThickness,
+            tool,
+            typedWallLength,
+            wallChainStep,
+            wallDrawingAnchorAttachment,
+            wallDrawingAnchorPoint,
+        ],
+    );
     const ghost = useMemo(
         () =>
-            tool === "wall" && wallDrawingAnchorPoint && hoverPoint
+            typedWall ??
+            (tool === "wall" && wallDrawingAnchorPoint && hoverPoint
                 ? { start: wallDrawingAnchorPoint, end: hoverPoint }
-                : null,
-        [hoverPoint, tool, wallDrawingAnchorPoint],
+                : null),
+        [hoverPoint, tool, typedWall, wallDrawingAnchorPoint],
     );
     // Hover stays deliberately quiet: only the 50 mm cell moves under the
     // cursor.  The magnet is resolved and revealed on pointer down, not while
@@ -7168,6 +7492,13 @@ const DrawRoom: React.FC = () => {
               ]
             : []),
     ];
+    const liveDisplayLength = !ghost
+        ? undefined
+        : typedWallLength
+          ? Number(typedWallLength)
+          : preview
+            ? undefined
+            : getClearWallLength(ghost, renderedWallThickness);
     const liveWallDimensions = ghost
         ? getLiveWallDimensions(
               ghost,
@@ -7176,6 +7507,7 @@ const DrawRoom: React.FC = () => {
               wallDrawingAnchorAttachment,
               liveDimensionObstacles,
               viewBox,
+              liveDisplayLength,
           )
         : [];
     // While a wall is being dragged its live values take priority: a committed
@@ -8044,6 +8376,26 @@ const DrawRoom: React.FC = () => {
                 />
 
                 <Dialog
+                    open={roomDesignNoticeOpen}
+                    title={ROOM_DESIGN_UNAVAILABLE_TITLE}
+                    onCancel={() => setRoomDesignNoticeOpen(false)}
+                    actions={
+                        <button
+                            data-variant="primary"
+                            type="button"
+                            onClick={() => setRoomDesignNoticeOpen(false)}
+                        >
+                            Понятно
+                        </button>
+                    }
+                >
+                    <p>
+                        {ROOM_DESIGN_UNAVAILABLE_MESSAGE} Помещение останется на плане с выбранным
+                        типом.
+                    </p>
+                </Dialog>
+
+                <Dialog
                     open={templateOpen}
                     title="Прямоугольная комната"
                     onCancel={() => {
@@ -8518,6 +8870,11 @@ const DrawRoom: React.FC = () => {
                             data-grid-presentation-level={gridPresentation.level}
                             onPointerMove={handleBoardPointerMove}
                             onPointerLeave={handleBoardPointerLeave}
+                            onContextMenu={(event) => {
+                                if (!wallChainRef.current) return;
+                                event.preventDefault();
+                                endWallChain("Рисование стены закончено.");
+                            }}
                             onPointerCancel={handleBoardPointerCancel}
                             onPointerUp={handleBoardPointerUp}
                             onPointerDown={handleBoardPointerDown}
@@ -10479,9 +10836,12 @@ const DrawRoom: React.FC = () => {
                                         reviewStatus={autoLayoutReviewStatus}
                                         onReview={(review) => void submitAutoLayoutReview(review)}
                                         blockedReason={
-                                            autoLayoutTarget && autoLayoutTarget.status !== "ready"
-                                                ? autoLayoutTarget.message
-                                                : null
+                                            !isRoomDesignAvailable(furnitureRoom?.kind)
+                                                ? ROOM_DESIGN_UNAVAILABLE_MESSAGE
+                                                : autoLayoutTarget &&
+                                                    autoLayoutTarget.status !== "ready"
+                                                  ? autoLayoutTarget.message
+                                                  : null
                                         }
                                     />
                                 ) : null
@@ -11091,7 +11451,7 @@ const DrawRoom: React.FC = () => {
                             aria-live="polite"
                         >
                             {ghost && liveWallLength > 0
-                                ? `${wallDrawingAnchorAttachment === "endpoint" ? "Привязка к концу стены." : wallDrawingAnchorAttachment === "side" ? "Привязка к стороне стены." : "Свободная точка."} Угол 90 градусов, направление по оси. Длина: ${formatWallLengthWithUnit(liveWallLength)}. Толщина: ${formatWallThickness(renderedWallThickness)}.${liveDimensionLayout === "compact" ? " Компактная подача: дублирующий размер у занятого торца скрыт, исходная толщина сохранена." : ""}`
+                                ? `${wallDrawingAnchorAttachment === "endpoint" ? "Привязка к концу стены." : wallDrawingAnchorAttachment === "side" ? "Привязка к стороне стены." : "Свободная точка."} Угол 90 градусов, направление по оси. Длина: ${formatWallLengthWithUnit(liveDisplayLength ?? liveWallLength)}. Толщина: ${formatWallThickness(renderedWallThickness)}.${liveDimensionLayout === "compact" ? " Компактная подача: дублирующий размер у занятого торца скрыт, исходная толщина сохранена." : ""}`
                                 : ""}
                         </span>
                         <span
@@ -11109,6 +11469,17 @@ const DrawRoom: React.FC = () => {
                         </span>
                     </div>
                 </section>
+
+                {wallChainPointer && tool === "wall" && (
+                    <div
+                        className={styles.wallLengthEntry}
+                        data-draw-room-wall-length="true"
+                        aria-live="polite"
+                        style={{ left: wallChainPointer.x + 18, top: wallChainPointer.y + 20 }}
+                    >
+                        {typedWallLength ? `${typedWallLength} мм` : "Длина, мм"}
+                    </div>
+                )}
 
                 <footer className={styles.statusBar}>
                     <span data-draw-room-status="grid">

@@ -763,6 +763,19 @@
 }
 .constructionGuides,
 .constructionAnchorLayer,
+.wallLengthEntry {
+    position: fixed;
+    z-index: 40;
+    padding: 0.2rem 0.5rem;
+    color: #fffdf8;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+    background: #2f2a24;
+}
+
 .liveWallDimensions {
     pointer-events: none;
 }

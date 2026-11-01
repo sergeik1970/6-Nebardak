@@ -40,6 +40,7 @@ jobs:
           NEXT_PUBLIC_AUTH_ENABLED: "false"
           NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED: "false"
           NEXT_PUBLIC_BETA_BADGE_ENABLED: "true"
+          NEXT_PUBLIC_KITCHEN_BATH_DESIGN: "on"
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
         env:
@@ -47,6 +48,7 @@ jobs:
           NEXT_PUBLIC_AUTH_ENABLED: "false"
           NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED: "false"
           NEXT_PUBLIC_BETA_BADGE_ENABLED: "true"
+          NEXT_PUBLIC_KITCHEN_BATH_DESIGN: "on"
       - name: Preserve Playwright diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

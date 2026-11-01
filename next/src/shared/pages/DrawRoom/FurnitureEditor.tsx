@@ -23,7 +23,7 @@ import {
     type FurnitureRoom,
 } from "./furniture";
 import {
-    FURNITURE_MENU,
+    OFFERED_FURNITURE_MENU,
     furnitureMenuOrder,
     menuGroupDefinitions,
     searchFurnitureMenu,
@@ -571,7 +571,7 @@ export default function FurnitureEditor({
     const screenUnit = 1 / (board?.getScreenCTM()?.a || 0.1);
     const layerHost =
         board?.querySelector<SVGGElement>("[data-draw-furniture-host='true']") ?? board;
-    const openSection = FURNITURE_MENU.find((menuSection) => menuSection.id === section);
+    const openSection = OFFERED_FURNITURE_MENU.find((menuSection) => menuSection.id === section);
     const autoLayoutOpen = section === AUTO_LAYOUT && Boolean(autoLayout);
     const shortcutsOpen = section === SHORTCUTS;
     const flyoutOpen = Boolean(query.trim() || openSection || autoLayoutOpen || shortcutsOpen);

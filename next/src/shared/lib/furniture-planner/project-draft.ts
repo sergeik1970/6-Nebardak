@@ -1,3 +1,4 @@
+import { MAX_DRAWN_CONTOUR_MM } from "./draw-room-grid";
 import { getProjectStorage } from "@/shared/lib/project-scope/storage";
 import { drawingBlockingIssues } from "./draw-furniture-handoff";
 import { getFurniturePhotos } from "./furniture-photos";
@@ -37,7 +38,7 @@ const LEGACY_PROJECT_DRAFT_STORAGE_KEYS = [
 ] as const;
 
 const MIN_ROOM_MM = 2400;
-const MAX_ROOM_MM = 10000;
+const MAX_ROOM_MM = MAX_DRAWN_CONTOUR_MM;
 const MAX_LAYOUT_VARIANTS = 3;
 const MAX_HISTORY_SNAPSHOTS = 50;
 const MAX_LAYOUT_NOTES = 32;
