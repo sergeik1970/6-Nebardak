@@ -536,8 +536,7 @@ const getClearWallLength = (segment: { start: Point; end: Point }, thickness: nu
             Math.abs(segment.end.y - segment.start.y) -
             thickness,
     );
-const formatWallThickness = (millimeters: number) =>
-    millimeters % 10 === 0 ? `${millimeters / 10} см` : `${millimeters} мм`;
+const formatWallThickness = (millimeters: number) => `${millimeters} мм`;
 const getWallCursorCellOrigin = (point: Point, thickness: number): Point => ({
     x: point.x - thickness / 2,
     y: point.y - thickness / 2,
@@ -1790,7 +1789,6 @@ const getOpeningHeightTag = (
     const labelHeight = Math.max(115, millimetersPerPixel * 18);
     const inward = opening.segment.inwardNormal;
     const vertical = opening.segment.orientation === "vertical";
-    const cm = (value: number) => String(Math.round(value / 10));
     if (opening.kind === "window") {
         const distance = thickness + Math.max(100, millimetersPerPixel * 15) + labelHeight * 1.8;
         const sill = getWindowSillHeight(opening.item);
@@ -1799,8 +1797,8 @@ const getOpeningHeightTag = (
             kind: "window",
             point: { x: centre.x - inward.x * distance, y: centre.y - inward.y * distance },
             vertical,
-            height: `H=${cm(getWindowHeight(opening.item))}`,
-            sill: opening.item.windowKind === "floor-to-ceiling" ? null : `Н под.=${cm(sill)}`,
+            height: `H=${getWindowHeight(opening.item)}`,
+            sill: opening.item.windowKind === "floor-to-ceiling" ? null : `Н под.=${sill}`,
         };
     }
     const partition = Boolean(opening.item.partitionId);
@@ -1817,7 +1815,7 @@ const getOpeningHeightTag = (
         kind: "door",
         point: { x: centre.x + normal.x * distance, y: centre.y + normal.y * distance },
         vertical,
-        height: `H=${cm(getDoorHeight(opening.item))}`,
+        height: `H=${getDoorHeight(opening.item)}`,
         sill: null,
     };
 };
@@ -3857,7 +3855,7 @@ const getRoomRegionLabelPlacement = (
     const clearHeight = clearBounds.bottom - clearBounds.top;
     if (clearWidth <= 0 || clearHeight <= 0) return null;
 
-    const heightValue = `H=${Math.round(ROOM_CEILING_HEIGHT_MM / 10)}`;
+    const heightValue = `H=${ROOM_CEILING_HEIGHT_MM}`;
     const areaValue = formatRoomArea(region.areaSquareMillimeters / 1_000_000);
     const title = region.name && !/^Помещение \d+$/.test(region.name) ? region.name : null;
     const lineCount = title ? 3 : 2;
@@ -3979,7 +3977,7 @@ const getRoomSummaryPlacement = (
     const usableContour = faces.innerFaceContour;
     const bounds = getContourBounds(usableContour);
     const areaSquareMeters = getRoomClearAreaSquareMeters(contour, thickness);
-    const heightValue = `H=${Math.round(ROOM_CEILING_HEIGHT_MM / 10)}`;
+    const heightValue = `H=${ROOM_CEILING_HEIGHT_MM}`;
     const areaValue = formatRoomArea(areaSquareMeters);
     const smallestClearSpan = Math.min(bounds.right - bounds.left, bounds.bottom - bounds.top);
     const baseFontSize = Math.max(
@@ -6241,7 +6239,7 @@ const DrawRoom: React.FC = () => {
                     ...scene,
                     doors: scene.doors.map((door) => (door.id === item.id ? candidate : door)),
                 });
-                if (nextWidth < NARROW_DOOR_OPENING_MM && item.width >= NARROW_DOOR_OPENING_MM)
+                if (nextWidth <= NARROW_DOOR_OPENING_MM && item.width > NARROW_DOOR_OPENING_MM)
                     setNarrowDoorNoticeOpen(true);
             } else {
                 commitScene({
@@ -8501,7 +8499,7 @@ const DrawRoom: React.FC = () => {
 
                 <Dialog
                     open={narrowDoorNoticeOpen}
-                    title={`Проём меньше ${NARROW_DOOR_OPENING_MM} мм`}
+                    title={`Проём ${NARROW_DOOR_OPENING_MM} мм или меньше`}
                     onCancel={() => setNarrowDoorNoticeOpen(false)}
                     actions={
                         <button
@@ -11144,7 +11142,7 @@ const DrawRoom: React.FC = () => {
                                         </span>
                                         <div>
                                             <b>Радиатор</b>
-                                            <small>Перед ним 30 см остаются свободными</small>
+                                            <small>Перед ним 300 мм остаются свободными</small>
                                         </div>
                                         <button
                                             type="button"
@@ -11329,8 +11327,8 @@ const DrawRoom: React.FC = () => {
                                         </b>
                                         <small>
                                             {(selectedOpeningData.item as DoorOpening).partitionId
-                                                ? "Привязано к перегородке · шаг 50 мм"
-                                                : "Привязано к стене · шаг 50 мм"}
+                                                ? `Привязано к перегородке · шаг ${sceneSnapMm} мм`
+                                                : `Привязано к стене · шаг ${sceneSnapMm} мм`}
                                         </small>
                                     </div>
                                     <button

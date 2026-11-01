@@ -132,7 +132,10 @@ describe("drawing sheets", () => {
         expect(narrow).toContain(">550×2000<");
         expect(narrow).toContain("разобранном виде");
         expect(narrow).toContain('fill="#d0342c"');
-        expect(narrow).toContain(">Д1: проём меньше 700 мм.");
+        expect(narrow).toContain(">Д1: проём 700 мм или меньше.");
+        // Exactly 700 still warns; the next step up does not.
+        expect(schedule([door({ width: 700 })])).toContain("разобранном виде");
+        expect(schedule([door({ width: 710 })])).not.toContain("разобранном виде");
     });
 
     it("fills walls by whether they bear load", () => {
