@@ -763,6 +763,14 @@
 }
 .constructionGuides,
 .constructionAnchorLayer,
+.wallBearingControl {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    font-weight: 600;
+}
+
 .wallLengthEntry {
     position: fixed;
     z-index: 40;

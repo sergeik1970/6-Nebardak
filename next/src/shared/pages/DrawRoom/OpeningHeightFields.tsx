@@ -32,7 +32,14 @@ interface HeightInputProps {
  * value is kept as a draft and applied on Enter or when the field is left,
  * so the person can type it out instead of fighting a rejected keystroke.
  */
-const HeightInput = ({ label, value, minimum, maximum, step, onCommit }: HeightInputProps) => {
+export const HeightInput = ({
+    label,
+    value,
+    minimum,
+    maximum,
+    step,
+    onCommit,
+}: HeightInputProps) => {
     const [draft, setDraft] = useState(String(value));
     useEffect(() => setDraft(String(value)), [value]);
     const commit = () => {

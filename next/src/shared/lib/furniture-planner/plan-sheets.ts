@@ -6,7 +6,7 @@ import {
 } from "./opening-heights";
 import {
     getDoorOpeningDepth,
-    getPartitionObstacleRects,
+    getPartitionMaterial,
     getRadiatorBody,
     isHingedDoor,
 } from "./geometry";
@@ -47,6 +47,10 @@ export const STAMP_WIDTH_MM = 185;
 export const STAMP_HEIGHT_MM = 55;
 /** A door leaf is taken this much smaller than its opening. */
 export const DOOR_LEAF_CLEARANCE_MM = 100;
+/** Below this opening, bulky furniture only gets through taken apart. */
+export const NARROW_DOOR_OPENING_MM = 700;
+export const NARROW_DOOR_WARNING =
+    "Габаритная мебель (диваны, кровати, шкафы) может пройти только в разобранном виде. Обратите внимание при закупке.";
 /** With this few doors, doors and windows share one sheet. */
 export const MAX_DOORS_ON_SHARED_SHEET = 6;
 
@@ -57,7 +61,7 @@ const MAIN = 0.35;
 const TEXT = 3;
 const SMALL = 2.5;
 const BEARING_FILL = "#d4d4d4";
-const PARTITION_FILL = "#6f6f6f";
+const NON_BEARING_FILL = "#6f6f6f";
 const RADIATOR = "#d0342c";
 const DIMENSION_GAP = 7;
 const DIMENSION_TIER = 6;
@@ -91,14 +95,16 @@ const text = (
         anchor = "start",
         weight = 400,
         rotate,
+        color,
     }: {
         size?: number;
         anchor?: "start" | "middle" | "end";
         weight?: number;
         rotate?: number;
+        color?: string;
     } = {},
 ) =>
-    `<text x="${n(x)}" y="${n(y)}" font-size="${size}" text-anchor="${anchor}" font-weight="${weight}"${rotate ? ` transform="rotate(${rotate} ${n(x)} ${n(y)})"` : ""}>${escapeXml(value)}</text>`;
+    `<text x="${n(x)}" y="${n(y)}" font-size="${size}" text-anchor="${anchor}" font-weight="${weight}"${color ? ` fill="${color}"` : ""}${rotate ? ` transform="rotate(${rotate} ${n(x)} ${n(y)})"` : ""}>${escapeXml(value)}</text>`;
 
 const estimateTextWidth = (value: string, size: number) => value.length * size * 0.56;
 
@@ -314,7 +320,21 @@ const drawWalls = (room: Room, view: PlanView) => {
     const parts = [
         `<path d="${pathOf(outer)}${pathOf(inner)}" fill="${BEARING_FILL}" fill-rule="evenodd" stroke="${INK}" stroke-width="${MAIN}"/>`,
     ];
-    getPartitionObstacleRects(room).forEach((rect: Rect) => {
+    getRoomBoundarySegments(room)
+        .filter((segment) => room.nonBearingWalls?.includes(segment.id))
+        .forEach((segment) => {
+            const outward = { x: -segment.inwardNormal.x, y: -segment.inwardNormal.y };
+            const corners = [
+                segment.start,
+                segment.end,
+                shift(segment.end, outward, view.thickness),
+                shift(segment.start, outward, view.thickness),
+            ].map(view.at);
+            parts.push(
+                `<path d="${pathOf(corners)}" fill="${NON_BEARING_FILL}" stroke="${INK}" stroke-width="${THIN}"/>`,
+            );
+        });
+    getPartitionMaterial(room).forEach(({ rect, loadBearing }) => {
         const corner = view.at(rect);
         parts.push(
             box(
@@ -322,7 +342,7 @@ const drawWalls = (room: Room, view: PlanView) => {
                 corner.y,
                 view.size(rect.width),
                 view.size(rect.depth),
-                `fill="${PARTITION_FILL}" stroke="${INK}" stroke-width="${THIN}"`,
+                `fill="${loadBearing ? BEARING_FILL : NON_BEARING_FILL}" stroke="${INK}" stroke-width="${THIN}"`,
             ),
         );
     });
@@ -704,7 +724,7 @@ const drawRadiators = (room: Room, view: PlanView) =>
 
 const WALL_LEGEND = [
     { fill: BEARING_FILL, label: "Несущие стены" },
-    { fill: PARTITION_FILL, label: "Ненесущие стены и перегородки" },
+    { fill: NON_BEARING_FILL, label: "Ненесущие стены" },
     { fill: "#fff", stroke: RADIATOR, label: "Радиатор" },
 ];
 
@@ -940,7 +960,8 @@ const scheduleSheets = (specification: PlanSpecification, regions: DrawRoomRegio
     const top = frame.top + 14;
     const doors = doorRows(room);
     const windows = windowRows(room, regions);
-    const doorNote = `Размер полотна указан ориентировочно: проём минус ${DOOR_LEAF_CLEARANCE_MM} мм.`;
+    const narrow = doors.filter((_, index) => room.doors[index].width < NARROW_DOOR_OPENING_MM);
+    const narrowNote = `${narrow.map(([label]) => label).join(", ")}: проём меньше ${NARROW_DOOR_OPENING_MM} мм. ${NARROW_DOOR_WARNING}`;
     const windowNote = "Глубина откоса — расстояние от плоскости стены до окна.";
     const doorBlock = (y: number) => {
         const table = drawTable(left, y + 5, DOOR_COLUMNS, doors);
@@ -948,7 +969,12 @@ const scheduleSheets = (specification: PlanSpecification, regions: DrawRoomRegio
             svg:
                 heading(left, y, "Спецификация дверей") +
                 table.svg +
-                text(left, y + 11 + table.height, doorNote, { size: SMALL }),
+                (narrow.length
+                    ? text(left, y + 11 + table.height, narrowNote, {
+                          weight: 600,
+                          color: RADIATOR,
+                      })
+                    : ""),
             bottom: y + 11 + table.height,
         };
     };
@@ -1026,7 +1052,6 @@ const furnitureScheduleSheets = (specification: PlanSpecification) => {
                 ...(specification.caveats.length
                     ? specification.caveats
                     : ["Дополнительных оговорок для этого варианта нет."]),
-                "Внешний контур показан как несущий, перегородки — как ненесущие; сверьте с техническим планом.",
             ],
         },
     ];

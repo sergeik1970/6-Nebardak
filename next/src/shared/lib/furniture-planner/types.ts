@@ -30,6 +30,8 @@ export interface RoomPartition {
     start: Pick<RoomVertex, "x" | "y">;
     end: Pick<RoomVertex, "x" | "y">;
     thickness: number;
+    /** A partition is non-load-bearing unless marked otherwise. */
+    loadBearing?: boolean;
 }
 
 /**
@@ -347,7 +349,9 @@ export interface Room {
      * Physical exterior wall thickness used to derive this DrawRoom contour.
      * Missing data predates the constructive editor and remains a 50 mm wall.
      */
-    wallThickness?: 50 | 100;
+    wallThickness?: number;
+    /** Boundary segments marked non-load-bearing; the outer walls bear by default. */
+    nonBearingWalls?: string[];
     /** Missing means the backwards-compatible rectangular geometry. */
     geometry?: RoomGeometry;
     /** Omitted by legacy callers and normalized to an empty list. */

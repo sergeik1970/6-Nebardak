@@ -5437,3 +5437,60 @@ test("a flat wider than ten metres, typed to the millimetre, takes a door and su
     await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
     await expect(page.locator("[data-draw-room-opening-kind='door']")).not.toHaveCount(0);
 });
+
+test("a wall carries its own parameters and a narrow door warns about furniture", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "The side card is covered once");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await drawMeasuredRectangle(page, { x: 3000, y: 2000 }, 6000, 4000);
+    await openToolGroup(page, "walls");
+    await page.locator("[data-draw-room-tool='wall']").click();
+    await dragOnBoardWorld(page, { x: 6000, y: 2000 }, { x: 6000, y: 6000 });
+
+    const saved = () =>
+        page.evaluate(() =>
+            JSON.parse(localStorage.getItem("stylefinder:draw-room-editor:v1") ?? "{}"),
+        );
+
+    // An inner wall: non-load-bearing by default, with its own thickness.
+    await page.locator("[data-draw-room-tool='select']").click();
+    const inside = await getBoardScreenPoint(page, 6000, 3000);
+    await page.mouse.click(inside.x, inside.y);
+    const card = page.locator("[data-draw-room-wall-inspector='true']");
+    await expect(card).toBeVisible();
+    await expect(card.getByLabel("Несущая стена")).not.toBeChecked();
+    await card.getByLabel("Несущая стена").check();
+    await card.getByLabel("Толщина, мм").fill("150");
+    await card.getByLabel("Толщина, мм").press("Enter");
+    await expect
+        .poll(
+            async () =>
+                (await saved()).segments.filter(
+                    (wall: { loadBearing?: boolean; thickness?: number }) =>
+                        wall.loadBearing && wall.thickness === 150,
+                ).length,
+        )
+        .toBeGreaterThan(0);
+    await expect((await saved()).wallThickness).toBe(100);
+
+    // A narrow opening is allowed, and warned about once.
+    await page.getByRole("button", { name: "Снять выделение стены" }).click();
+    await page.locator("[data-draw-room-step='openings']").click();
+    await page.locator("[data-draw-room-door-kind='room']").click();
+    const doorway = await getBoardScreenPoint(page, 6000, 5000);
+    await page.mouse.click(doorway.x, doorway.y);
+    const doorCard = page.locator("[data-draw-room-opening-inspector='door']");
+    await expect(doorCard).toBeVisible();
+    await doorCard
+        .getByLabel(/Ширина/)
+        .first()
+        .fill("650");
+    const warning = page.getByRole("dialog", { name: "Проём меньше 700 мм" });
+    await expect(warning).toContainText("только в разобранном виде");
+    await warning.getByRole("button", { name: "Понятно" }).click();
+    await expect(warning).toBeHidden();
+});

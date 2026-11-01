@@ -12,6 +12,10 @@ export interface DrawWallSegment {
     id: string;
     start: DrawWallPoint;
     end: DrawWallPoint;
+    /** Unset means the default for its place: outer walls bear, partitions do not. */
+    loadBearing?: boolean;
+    /** A partition's own thickness; outer walls share the drawing's. */
+    thickness?: number;
 }
 
 export interface DrawWallGraphRoom {
