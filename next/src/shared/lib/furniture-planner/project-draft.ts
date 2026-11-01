@@ -478,7 +478,10 @@ const normalizeRoom = (input: unknown, allowDrawingWithoutDoor = false): Room | 
                 opening.windowKind !== "standard" &&
                 opening.windowKind !== "floor-to-ceiling") ||
             (opening.height !== undefined && !isSafeNumber(opening.height, 1, MAX_ROOM_MM)) ||
-            (opening.sillHeight !== undefined && !isSafeNumber(opening.sillHeight, 0, MAX_ROOM_MM))
+            (opening.sillHeight !== undefined &&
+                !isSafeNumber(opening.sillHeight, 0, MAX_ROOM_MM)) ||
+            (opening.revealDepth !== undefined &&
+                !isSafeNumber(opening.revealDepth, 0, MAX_ROOM_MM))
         ) {
             return null;
         }
@@ -497,6 +500,9 @@ const normalizeRoom = (input: unknown, allowDrawingWithoutDoor = false): Room | 
             ...(opening.height !== undefined ? { height: opening.height as number } : {}),
             ...(opening.sillHeight !== undefined
                 ? { sillHeight: opening.sillHeight as number }
+                : {}),
+            ...(opening.revealDepth !== undefined
+                ? { revealDepth: opening.revealDepth as number }
                 : {}),
         });
     }

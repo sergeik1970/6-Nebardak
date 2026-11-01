@@ -295,6 +295,8 @@ export interface WindowOpening {
     height?: number;
     /** Floor to the bottom of the aperture, mm; a panoramic window has none. */
     sillHeight?: number;
+    /** From the wall's plane to the window, mm; measured, so no default stands in. */
+    revealDepth?: number;
 }
 
 export interface RadiatorObstacle {

@@ -45,8 +45,6 @@ export const FRAME_LEFT_MM = 20;
 export const FRAME_MARGIN_MM = 5;
 export const STAMP_WIDTH_MM = 185;
 export const STAMP_HEIGHT_MM = 55;
-/** The designer's working value until reveals are measured per window. */
-export const DEFAULT_WINDOW_REVEAL_MM = 250;
 /** A door leaf is taken this much smaller than its opening. */
 export const DOOR_LEAF_CLEARANCE_MM = 100;
 /** With this few doors, doors and windows share one sheet. */
@@ -889,7 +887,7 @@ const windowRows = (room: Room, regions: DrawRoomRegion[]) =>
         roomOfWindow(window, room, regions),
         `${window.width}×${getWindowHeight(window)}`,
         String(window.windowKind === "floor-to-ceiling" ? 0 : getWindowSillHeight(window)),
-        String(DEFAULT_WINDOW_REVEAL_MM),
+        window.revealDepth === undefined ? "—" : String(window.revealDepth),
     ]);
 
 const DOOR_COLUMNS: TableColumn[] = [
@@ -943,7 +941,7 @@ const scheduleSheets = (specification: PlanSpecification, regions: DrawRoomRegio
     const doors = doorRows(room);
     const windows = windowRows(room, regions);
     const doorNote = `Размер полотна указан ориентировочно: проём минус ${DOOR_LEAF_CLEARANCE_MM} мм.`;
-    const windowNote = `Глубина откоса — типовая, ${DEFAULT_WINDOW_REVEAL_MM} мм; уточните по месту.`;
+    const windowNote = "Глубина откоса — расстояние от плоскости стены до окна.";
     const doorBlock = (y: number) => {
         const table = drawTable(left, y + 5, DOOR_COLUMNS, doors);
         return {

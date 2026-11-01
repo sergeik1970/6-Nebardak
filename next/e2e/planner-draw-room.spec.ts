@@ -3247,16 +3247,19 @@ test("a radiator is placed on the drawing, keeps furniture away and stays after 
 
     await page.locator("[data-draw-room-step='openings']").click();
     await page.locator("[data-draw-room-tool='radiator']").click();
-    // A click on the bottom wall centres an 80 cm radiator there.
+    // A click on the bottom wall centres an 850 × 80 mm radiator there.
     const bottomWall = await getBoardScreenPoint(page, 6000, 5000);
     await page.mouse.click(bottomWall.x, bottomWall.y);
     const radiator = page.locator("[data-draw-room-radiator]");
     await expect(radiator).toHaveCount(1);
     const card = page.locator("[data-draw-room-radiator-inspector='true']");
     await expect(card).toBeVisible();
-    await expect(card.getByLabel("Ширина радиатора, мм")).toHaveValue("800");
+    await expect(card.getByLabel("Ширина радиатора, мм")).toHaveValue("850");
+    await expect(card.getByLabel("Глубина радиатора, мм")).toHaveValue("80");
     await card.getByLabel("Ширина радиатора, мм").fill("1000");
     await expect(card.getByLabel("Ширина радиатора, мм")).toHaveValue("1000");
+    await card.getByLabel("Глубина радиатора, мм").fill("120");
+    await expect(card.getByLabel("Глубина радиатора, мм")).toHaveValue("120");
 
     // Moving the wall takes its radiator along.
     const radiatorBody = radiator.locator("rect").nth(1);
@@ -4968,6 +4971,21 @@ test("doors and windows carry their heights on the drawing and in the card", asy
     await sill.press("Enter");
     await expect(page.locator("[data-draw-room-notice='true']")).toContainText("не выше потолка");
     await expect(sill).toHaveValue("900");
+
+    // The reveal is measured, so it starts empty and is explained on the spot.
+    const reveal = windowCard.getByLabel("Глубина откоса, мм");
+    await expect(reveal).toHaveValue("");
+    await expect(windowCard).toContainText("от плоскости стены до окна");
+    await reveal.fill("180");
+    await reveal.blur();
+    await expect
+        .poll(async () =>
+            page.evaluate(() => {
+                const saved = localStorage.getItem("stylefinder:draw-room-editor:v1");
+                return saved ? JSON.parse(saved).windows[0].revealDepth : null;
+            }),
+        )
+        .toBe(180);
 
     await windowCard.getByRole("button", { name: "Панорамное" }).click();
     await expect(windowTag).toHaveText("H=240");

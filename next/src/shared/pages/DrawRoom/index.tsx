@@ -334,8 +334,9 @@ type SolverPayload = SolverWorkerRequest extends infer Request
         : never
     : never;
 
-const RADIATOR_DEFAULT_WIDTH_MM = 800;
-const RADIATOR_DEPTH_MM = 100;
+const RADIATOR_DEFAULT_WIDTH_MM = 850;
+const RADIATOR_DEFAULT_DEPTH_MM = 80;
+const RADIATOR_DEPTH_RANGE_MM = { minimum: 20, maximum: 300 };
 /** Free air in front of a radiator; furniture must not stand in it. */
 const RADIATOR_CLEARANCE_MM = 300;
 
@@ -5929,7 +5930,7 @@ const DrawRoom: React.FC = () => {
                 segmentId: target.segment.id,
                 offset,
                 width,
-                depth: RADIATOR_DEPTH_MM,
+                depth: RADIATOR_DEFAULT_DEPTH_MM,
                 clearanceDepth: RADIATOR_CLEARANCE_MM,
             };
             const problem = validateRoomGeometry({
@@ -5960,11 +5961,11 @@ const DrawRoom: React.FC = () => {
     }, [previews, selectedRadiatorId]);
 
     const updateSelectedRadiator = useCallback(
-        (patch: Partial<Pick<RadiatorObstacle, "width" | "offset">>) => {
+        (patch: Partial<Pick<RadiatorObstacle, "width" | "offset" | "depth">>) => {
             if (!selectedRadiatorData) return;
             const { owner, radiator } = selectedRadiatorData;
             if (
-                ![patch.width, patch.offset].every(
+                ![patch.width, patch.offset, patch.depth].every(
                     (value) => value === undefined || Number.isFinite(value),
                 )
             )
@@ -11044,6 +11045,23 @@ const DrawRoom: React.FC = () => {
                                             onChange={(event) =>
                                                 updateSelectedRadiator({
                                                     width: Number(event.target.value),
+                                                })
+                                            }
+                                        />
+                                    </label>
+                                    <label className={styles.openingControl}>
+                                        <span>Глубина, мм</span>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            aria-label="Глубина радиатора, мм"
+                                            min={RADIATOR_DEPTH_RANGE_MM.minimum}
+                                            max={RADIATOR_DEPTH_RANGE_MM.maximum}
+                                            step={sceneSnapMm}
+                                            value={selectedRadiatorData.radiator.depth}
+                                            onChange={(event) =>
+                                                updateSelectedRadiator({
+                                                    depth: Number(event.target.value),
                                                 })
                                             }
                                         />

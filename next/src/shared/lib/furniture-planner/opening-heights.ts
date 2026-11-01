@@ -2,6 +2,7 @@ import type { DoorOpening, WindowOpening } from "./types";
 
 /** The drawing has a single ceiling height for every room. */
 export const CEILING_HEIGHT_MM = 2700;
+export const WINDOW_REVEAL_RANGE_MM = { minimum: 0, maximum: 1000 };
 
 export const DEFAULT_DOOR_HEIGHT_MM = 2100;
 export const DEFAULT_WINDOW_HEIGHT_MM = 1500;

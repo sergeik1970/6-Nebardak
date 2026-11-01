@@ -4,7 +4,6 @@ import { buildDrawingPlanSpecification } from "./plan-export";
 import {
     A3_LONG_MM,
     A3_SHORT_MM,
-    DEFAULT_WINDOW_REVEAL_MM,
     STAMP_WIDTH_MM,
     buildPlanSheets,
     getDoorHandedness,
@@ -119,9 +118,16 @@ describe("drawing sheets", () => {
         expect(schedule).toContain(">800×2100<");
         expect(schedule).toContain(">700×2000<");
         expect(schedule).toContain(">1500×1500<");
-        expect(schedule).toContain(`>${DEFAULT_WINDOW_REVEAL_MM}<`);
+        expect(schedule).toContain(">—<");
         expect(schedule).not.toContain("Створки");
         expect(schedule).not.toContain("Тип открывания");
+    });
+
+    it("prints the reveal the person entered", () => {
+        const windows = room.windows.map((window) => ({ ...window, revealDepth: 180 }));
+        const schedule = buildPlanSheets({ ...specification(), room: { ...room, windows } })[2].svg;
+        expect(schedule).toContain(">180<");
+        expect(schedule).toContain("от плоскости стены до окна");
     });
 
     it("groups identical pieces and keeps the notes at the very end", () => {

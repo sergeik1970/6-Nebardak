@@ -8,13 +8,14 @@ import {
     getWindowHeightError,
     getWindowSillHeight,
     WINDOW_HEIGHT_RANGE_MM,
+    WINDOW_REVEAL_RANGE_MM,
     WINDOW_SILL_RANGE_MM,
 } from "@/shared/lib/furniture-planner/opening-heights";
 import type { DoorOpening, WindowOpening } from "@/shared/lib/furniture-planner/types";
 
 import styles from "./index.module.scss";
 
-type HeightPatch = Pick<WindowOpening, "height" | "sillHeight">;
+type HeightPatch = Pick<WindowOpening, "height" | "sillHeight" | "revealDepth">;
 
 interface HeightInputProps {
     label: string;
@@ -62,6 +63,61 @@ const HeightInput = ({ label, value, minimum, maximum, step, onCommit }: HeightI
                     }
                 }}
             />
+        </label>
+    );
+};
+
+/** Left empty until measured: the schedule then shows a dash rather than a guess. */
+const RevealInput = ({
+    value,
+    step,
+    onChange,
+    onReject,
+}: {
+    value?: number;
+    step: number;
+    onChange: (patch: HeightPatch) => void;
+    onReject: (message: string) => void;
+}) => {
+    const [draft, setDraft] = useState(value === undefined ? "" : String(value));
+    useEffect(() => setDraft(value === undefined ? "" : String(value)), [value]);
+    const { minimum, maximum } = WINDOW_REVEAL_RANGE_MM;
+    const commit = () => {
+        if (!draft.trim()) {
+            if (value !== undefined) onChange({ revealDepth: undefined });
+            return;
+        }
+        const next = Number(draft);
+        if (!Number.isFinite(next) || next < minimum || next > maximum) {
+            onReject(`Глубина откоса: от ${minimum} до ${maximum} мм.`);
+            setDraft(value === undefined ? "" : String(value));
+            return;
+        }
+        if (next !== value) onChange({ revealDepth: next });
+    };
+    return (
+        <label className={styles.openingControl}>
+            <span>Глубина откоса, мм</span>
+            <input
+                type="number"
+                inputMode="numeric"
+                aria-label="Глубина откоса, мм"
+                min={minimum}
+                max={maximum}
+                step={step}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onBlur={commit}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        commit();
+                    }
+                }}
+            />
+            <small className={styles.openingWidthHint}>
+                Расстояние от плоскости стены до окна. Подоконник обычно выступает дальше откоса.
+            </small>
         </label>
     );
 };
@@ -128,6 +184,12 @@ export const OpeningHeightFields = ({
                     onCommit={(next) => apply({ sillHeight: next })}
                 />
             )}
+            <RevealInput
+                value={window.revealDepth}
+                step={step}
+                onChange={onChange}
+                onReject={onReject}
+            />
         </>
     );
 };
