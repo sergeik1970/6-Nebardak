@@ -129,6 +129,9 @@
 }
 
 .imageBlock {
+    /* The pictures are square: on a short screen the pair narrows to stay in view. */
+    width: min(100%, calc((100svh - 14rem) * 2));
+    margin-inline: auto;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: clamp(0.65rem, 2vw, 1.25rem);
@@ -137,7 +140,7 @@
 .imageChoice {
     position: relative;
     min-width: 0;
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 1;
     overflow: hidden;
     padding: 0;
     background: #e8dfd2;
@@ -180,6 +183,16 @@
 
 .imageChoice:hover img {
     transform: scale(1.015);
+}
+
+.testNav {
+    display: flex;
+    margin-top: 0.65rem;
+}
+
+.neutralButton:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
 }
 
 .choiceControls {
@@ -413,6 +426,9 @@
 }
 
 .galleryViewport {
+    /* The renders are square too, so the frame follows the screen height. */
+    width: min(100%, calc(100svh - 12rem));
+    justify-self: center;
     min-width: 0;
     overflow: hidden;
     background: #d8ccbc;
@@ -423,7 +439,7 @@
 .galleryViewport figure {
     position: relative;
     min-height: 0;
-    aspect-ratio: 16 / 9.5;
+    aspect-ratio: 1;
 }
 
 .galleryViewport img {
@@ -726,15 +742,18 @@
         padding: 0.75rem;
     }
 
+    /* One above the other, each small enough that both fit on the screen. */
     .imageBlock {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: min(100%, calc((100svh - 13rem) / 2));
+        min-width: 14rem;
+        grid-template-columns: minmax(0, 1fr);
         gap: 0.6rem;
     }
 
     .imageChoice {
         width: 100%;
         min-height: 0;
-        aspect-ratio: 4 / 3;
+        aspect-ratio: 1;
     }
 
     .imageChoice > span {

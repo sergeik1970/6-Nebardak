@@ -215,6 +215,43 @@ describe("auto layout in one room of the drawing", () => {
         ).toBe(false);
     });
 
+    it("furnishes an L-shaped room measured to the millimetre", () => {
+        const room: Room = {
+            width: 6113,
+            depth: 5007,
+            geometry: {
+                version: 1,
+                kind: "orthogonal",
+                vertices: [
+                    { id: "v1", x: 0, y: 0 },
+                    { id: "v2", x: 6113, y: 0 },
+                    { id: "v3", x: 6113, y: 3007 },
+                    { id: "v4", x: 3403, y: 3007 },
+                    { id: "v5", x: 3403, y: 5007 },
+                    { id: "v6", x: 0, y: 5007 },
+                ],
+            },
+            doors: [
+                {
+                    id: "door",
+                    wall: "right",
+                    segmentId: "segment-v2",
+                    offset: 2000,
+                    width: 800,
+                    clearanceDepth: 800,
+                    hinge: "start",
+                },
+            ],
+            windows: [
+                { id: "window", wall: "top", segmentId: "segment-v1", offset: 2000, width: 1200 },
+            ],
+            radiators: [],
+            partitions: [],
+        };
+        const pieces = buildRoomInstances({ "double-bed": 1 });
+        expect(solveRoomVariants(room, pieces, {}, 1)).toMatchObject({ status: "success" });
+    });
+
     it("lays a kitchen by its own rules and solves the table around it", async () => {
         const base = createDefaultRoom(3600, 3600);
         const room: Room = {

@@ -1,4 +1,8 @@
-import { DRAW_ROOM_WALL_LANE_MM, snapDrawRoomWallLaneCentre } from "./draw-room-grid";
+import {
+    DRAW_ROOM_WALL_LANE_MM,
+    MAX_DRAWN_CONTOUR_MM,
+    snapDrawRoomWallLaneCentre,
+} from "./draw-room-grid";
 import { signedPolygonArea } from "./room-geometry";
 import type { Room, RoomGeometry, RoomVertex } from "./types";
 
@@ -55,7 +59,6 @@ export type MoveDrawWallContourSegmentResult =
 export type MoveDrawWallSegmentResult = MoveDrawWallContourSegmentResult;
 
 const MIN_SEGMENT_MM = 500;
-const MAX_ROOM_SIZE_MM = 10_000;
 const samePoint = (first: DrawWallPoint, second: DrawWallPoint) =>
     first.x === second.x && first.y === second.y;
 const keyForPoint = (point: DrawWallPoint) => `${point.x}:${point.y}`;
@@ -846,7 +849,7 @@ const roomFromCycle = (
     // drawing editor. Planner-size eligibility is deliberately checked by the
     // caller against the full room validation contract before handoff.
     // Individual wall safety is already enforced by addDrawWallSegment.
-    if (width > MAX_ROOM_SIZE_MM || depth > MAX_ROOM_SIZE_MM) return null;
+    if (width > MAX_DRAWN_CONTOUR_MM || depth > MAX_DRAWN_CONTOUR_MM) return null;
     const geometry: RoomGeometry =
         vertices.length === 4
             ? { version: 1, kind: "rect" }

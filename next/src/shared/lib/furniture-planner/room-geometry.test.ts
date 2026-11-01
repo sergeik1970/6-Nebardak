@@ -224,7 +224,7 @@ describe("user-drawn orthogonal contour", () => {
 
         expect(result).toEqual({
             status: "invalid",
-            message: "Габариты нарисованного контура должны быть от 2,4 до 10 м.",
+            message: "Габариты нарисованного контура должны быть от 2,4 до 30 м.",
         });
     });
 });
@@ -300,7 +300,7 @@ describe("snapRoomToPlannerGrid", () => {
 
     it("rounds a 10 mm contour onto the planner lattice and makes it eligible", () => {
         const room = drawnLRoom();
-        expect(validateRoomGeometry(room)).toMatch(/сетке 50 мм/);
+        expect(validateRoomGeometry(room)).toBeNull();
 
         const { room: snapped, maxShift } = snapRoomToPlannerGrid(room);
 

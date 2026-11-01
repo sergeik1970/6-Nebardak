@@ -531,6 +531,17 @@ const Test: React.FC = () => {
                             </button>
                         </div>
                     )}
+
+                    <div className={styles.testNav}>
+                        <button
+                            type="button"
+                            className={styles.neutralButton}
+                            onClick={goBack}
+                            disabled={session.history.length === 0}
+                        >
+                            <span aria-hidden="true">←</span> Назад
+                        </button>
+                    </div>
                 </section>
             </main>
             <Footer />

@@ -1436,11 +1436,11 @@ test("wall preview is visible only during a live drag and the top ruler is absen
                 dimensionLines: read("[data-draw-room-live-dimension-line]"),
             };
         });
-    // The graph span is 8 000 mm; the real painted envelope includes its two
-    // 50 mm end faces. Both parallel faces therefore read 810 cm, while both
-    // end-face measurements read the actual 10 cm material thickness.
-    expect(liveLayout.lengthLabels).toEqual(["810", "810"]);
-    expect(liveLayout.thicknessLabels).toEqual(["10", "10"]);
+    // The graph span is 8 000 mm; an open contour reads the clear length it
+    // will have between corners, one wall thickness less, while both end-face
+    // measurements read the actual 100 mm material thickness.
+    expect(liveLayout.lengthLabels).toEqual(["7900", "7900"]);
+    expect(liveLayout.thicknessLabels).toEqual(["100", "100"]);
     expect(liveLayout.dimensionLines).toHaveLength(4);
     expect(liveLayout.extensionLines).toHaveLength(8);
     expect(liveLayout.materialCorners).toHaveLength(4);
@@ -1472,8 +1472,8 @@ test("wall preview is visible only during a live drag and the top ruler is absen
     // A lone committed wall keeps its length and its end-face thickness.
     await expect(page.locator("[data-draw-room-persistent-dimension-line='true']")).toHaveCount(2);
     await expect(page.locator("[data-draw-room-wall-dimension='persistent']")).toHaveText([
-        "810",
-        "10",
+        "7900",
+        "100",
     ]);
     await expect(page.locator("[data-draw-room-active-anchor='true']")).toHaveCount(0);
     await expect(page.locator("[data-draw-room-construction-guides='true']")).toHaveCount(0);
@@ -1540,8 +1540,8 @@ test("vertical live wall dimensions use the true painted end faces", async ({ pa
             };
         });
 
-    expect(liveLayout.lengths).toEqual(["260", "260"]);
-    expect(liveLayout.thicknesses).toEqual(["10", "10"]);
+    expect(liveLayout.lengths).toEqual(["2400", "2400"]);
+    expect(liveLayout.thicknesses).toEqual(["100", "100"]);
     const [topLeft, topRight, bottomRight, bottomLeft] = liveLayout.corners;
     expect(liveLayout.extensions).toEqual(
         expect.arrayContaining([
@@ -1558,8 +1558,8 @@ test("vertical live wall dimensions use the true painted end faces", async ({ pa
     await expect(page.locator("[data-draw-room-persistent-dimensions='true']")).toHaveCount(1);
     await expect(page.locator("[data-draw-room-persistent-dimension-line='true']")).toHaveCount(2);
     await expect(page.locator("[data-draw-room-wall-dimension='persistent']")).toHaveText([
-        "260",
-        "10",
+        "2400",
+        "100",
     ]);
 });
 
@@ -1856,12 +1856,12 @@ test("separate room drawing route makes the gridded field primary and creates a 
     const rectangleInner = rectangleDimensions.filter((dimension) => dimension.kind === "inner");
     const unique = <T>(values: T[]) => Array.from(new Set(values));
     expect(unique(rectangleOuter.map((dimension) => dimension.label)).sort()).toEqual([
-        "470",
-        "970",
+        "4700",
+        "9700",
     ]);
     expect(unique(rectangleInner.map((dimension) => dimension.label)).sort()).toEqual([
-        "450",
-        "950",
+        "4500",
+        "9500",
     ]);
     // The clear faces lie a real 100 mm material lane inside each matching
     // outer face: a full span differs by exactly 2 × 100 mm.
@@ -2773,18 +2773,18 @@ test("a real 200 by 125 cm closed contour uses canonical face dimensions", async
         const inner = dimensions.filter((dimension) => dimension.kind === "inner");
         const spans = (items: typeof dimensions) =>
             Array.from(new Set(items.map((dimension) => dimension.label))).sort();
-        expect(spans(outer)).toEqual(["125", "200"]);
-        expect(spans(inner)).toEqual(["105", "180"]);
+        expect(spans(outer)).toEqual(["1250", "2000"]);
+        expect(spans(inner)).toEqual(["1050", "1800"]);
         // The phone must retain the vertical face span too. A short projected
         // dimension is still architectural data, not a decorative duplicate.
-        expect(spans(outer.filter((dimension) => !dimension.horizontal))).toEqual(["125"]);
-        expect(spans(inner.filter((dimension) => !dimension.horizontal))).toEqual(["105"]);
+        expect(spans(outer.filter((dimension) => !dimension.horizontal))).toEqual(["1250"]);
+        expect(spans(inner.filter((dimension) => !dimension.horizontal))).toEqual(["1050"]);
         expect(outer.find((dimension) => dimension.id === "outer-0")?.extensionStart).toEqual({
             x: 4950,
             y: 3150,
         });
         const innerHorizontal = inner.find(
-            (dimension) => dimension.horizontal && dimension.label === "180",
+            (dimension) => dimension.horizontal && dimension.label === "1800",
         );
         expect(innerHorizontal).toBeTruthy();
         expect(
@@ -2849,7 +2849,7 @@ test("a T wall remains visible and dimensioned after a closed room is recognised
             1,
         );
         await expect(page.locator("[data-draw-room-branch-dimension-label='true']")).toHaveText(
-            "50",
+            "500",
         );
 
         const materialBounds = await page
@@ -3509,21 +3509,21 @@ test("a divider keeps the completed exterior and dimensions each room on its own
         const chainLabels = await page.locator("[data-draw-room-wall-dimension]").allTextContents();
         // The centred 10 cm divider leaves two 85 × 105 cm rooms. The undivided
         // 180 cm clear span would only overlap their values.
-        expect(chainLabels).not.toContain("180");
-        expect(chainLabels).toEqual(expect.arrayContaining(["200", "125"]));
+        expect(chainLabels).not.toContain("1800");
+        expect(chainLabels).toEqual(expect.arrayContaining(["2000", "1250"]));
         if (viewport.width > 480) {
             const innerLabels = await page
                 .locator("[data-draw-room-wall-dimension='inner']")
                 .allTextContents();
             expect(innerLabels.sort()).toEqual([
-                "105",
-                "105",
-                "105",
-                "105",
-                "85",
-                "85",
-                "85",
-                "85",
+                "1050",
+                "1050",
+                "1050",
+                "1050",
+                "850",
+                "850",
+                "850",
+                "850",
             ]);
         }
         await page.screenshot({
@@ -4034,9 +4034,8 @@ test("contiguous collinear wall segments use one total dimension", async ({ page
             );
             await page.goto("/planner/draw", { waitUntil: "networkidle" });
 
-            // Each standalone span would show 100 cm and 410 cm because its
-            // dimension includes two material end faces. Together they form one
-            // physical 500 cm wall: the shared face is no longer an endpoint.
+            // Two spans laid end to end form one physical wall: the shared
+            // face is no longer an endpoint, so one clear length covers both.
             await dragOnBoardWorld(page, ...run.first);
             await dragOnBoardWorld(page, ...run.second);
             // A 5 m wall is too small on a phone's initial view for chains.
@@ -4044,7 +4043,7 @@ test("contiguous collinear wall segments use one total dimension", async ({ page
 
             await expect(page.locator("[data-draw-room-persistent-wall]")).toHaveCount(1);
             await expect(page.locator("[data-draw-room-wall-dimension='persistent']")).toHaveText(
-                "500",
+                "4800",
             );
             await expect(
                 page.locator("[data-draw-room-persistent-dimension-line='true']"),
@@ -4099,7 +4098,7 @@ test("a committed wall keeps its concise length and thickness until a room close
     await expect(page.locator("[data-draw-room-persistent-dimension-tick]")).toHaveCount(4);
     expect(
         await page.locator("[data-draw-room-wall-dimension='persistent']").allTextContents(),
-    ).toEqual([liveValues[0], "10"]);
+    ).toEqual([liveValues[0], "100"]);
 
     await dragOnBoardWorld(page, { x: 8_000, y: 3_800 }, { x: 8_000, y: 6_000 });
     // An open L: each wall's length plus the two clear inner-face spans.
@@ -4126,7 +4125,7 @@ test("a committed wall keeps its concise length and thickness until a room close
     await expect(page.locator("[data-draw-room-dimension-chain]")).toHaveCount(0);
 });
 
-test("an 850 mm graph span keeps its 950 mm material-envelope value after release", async ({
+test("an 850 mm graph span keeps its 750 mm clear value after release", async ({
     page,
 }, testInfo) => {
     test.skip(
@@ -4144,13 +4143,13 @@ test("an 850 mm graph span keeps its 950 mm material-envelope value after releas
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
     await page.mouse.move(end.x, end.y, { steps: 8 });
-    // 850 mm between centre points plus two 50 mm end faces of a 10 cm wall.
-    await expect(page.locator("[data-draw-room-live-length='true']")).toHaveText(["95", "95"]);
-    await expect(page.locator("[data-draw-room-live-status='true']")).toContainText("95 см");
+    // 850 mm between centre points less one 100 mm wall thickness.
+    await expect(page.locator("[data-draw-room-live-length='true']")).toHaveText(["750", "750"]);
+    await expect(page.locator("[data-draw-room-live-status='true']")).toContainText("750 мм");
     await page.mouse.up();
     await expect(page.locator("[data-draw-room-wall-dimension='persistent']")).toHaveText([
-        "95",
-        "10",
+        "750",
+        "100",
     ]);
 });
 
@@ -4457,14 +4456,14 @@ test("constructive 10 mm drawing keeps exact face chains, regions and responsive
     );
     await addCoordinates([1000, 4000, 4000, 4000]);
     await expect(page.locator("[data-draw-room-wall-dimension='persistent']")).toHaveText([
-        "310",
-        "10",
+        "2900",
+        "100",
     ]);
 
     await addCoordinates([4000, 4000, 4000, 4880]);
     expect(
         await page.locator("[data-draw-room-wall-dimension='persistent']").allTextContents(),
-    ).toEqual(expect.arrayContaining(["310", "98", "300", "88"]));
+    ).toEqual(expect.arrayContaining(["2900", "780"]));
 
     await addCoordinates([4000, 4880, 1000, 4880]);
     await addCoordinates([1000, 4880, 1000, 4000]);
@@ -4490,7 +4489,7 @@ test("constructive 10 mm drawing keeps exact face chains, regions and responsive
     // At this zoom the 78 cm deep rooms keep their H/S labels and hide the
     // values that would crowd them; every value shown belongs to one room.
     expect(roomValues.length).toBeGreaterThan(0);
-    roomValues.forEach((value) => expect(["173", "107", "78"]).toContain(value));
+    roomValues.forEach((value) => expect(["1730", "1070", "780"]).toContain(value));
     await expect(page.locator("[data-draw-room-region]")).toHaveCount(2);
     await expect(page.locator("[data-draw-room-region]").first()).toContainText("H=270");
     await expect(page.locator("[data-draw-room-region]").first()).toContainText("S=1,35 м²");
@@ -4682,15 +4681,15 @@ test("a detached second open contour keeps its CAD dimensions after the first ro
         // It must retain only its own committed dimensions, while the closed
         // room keeps its architectural chains without a duplicate branch chain.
         await addCoordinates([6500, 2500, 8500, 2500]);
-        await expectDetachedDimensionsOnly(["210", "10"]);
+        await expectDetachedDimensionsOnly(["2100", "100"]);
         await expect(page.locator("[data-draw-room-branch-dimension-label='true']")).toHaveCount(0);
         await expectPrimarySummaryToClearItsChains();
 
         await addCoordinates([8500, 2500, 8500, 3900]);
-        await expectDetachedDimensionsOnly(["210", "150"]);
+        await expectDetachedDimensionsOnly(["2100", "1500"]);
         expect(
             await page.locator("[data-draw-room-wall-dimension='persistent']").allTextContents(),
-        ).not.toEqual(expect.arrayContaining(["200"]));
+        ).not.toEqual(expect.arrayContaining(["2000"]));
         expect(await getPersistentDimensionSafety(page)).toEqual({
             labelHitsMaterial: false,
             axisHitsMaterial: false,
@@ -4726,7 +4725,7 @@ test("a detached second open contour keeps its CAD dimensions after the first ro
         await expect(page.locator("[data-draw-room-live-length='true']")).toHaveCount(2);
         await page.mouse.up();
         await expect(page.locator("[data-draw-room-live-dimensions='true']")).toHaveCount(0);
-        await expectDetachedDimensionsOnly(["210", "150"]);
+        await expectDetachedDimensionsOnly(["2100", "1500"]);
 
         // The default expanded view is asserted above, before the screenshot.
         // Keep the same full-callout contract through the explicit Fit and
@@ -5310,4 +5309,110 @@ test("auto layout lays the kitchen units as one worktop with the uppers over it"
     });
     expect(touching).toHaveLength(5);
     expect(touching.every(Boolean)).toBe(true);
+});
+
+test("a click starts a wall and typed lengths build the room to the millimetre", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Mouse and keyboard entry only");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+
+    const board = (await page.locator("[data-draw-room-board='true']").boundingBox())!;
+    const at = (x: number, y: number) =>
+        [board.x + board.width * x, board.y + board.height * y] as const;
+    const entry = page.locator("[data-draw-room-wall-length='true']");
+    const type = async (x: number, y: number, length: string) => {
+        await page.mouse.move(...at(x, y), { steps: 4 });
+        await page.keyboard.type(length);
+        await expect(entry).toHaveText(`${length} мм`);
+        await page.keyboard.press("Enter");
+    };
+
+    await page.mouse.move(...at(0.3, 0.3));
+    await page.mouse.click(...at(0.3, 0.3));
+    await expect(entry).toHaveText("Длина, мм");
+
+    // Escape drops the typed digits first, the wall itself second.
+    await page.mouse.move(...at(0.5, 0.3), { steps: 4 });
+    await page.keyboard.type("99");
+    await page.keyboard.press("Escape");
+    await expect(entry).toHaveText("Длина, мм");
+    await page.keyboard.press("Escape");
+    await expect(entry).toHaveCount(0);
+
+    await page.mouse.move(...at(0.3, 0.3));
+    await page.mouse.click(...at(0.3, 0.3));
+    await type(0.5, 0.3, "4213");
+    await type(0.5, 0.6, "3177");
+    await type(0.3, 0.6, "4213");
+    await type(0.3, 0.3, "3177");
+
+    // The closed contour ends the chain.
+    await expect(entry).toHaveCount(0);
+    await expect
+        .poll(() =>
+            page.evaluate(() => {
+                const raw = localStorage.getItem("stylefinder:draw-room-editor:v1");
+                const parsed = raw ? JSON.parse(raw) : null;
+                const segments: { start: { x: number }; end: { x: number } }[] =
+                    parsed?.segments ?? parsed?.scene?.segments ?? [];
+                const xs = segments.flatMap((wall) => [wall.start.x, wall.end.x]);
+                return segments.length ? Math.max(...xs) - Math.min(...xs) : 0;
+            }),
+        )
+        .toBe(4313);
+});
+
+test("a flat wider than ten metres, typed to the millimetre, takes a door and survives a reload", async ({
+    page,
+}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "Mouse and keyboard entry only");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/planner/draw", { waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("stylefinder:draw-room-editor:v1"));
+    await page.reload({ waitUntil: "networkidle" });
+
+    // Zoomed out, as a person would be for a whole flat.
+    const centre = await getBoardScreenPoint(page, 8_000, 5_000);
+    await page.mouse.move(centre.x, centre.y);
+    await page.mouse.wheel(0, 500);
+    await page.waitForTimeout(300);
+
+    const aim = async (x: number, y: number) => {
+        const point = await getBoardScreenPoint(page, x, y);
+        await page.mouse.move(point.x, point.y, { steps: 4 });
+    };
+    const type = async (x: number, y: number, length: string) => {
+        await aim(x, y);
+        await page.keyboard.type(length);
+        await page.keyboard.press("Enter");
+    };
+
+    // An L: the corner is off the 50 mm lattice on both axes.
+    await aim(1_000, 1_000);
+    await page.mouse.down();
+    await page.mouse.up();
+    await type(3_000, 1_000, "15007");
+    await type(16_107, 3_000, "4213");
+    await type(13_000, 5_313, "6003");
+    await type(10_104, 7_000, "2507");
+    await type(5_000, 7_820, "9004");
+    await type(1_000, 4_000, "6720");
+
+    await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
+    await page.getByRole("button", { name: "Вместить" }).click();
+    await expect(page.locator("[data-draw-room-wall-dimension='inner']")).toContainText(["15007"]);
+
+    await page.locator("[data-draw-room-step='openings']").click();
+    await page.locator("[data-draw-room-door-kind='room']").click();
+    const wall = await page.locator("[data-draw-room-wall-union='true']").boundingBox();
+    await page.mouse.click(wall!.x + wall!.width / 2, wall!.y + 2);
+    await expect(page.locator("[data-draw-room-opening-kind='door']")).not.toHaveCount(0);
+
+    await page.reload({ waitUntil: "networkidle" });
+    await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
+    await expect(page.locator("[data-draw-room-opening-kind='door']")).not.toHaveCount(0);
 });

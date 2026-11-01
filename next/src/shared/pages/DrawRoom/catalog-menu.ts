@@ -3,6 +3,7 @@ import {
     type FurnitureDefinition,
     type RoomKind,
 } from "@/shared/lib/furniture-planner";
+import { KITCHEN_BATH_DESIGN_ENABLED, isFurnitureOffered } from "./room-availability";
 
 export interface FurnitureMenuGroup {
     label: string;
@@ -128,6 +129,23 @@ export const FURNITURE_MENU: FurnitureMenuSection[] = [
     },
 ];
 
+/** Sections that change once kitchen units are out of the menu. */
+const SECTIONS_WITHOUT_KITCHEN: Record<string, Pick<FurnitureMenuSection, "label" | "icon">> = {
+    "kitchen-dining": { label: "Столовая", icon: "dining-round-four" },
+    appliances: { label: "ТВ и мультимедиа", icon: "tv" },
+};
+
+/** The menu as people see it: {@link FURNITURE_MENU} less what is not offered yet. */
+export const OFFERED_FURNITURE_MENU: FurnitureMenuSection[] = KITCHEN_BATH_DESIGN_ENABLED
+    ? FURNITURE_MENU
+    : FURNITURE_MENU.map((section) => ({
+          ...section,
+          ...SECTIONS_WITHOUT_KITCHEN[section.id],
+          groups: section.groups
+              .map((group) => ({ ...group, ids: group.ids.filter(isFurnitureOffered) }))
+              .filter((group) => group.ids.length > 0),
+      }));
+
 const KIND_SECTIONS: Record<RoomKind, string[]> = {
     bedroom: ["living-bedroom", "wardrobe-hallway", "office"],
     living: ["living-bedroom", "appliances", "wardrobe-hallway"],
@@ -146,7 +164,7 @@ export function furnitureMenuOrder(kind?: RoomKind): FurnitureMenuSection[] {
         const index = preferred.indexOf(section.id);
         return index === -1 ? preferred.length : index;
     };
-    return [...FURNITURE_MENU].sort((first, second) => rank(first) - rank(second));
+    return [...OFFERED_FURNITURE_MENU].sort((first, second) => rank(first) - rank(second));
 }
 
 const byId = new Map(FURNITURE_CATALOG.map((definition) => [definition.id, definition]));
@@ -158,7 +176,7 @@ export const menuGroupDefinitions = (group: FurnitureMenuGroup): FurnitureDefini
 export function searchFurnitureMenu(query: string): FurnitureDefinition[] {
     const needle = query.trim().toLowerCase();
     if (!needle) return [];
-    return FURNITURE_MENU.flatMap((section) => section.groups.flatMap(menuGroupDefinitions)).filter(
-        (definition) => definition.label.toLowerCase().includes(needle),
-    );
+    return OFFERED_FURNITURE_MENU.flatMap((section) =>
+        section.groups.flatMap(menuGroupDefinitions),
+    ).filter((definition) => definition.label.toLowerCase().includes(needle));
 }

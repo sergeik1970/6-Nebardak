@@ -1,3 +1,4 @@
+import { MAX_DRAWN_CONTOUR_MM } from "./draw-room-grid";
 import {
     PROVISIONAL_CURTAIN_BUFFER_MM,
     getFurniture,
@@ -533,10 +534,10 @@ export const validateRoomGeometry = (room: Room): string | null => {
         !Number.isFinite(room.depth) ||
         room.width < 2400 ||
         room.depth < 2400 ||
-        room.width > 10_000 ||
-        room.depth > 10_000
+        room.width > MAX_DRAWN_CONTOUR_MM ||
+        room.depth > MAX_DRAWN_CONTOUR_MM
     ) {
-        return "Проверьте размеры комнаты: допустимый диапазон — от 2400 до 10 000 мм.";
+        return "Проверьте размеры комнаты: допустимый диапазон — от 2400 до 30 000 мм.";
     }
 
     const contourError = validateOrthogonalRoomGeometry(room);

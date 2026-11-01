@@ -1,3 +1,4 @@
+import { MAX_DRAWN_CONTOUR_MM } from "./draw-room-grid";
 import {
     Rect,
     Room,
@@ -329,12 +330,12 @@ export const validateOrthogonalRoomGeometry = (room: Room): string | null => {
             !Number.isFinite(vertex.y) ||
             vertex.x < 0 ||
             vertex.y < 0 ||
-            vertex.x > 10_000 ||
-            vertex.y > 10_000 ||
-            vertex.x % 50 !== 0 ||
-            vertex.y % 50 !== 0
+            vertex.x > MAX_DRAWN_CONTOUR_MM ||
+            vertex.y > MAX_DRAWN_CONTOUR_MM ||
+            !Number.isInteger(vertex.x) ||
+            !Number.isInteger(vertex.y)
         ) {
-            return "Вершины контура должны быть уникальными и находиться на сетке 50 мм.";
+            return "Вершины контура должны быть уникальными и заданы в целых миллиметрах.";
         }
         ids.add(vertex.id);
     }
@@ -980,8 +981,13 @@ export const buildOrthogonalRoomFromDraft = (
         vertices = vertices.map((vertex, index) => ({ ...vertex, id: `v${index + 1}` }));
         const width = Math.max(...vertices.map((vertex) => vertex.x));
         const depth = Math.max(...vertices.map((vertex) => vertex.y));
-        if (width < 2400 || depth < 2400 || width > 10_000 || depth > 10_000) {
-            lastError = "Габариты нарисованного контура должны быть от 2,4 до 10 м.";
+        if (
+            width < 2400 ||
+            depth < 2400 ||
+            width > MAX_DRAWN_CONTOUR_MM ||
+            depth > MAX_DRAWN_CONTOUR_MM
+        ) {
+            lastError = "Габариты нарисованного контура должны быть от 2,4 до 30 м.";
             continue;
         }
         const geometry: RoomGeometry = { version: 1, kind: "orthogonal", vertices };

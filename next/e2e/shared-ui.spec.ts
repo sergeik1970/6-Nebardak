@@ -105,8 +105,13 @@ test("home exposes one product heading and mobile test keeps the visual pair tog
     const boxes = await choices.evaluateAll((elements) =>
         elements.map((element) => element.getBoundingClientRect().toJSON()),
     );
-    expect(Math.abs(boxes[0].top - boxes[1].top)).toBeLessThanOrEqual(1);
-    expect(boxes.every((box) => box.width >= 150 && box.height >= 110)).toBe(true);
+    // One above the other, large enough to judge, and both on one screen.
+    expect(boxes[1].top).toBeGreaterThanOrEqual(boxes[0].bottom);
+    expect(Math.abs(boxes[0].left - boxes[1].left)).toBeLessThanOrEqual(1);
+    expect(boxes.every((box) => box.width >= 220 && box.width === box.height)).toBe(true);
+    expect(boxes[1].bottom - boxes[0].top).toBeLessThanOrEqual(
+        page.viewportSize()?.height ?? Infinity,
+    );
     expect(
         await page.evaluate(
             () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
