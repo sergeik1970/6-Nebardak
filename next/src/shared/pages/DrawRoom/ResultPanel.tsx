@@ -104,7 +104,7 @@ export default function ResultPanel({
                     disabled={busy}
                     onClick={onDownload}
                 >
-                    Скачать PNG
+                    Скачать чертежи (PDF)
                 </button>
                 <button
                     type="button"

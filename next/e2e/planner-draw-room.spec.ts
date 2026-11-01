@@ -3333,12 +3333,15 @@ test("the result step lists each room's furniture, saves a PNG and prints the pl
     );
 
     const download = page.waitForEvent("download");
-    await result.getByRole("button", { name: "Скачать PNG" }).click();
+    await result.getByRole("button", { name: "Скачать чертежи (PDF)" }).click();
     const file = await download;
-    expect(file.suggestedFilename()).toMatch(/\.png$/);
+    expect(file.suggestedFilename()).toMatch(/\.pdf$/);
     const bytes = await (await file.createReadStream()).toArray();
-    expect(Buffer.concat(bytes).subarray(1, 4).toString()).toBe("PNG");
-    await expect(result.getByRole("status")).toHaveText("PNG сохранён.");
+    const pdf = Buffer.concat(bytes);
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+    // Two plans, the door and window schedule, the furniture schedule.
+    expect(pdf.toString("latin1")).toContain("/Count 4");
+    await expect(result.getByRole("status")).toHaveText("PDF сохранён.");
 
     // Printing waits for the sheet image, then only that sheet is on paper.
     await page.evaluate(() => {
