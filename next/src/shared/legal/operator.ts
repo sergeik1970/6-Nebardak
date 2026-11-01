@@ -6,7 +6,7 @@
  */
 export const LEGAL_OPERATOR = {
     name: "[ФИО индивидуального предпринимателя или наименование организации]",
-    registration: "[ИНН и ОГРН / ОГРНИП]",
+    registration: "ИНН 440122104148",
     address: "[почтовый адрес для обращений]",
     responsible: "[ФИО ответственного за организацию обработки персональных данных]",
     email: "contact@stylefinder.online",

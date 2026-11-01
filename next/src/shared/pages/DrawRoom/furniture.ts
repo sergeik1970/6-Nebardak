@@ -188,7 +188,7 @@ export function furnitureConflicts(
         ...(mounting === "upper" ? [] : radiatorObstacles).map((rect) => ({
             kind: "radiator" as const,
             rect,
-            message: "Мебель закрывает радиатор. Перед ним нужно оставить 30 см свободными.",
+            message: "Мебель закрывает радиатор. Перед ним нужно оставить 300 мм свободными.",
         })),
         ...walls.map((wall) => ({
             kind: "wall" as const,

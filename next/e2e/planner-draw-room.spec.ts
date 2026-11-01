@@ -3053,8 +3053,8 @@ test("furniture goes into the selected room, against its walls", async ({ page }
     const pieces = page.locator("[data-draw-furniture^='furniture-']");
     await expect(pieces).toHaveCount(1);
     await expect(pieces).toHaveAttribute("transform", "translate(4200 4050)");
-    await expect(pieces.locator("[data-furniture-size='width']")).toHaveText("200");
-    await expect(pieces.locator("[data-furniture-size='depth']")).toHaveText("90");
+    await expect(pieces.locator("[data-furniture-size='width']")).toHaveText("2000");
+    await expect(pieces.locator("[data-furniture-size='depth']")).toHaveText("900");
     await expect(page.getByLabel("До стены снизу, мм")).toHaveValue("0");
 
     // The other room does not take this room's furniture.
@@ -3165,7 +3165,7 @@ test("a piece takes a standard size from the designer's drawings", async ({ page
         "true",
     );
     await presets.getByRole("button", { name: "1400 × 1000" }).click();
-    await expect(piece.locator("[data-furniture-size='width']")).toHaveText("140");
+    await expect(piece.locator("[data-furniture-size='width']")).toHaveText("1400");
     await expect(panel.getByLabel("Ширина, мм")).toHaveValue("1400");
     await expect(presets.getByRole("button", { name: "1400 × 1000" })).toHaveAttribute(
         "aria-pressed",
@@ -3593,7 +3593,7 @@ test("partition region metrics stay SVG-native, readable and inside each clear b
         expect(metrics.labelsOverlap).toBe(false);
         expect(metrics.dimensionCollisions).toEqual([]);
         for (const label of metrics.labels) {
-            expect(label.heightText).toBe("H=270");
+            expect(label.heightText).toBe("H=2700");
             expect(["S=1,35 м²", "S=0,83 м²"]).toContain(label.areaText);
             expect(label.heightBox.height).toBeGreaterThanOrEqual(14);
             expect(label.areaBox.height).toBeGreaterThanOrEqual(14);
@@ -3873,7 +3873,7 @@ test("adaptive vector grid keeps 10 mm construction snap and committed dimension
     test.skip(testInfo.project.name !== "desktop-chromium", "Desktop grid density is covered once");
     await page.goto("/planner/draw", { waitUntil: "networkidle" });
 
-    await expect(page.locator("[data-draw-room-status='grid']")).toContainText("Сетка: 1 см");
+    await expect(page.locator("[data-draw-room-status='grid']")).toContainText("Сетка: 10 мм");
     const readGridSteps = () =>
         page.locator("[data-draw-room-board='true']").evaluate((board) => {
             const stepFor = (id: string) => {
@@ -4476,14 +4476,14 @@ test("constructive 10 mm drawing keeps exact face chains, regions and responsive
     await expect(page.locator("[data-draw-room-preview='true']")).toBeVisible();
     await expect(page.locator("[data-draw-room-dimension-chain='outer']")).toHaveCount(4);
     await expect(page.locator("[data-draw-room-dimension-chain='inner']")).toHaveCount(4);
-    await expect(page.locator("[data-draw-room-summary='true']")).toContainText("H=270");
+    await expect(page.locator("[data-draw-room-summary='true']")).toContainText("H=2700");
     await expect(page.locator("[data-draw-room-summary='true']")).toContainText("S=2,26 м²");
 
     await page.setViewportSize({ width: 820, height: 900 });
     await page.getByRole("button", { name: "Вместить" }).click();
     // This is the evaluator's small constructive contour: fit must reveal
     // real H/S markup rather than relying on the desktop inspector.
-    await expect(page.locator("[data-draw-room-summary='true']")).toContainText("H=270");
+    await expect(page.locator("[data-draw-room-summary='true']")).toContainText("H=2700");
     await expect(page.locator("[data-draw-room-summary='true']")).toContainText("S=2,26 м²");
 
     await addCoordinates([2830, 4000, 2830, 4880]);
@@ -4497,7 +4497,7 @@ test("constructive 10 mm drawing keeps exact face chains, regions and responsive
     expect(roomValues.length).toBeGreaterThan(0);
     roomValues.forEach((value) => expect(["1730", "1070", "780"]).toContain(value));
     await expect(page.locator("[data-draw-room-region]")).toHaveCount(2);
-    await expect(page.locator("[data-draw-room-region]").first()).toContainText("H=270");
+    await expect(page.locator("[data-draw-room-region]").first()).toContainText("H=2700");
     await expect(page.locator("[data-draw-room-region]").first()).toContainText("S=1,35 м²");
     await openToolGroup(page, "opening");
     const tablet = await page.evaluate(() => {
@@ -4590,7 +4590,7 @@ test("constructive 10 mm drawing keeps exact face chains, regions and responsive
         "data-grid-snap-mm",
         "50",
     );
-    await expect(page.locator("[data-draw-room-status='thickness']")).toContainText("5 см");
+    await expect(page.locator("[data-draw-room-status='thickness']")).toContainText("50 мм");
 });
 
 test("a detached second open contour keeps its CAD dimensions after the first room closes", async ({
@@ -4940,14 +4940,14 @@ test("doors and windows carry their heights on the drawing and in the card", asy
     const door = page.locator("[data-draw-room-opening='door']");
     const doorId = await door.getAttribute("data-draw-room-opening-id");
     const doorTag = page.locator(`[data-draw-room-opening-height='${doorId}']`);
-    await expect(doorTag).toHaveText("H=210");
+    await expect(doorTag).toHaveText("H=2100");
 
     const doorCard = page.getByLabel("Параметры: дверь");
     const doorHeight = doorCard.getByLabel("Высота, мм");
     await expect(doorHeight).toHaveValue("2100");
     await doorHeight.fill("2000");
     await doorHeight.press("Enter");
-    await expect(doorTag).toHaveText("H=200");
+    await expect(doorTag).toHaveText("H=2000");
     await doorHeight.fill("3000");
     await doorHeight.press("Enter");
     await expect(page.locator("[data-draw-room-notice='true']")).toContainText("Высота двери");
@@ -4960,13 +4960,13 @@ test("doors and windows carry their heights on the drawing and in the card", asy
     const window = page.locator("[data-draw-room-opening='window']");
     const windowId = await window.getAttribute("data-draw-room-opening-id");
     const windowTag = page.locator(`[data-draw-room-opening-height='${windowId}']`);
-    await expect(windowTag).toHaveText(/H=150\s*Н под\.=85/);
+    await expect(windowTag).toHaveText(/H=1500\s*Н под\.=850/);
 
     const windowCard = page.getByLabel("Параметры: окно");
     const sill = windowCard.getByLabel("Высота подоконника, мм");
     await sill.fill("900");
     await sill.blur();
-    await expect(windowTag).toHaveText(/H=150\s*Н под\.=90/);
+    await expect(windowTag).toHaveText(/H=1500\s*Н под\.=900/);
     await sill.fill("1300");
     await sill.press("Enter");
     await expect(page.locator("[data-draw-room-notice='true']")).toContainText("не выше потолка");
@@ -4988,7 +4988,7 @@ test("doors and windows carry their heights on the drawing and in the card", asy
         .toBe(180);
 
     await windowCard.getByRole("button", { name: "Панорамное" }).click();
-    await expect(windowTag).toHaveText("H=240");
+    await expect(windowTag).toHaveText("H=2400");
     await expect(windowCard.getByLabel("Высота подоконника, мм")).toHaveCount(0);
 
     await expect
@@ -5032,9 +5032,9 @@ test("a piece put in a bed's passage is flagged, not refused", async ({ page }, 
     await place("dresser", 6650, 3300);
     await expect(page.locator("[data-draw-furniture^='furniture-']")).toHaveCount(2);
     await expect(page.locator("[data-passage-blocked='true']")).toHaveCount(1);
-    await expect(page.locator("[data-furniture-passage-free]")).toHaveText("10 из 70 см");
+    await expect(page.locator("[data-furniture-passage-free]")).toHaveText("100 из 700 мм");
     await expect(panel.locator("[data-furniture-passage-warning]")).toContainText(
-        "Левый проход у «Односпальная кровать»: свободно 10 см из 70.",
+        "Левый проход у «Односпальная кровать»: свободно 100 мм из 700.",
     );
 });
 
@@ -5156,7 +5156,7 @@ test("a piece auto layout cannot fit stays on the plan for the next try", async 
     // The armchair is still there, and the column says why it found no spot.
     await expect(pieces).toHaveCount(4);
     await expect(auto.getByRole("status")).toContainText(
-        "Кресло, схема 900 × 900 мм: нет подходящего места (нужно 70 см спереди, не у окна) — оставлено на прежнем месте, передвиньте вручную.",
+        "Кресло, схема 900 × 900 мм: нет подходящего места (нужно 700 мм спереди, не у окна) — оставлено на прежнем месте, передвиньте вручную.",
     );
     // The next try counts it again.
     await expect(auto.locator("[data-auto-layout-item='armchair']")).toBeVisible();
@@ -5489,7 +5489,7 @@ test("a wall carries its own parameters and a narrow door warns about furniture"
         .getByLabel(/Ширина/)
         .first()
         .fill("650");
-    const warning = page.getByRole("dialog", { name: "Проём меньше 700 мм" });
+    const warning = page.getByRole("dialog", { name: "Проём 700 мм или меньше" });
     await expect(warning).toContainText("только в разобранном виде");
     await warning.getByRole("button", { name: "Понятно" }).click();
     await expect(warning).toBeHidden();

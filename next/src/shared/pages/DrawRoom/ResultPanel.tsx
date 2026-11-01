@@ -49,7 +49,7 @@ export default function ResultPanel({
                 >
                     <span>{item.label}</span>
                     <small>
-                        {Math.round(item.width / 10)} × {Math.round(item.depth / 10)} см
+                        {Math.round(item.width)} × {Math.round(item.depth)} мм
                     </small>
                 </li>
             ))}

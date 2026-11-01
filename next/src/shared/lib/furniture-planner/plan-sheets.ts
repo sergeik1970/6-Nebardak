@@ -47,7 +47,7 @@ export const STAMP_WIDTH_MM = 185;
 export const STAMP_HEIGHT_MM = 55;
 /** A door leaf is taken this much smaller than its opening. */
 export const DOOR_LEAF_CLEARANCE_MM = 100;
-/** Below this opening, bulky furniture only gets through taken apart. */
+/** At this opening or narrower, bulky furniture only gets through taken apart. */
 export const NARROW_DOOR_OPENING_MM = 700;
 export const NARROW_DOOR_WARNING =
     "Габаритная мебель (диваны, кровати, шкафы) может пройти только в разобранном виде. Обратите внимание при закупке.";
@@ -960,8 +960,8 @@ const scheduleSheets = (specification: PlanSpecification, regions: DrawRoomRegio
     const top = frame.top + 14;
     const doors = doorRows(room);
     const windows = windowRows(room, regions);
-    const narrow = doors.filter((_, index) => room.doors[index].width < NARROW_DOOR_OPENING_MM);
-    const narrowNote = `${narrow.map(([label]) => label).join(", ")}: проём меньше ${NARROW_DOOR_OPENING_MM} мм. ${NARROW_DOOR_WARNING}`;
+    const narrow = doors.filter((_, index) => room.doors[index].width <= NARROW_DOOR_OPENING_MM);
+    const narrowNote = `${narrow.map(([label]) => label).join(", ")}: проём ${NARROW_DOOR_OPENING_MM} мм или меньше. ${NARROW_DOOR_WARNING}`;
     const windowNote = "Глубина откоса — расстояние от плоскости стены до окна.";
     const doorBlock = (y: number) => {
         const table = drawTable(left, y + 5, DOOR_COLUMNS, doors);

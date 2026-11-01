@@ -162,7 +162,7 @@ describe("auto layout in one room of the drawing", () => {
     it("names the rules a piece needs, for a note when it finds no spot", () => {
         expect(placementRules("kitchen-fridge-wide")).toEqual([
             "спиной к стене",
-            "90 см спереди",
+            "900 мм спереди",
             "не у окна",
         ]);
         expect(placementRules("pouf")).toEqual(["не у окна"]);
