@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { FURNITURE_ASSETS } from "./assets";
 import {
     ROOM_LAB_CURATED_CASES,
     createRoomLabReport,
@@ -9,7 +8,8 @@ import {
     renderRoomLabContactSheet,
     renderRoomLabMarkdown,
 } from "./room-lab";
-import type { RoomLabAssetDataUrls, RoomLabCaseResult } from "./room-lab";
+import type { RoomLabCaseResult } from "./room-lab";
+import { loadRoomLabAssetDataUrls } from "./room-lab/load-asset-data-urls";
 
 const results: RoomLabCaseResult[] = [];
 
@@ -57,18 +57,14 @@ afterAll(() => {
 
     if (process.env.PLANNER_LAB_RENDER !== "1") return;
 
-    const assetDataUrls = Object.entries(FURNITURE_ASSETS).reduce<RoomLabAssetDataUrls>(
-        (urls, [assetKey, asset]) => {
-            const assetPath = path.join(process.cwd(), "public", asset.src.replace(/^\//, ""));
-            urls[assetKey as keyof RoomLabAssetDataUrls] =
-                `data:image/webp;base64,${fs.readFileSync(assetPath).toString("base64")}`;
-            return urls;
-        },
-        {},
-    );
     fs.writeFileSync(
         path.join(outputDirectory, "contact-sheet.html"),
-        renderRoomLabContactSheet(ROOM_LAB_CURATED_CASES, orderedResults, report, assetDataUrls),
+        renderRoomLabContactSheet(
+            ROOM_LAB_CURATED_CASES,
+            orderedResults,
+            report,
+            loadRoomLabAssetDataUrls(),
+        ),
     );
 
     const resultByCaseId = new Map(orderedResults.map((result) => [result.caseId, result]));
