@@ -111,7 +111,7 @@ export const placementRules = (definitionId: string): string[] => {
             : !placement.centerAllowed
               ? ["у стены"]
               : []),
-        ...(front ? [`${Math.round(front / 10)} см спереди`] : []),
+        ...(front ? [`${Math.round(front)} мм спереди`] : []),
         ...(placement.windowPolicy === "forbidden" ? ["не у окна"] : []),
     ];
 };

@@ -42,8 +42,8 @@ const AUTO_TURN_KEY = "stylefinder:furniture-auto-turn";
 const SHORTCUT_LIST: [string, string][] = [
     ["R", "Повернуть на 90°"],
     ["E", "Зеркально"],
-    ["← ↑ → ↓", "Сдвинуть на 1 см"],
-    ["Shift + стрелка", "Сдвинуть на 10 см"],
+    ["← ↑ → ↓", "Сдвинуть на 10 мм"],
+    ["Shift + стрелка", "Сдвинуть на 100 мм"],
     ["⌘C / Ctrl+C", "Копировать предмет"],
     ["⌘V / Ctrl+V", "Поставить копию"],
     ["Delete", "Удалить предмет"],
@@ -504,14 +504,14 @@ export default function FurnitureEditor({
                                 y={geometry.depth - 7 * screenUnit}
                                 textAnchor="middle"
                             >
-                                {Math.round(geometry.width / 10)}
+                                {Math.round(geometry.width)}
                             </text>
                             <text
                                 data-furniture-size="depth"
                                 transform={`translate(${geometry.width - 7 * screenUnit} ${geometry.depth / 2}) rotate(-90)`}
                                 textAnchor="middle"
                             >
-                                {Math.round(geometry.depth / 10)}
+                                {Math.round(geometry.depth)}
                             </text>
                         </g>
                     )}
@@ -560,7 +560,7 @@ export default function FurnitureEditor({
               .map((passage) => {
                   const owner = shown.find((item) => item.id === passage.itemId);
                   const name = owner ? furnitureDefinition(owner.definitionId)?.label : "";
-                  return `${passage.label}${passage.itemId === inspected.id ? "" : ` у «${name}»`}: свободно ${Math.round(passage.free / 10)} см из ${Math.round(passage.need / 10)}.`;
+                  return `${passage.label}${passage.itemId === inspected.id ? "" : ` у «${name}»`}: свободно ${Math.round(passage.free)} мм из ${Math.round(passage.need)}.`;
               })
         : [];
     const distances =
@@ -672,8 +672,7 @@ export default function FurnitureEditor({
                                     textAnchor="middle"
                                     dominantBaseline="middle"
                                 >
-                                    {Math.round(passage.free / 10)} из{" "}
-                                    {Math.round(passage.need / 10)} см
+                                    {Math.round(passage.free)} из {Math.round(passage.need)} мм
                                 </text>
                             ))}
                         </g>
