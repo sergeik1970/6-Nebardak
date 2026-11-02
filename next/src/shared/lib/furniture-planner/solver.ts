@@ -83,6 +83,12 @@ const MAX_SEARCH_NODES = 45_000;
 const MAX_VARIANT_SEARCH_NODES = 90_000;
 const MAX_REMOVAL_COMBINATION_CHECKS = 256;
 const MAX_PREFERRED_FALLBACK_NODES = 120_000;
+/**
+ * One block-aware search of the whole set, taken only when the quick plan left
+ * something out. Chosen on the benchmark: 8 000 nodes recover 13 of the 16 rooms
+ * 45 000 do, at a third of the time.
+ */
+const MAX_PREFERRED_FALLBACK_SCENARIO_NODES = 8_000;
 const MAX_PREFERRED_FALLBACK_ATTEMPT_NODES = 20_000;
 const MAX_PREFERRED_DIRECT_CANDIDATES = 6_000;
 /** Maximum perpendicular distance from an item's back edge to its matching window wall. */
@@ -2432,6 +2438,8 @@ export const solveWithAutomaticRemoval = (
  * a direct attempt in the already valid layout before the bounded re-solve
  * fallback. This never removes an item or claims an unplaced item is
  * physically impossible — it only reports what did not enter the quick plan.
+ * Anything left out earns one block-aware search of the whole set, unless the
+ * required furniture alone is already proven not to fit.
  */
 export const solveWithPreferredPlacementFallback = (
     room: Room,
@@ -2449,6 +2457,8 @@ export const solveWithPreferredPlacementFallback = (
         .sort(compareRemainingInstances);
     const requiredResult = solveRoom(room, requiredInstances, preferences);
     const requiredSearchDidNotFinish = requiredResult.status === "failure";
+    const requiredProvenImpossible =
+        requiredResult.status === "failure" && requiredResult.reason === "proven-impossible";
     let acceptedInstances = requiredSearchDidNotFinish ? [] : requiredInstances;
     let acceptedResult: LayoutSuccess =
         requiredResult.status === "success"
@@ -2567,6 +2577,17 @@ export const solveWithPreferredPlacementFallback = (
             acceptedPlacements = candidateResult.placements;
         } else {
             unplacedInstances.push(instance);
+        }
+    }
+
+    if (unplacedInstances.length > 0 && !requiredProvenImpossible) {
+        const scenarioResult = solveRoomInternal(room, instances, {
+            preferences,
+            profileId: getVariantProfileIds(room, instances)[1],
+            maxSearchNodes: MAX_PREFERRED_FALLBACK_SCENARIO_NODES,
+        });
+        if (scenarioResult.status === "success") {
+            return { result: scenarioResult, unplacedInstances: [] };
         }
     }
 

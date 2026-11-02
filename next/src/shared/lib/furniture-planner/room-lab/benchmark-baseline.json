@@ -3,7 +3,7 @@
   "totals": {
     "rooms": 196,
     "strictFull": 129,
-    "plannerFull": 138,
+    "plannerFull": 151,
     "knownToFit": 154,
     "variantRooms": 140,
     "variantRoomsWithChoice": 28,
@@ -11,13 +11,13 @@
     "searchExhausted": 67,
     "provenImpossible": 0,
     "maximumNodes": 90000,
-    "totalNodes": 19064362
+    "totalNodes": 19017081
   },
   "byKind": {
     "bedroom": {
       "rooms": 49,
       "strictFull": 9,
-      "plannerFull": 23,
+      "plannerFull": 26,
       "knownToFit": 26,
       "variantRooms": 40,
       "variantRoomsWithChoice": 0,
@@ -25,12 +25,12 @@
       "searchExhausted": 40,
       "provenImpossible": 0,
       "maximumNodes": 90000,
-      "totalNodes": 4590547
+      "totalNodes": 4569807
     },
     "living": {
       "rooms": 49,
       "strictFull": 29,
-      "plannerFull": 24,
+      "plannerFull": 31,
       "knownToFit": 32,
       "variantRooms": 49,
       "variantRoomsWithChoice": 5,
@@ -38,12 +38,12 @@
       "searchExhausted": 20,
       "provenImpossible": 0,
       "maximumNodes": 90000,
-      "totalNodes": 5169292
+      "totalNodes": 5129424
     },
     "children": {
       "rooms": 49,
       "strictFull": 42,
-      "plannerFull": 43,
+      "plannerFull": 45,
       "knownToFit": 47,
       "variantRooms": 32,
       "variantRoomsWithChoice": 9,
@@ -51,12 +51,12 @@
       "searchExhausted": 7,
       "provenImpossible": 0,
       "maximumNodes": 90000,
-      "totalNodes": 4457599
+      "totalNodes": 4472639
     },
     "office": {
       "rooms": 49,
       "strictFull": 49,
-      "plannerFull": 48,
+      "plannerFull": 49,
       "knownToFit": 49,
       "variantRooms": 19,
       "variantRoomsWithChoice": 14,
@@ -64,7 +64,7 @@
       "searchExhausted": 0,
       "provenImpossible": 0,
       "maximumNodes": 90000,
-      "totalNodes": 4846924
+      "totalNodes": 4845211
     }
   },
   "findingCounts": {
@@ -76,14 +76,14 @@
   },
   "timing": {
     "strict": {
-      "medianMs": 1352.76,
-      "p95Ms": 14295.28,
-      "maximumMs": 28337.71
+      "medianMs": 1302.52,
+      "p95Ms": 7820.65,
+      "maximumMs": 15329.67
     },
     "planner": {
-      "medianMs": 267.66,
-      "p95Ms": 2133.24,
-      "maximumMs": 4866.93
+      "medianMs": 259.02,
+      "p95Ms": 2009.25,
+      "maximumMs": 4002.14
     }
   },
   "cases": [
@@ -101,12 +101,12 @@
     {"id":"GEN-bedroom-3000x4200-radiator","input":"2831ed95","kind":"bedroom","scenario":"radiator","areaM2":12.6,"requested":4,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"fe488ec8","valid":true},"planner":{"status":"success","placed":3,"missing":["wardrobe-medium"],"nodes":4308,"layout":"58d6dc50","valid":true},"findings":[]},
     {"id":"GEN-bedroom-3000x4200-two-windows","input":"ba9c6536","kind":"bedroom","scenario":"two-windows","areaM2":12.6,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"d67b1912","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":4308,"layout":"7a9468b5","valid":true},"findings":["center-barrier","variants-too-similar"]},
     {"id":"GEN-bedroom-3000x4200-l-shape","input":"4f0211fc","kind":"bedroom","scenario":"l-shape","areaM2":10.56,"requested":4,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":53616,"layout":"4540bb4c","valid":true},"planner":{"status":"success","placed":1,"missing":["bedside-table","bedside-table","double-bed"],"nodes":0,"layout":"4540bb4c","valid":true},"findings":[]},
-    {"id":"GEN-bedroom-3300x3900-facing","input":"0d23c9ae","kind":"bedroom","scenario":"facing","areaM2":12.87,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"71273bbf","valid":true},"planner":{"status":"success","placed":3,"missing":["wardrobe-medium"],"nodes":20000,"layout":"4cabcf19","valid":true},"findings":["center-barrier","variants-too-similar"]},
+    {"id":"GEN-bedroom-3300x3900-facing","input":"0d23c9ae","kind":"bedroom","scenario":"facing","areaM2":12.87,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"71273bbf","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":8000,"layout":"71273bbf","valid":true},"findings":["center-barrier","variants-too-similar"]},
     {"id":"GEN-bedroom-3300x3900-side-door","input":"1a774e80","kind":"bedroom","scenario":"side-door","areaM2":12.87,"requested":4,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":54480,"layout":"a8fddb52","valid":true},"planner":{"status":"success","placed":1,"missing":["bedside-table","bedside-table","double-bed"],"nodes":0,"layout":"a8fddb52","valid":true},"findings":[]},
-    {"id":"GEN-bedroom-3300x3900-corner-door","input":"7556bc46","kind":"bedroom","scenario":"corner-door","areaM2":12.87,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"5be1b05d","valid":true},"planner":{"status":"success","placed":3,"missing":["wardrobe-medium"],"nodes":4740,"layout":"f42ec911","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-bedroom-3300x3900-corner-door","input":"7556bc46","kind":"bedroom","scenario":"corner-door","areaM2":12.87,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"5be1b05d","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":8000,"layout":"5be1b05d","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-bedroom-3300x3900-long-window","input":"427c82f0","kind":"bedroom","scenario":"long-window","areaM2":12.87,"requested":4,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"d11bb710","valid":true},"planner":{"status":"success","placed":3,"missing":["bedside-table"],"nodes":4740,"layout":"42f033e8","valid":true},"findings":[]},
     {"id":"GEN-bedroom-3300x3900-radiator","input":"25a832e4","kind":"bedroom","scenario":"radiator","areaM2":12.87,"requested":4,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"3f0fae9c","valid":true},"planner":{"status":"success","placed":2,"missing":["bedside-table","bedside-table"],"nodes":4740,"layout":"30cb356f","valid":true},"findings":[]},
-    {"id":"GEN-bedroom-3300x3900-two-windows","input":"7c552531","kind":"bedroom","scenario":"two-windows","areaM2":12.87,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"d9a4e372","valid":true},"planner":{"status":"success","placed":3,"missing":["wardrobe-medium"],"nodes":20000,"layout":"12d503eb","valid":true},"findings":["center-barrier","variants-too-similar"]},
+    {"id":"GEN-bedroom-3300x3900-two-windows","input":"7c552531","kind":"bedroom","scenario":"two-windows","areaM2":12.87,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"d9a4e372","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":8000,"layout":"d9a4e372","valid":true},"findings":["center-barrier","variants-too-similar"]},
     {"id":"GEN-bedroom-3300x3900-l-shape","input":"93797491","kind":"bedroom","scenario":"l-shape","areaM2":10.86,"requested":4,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":54480,"layout":"7046412b","valid":true},"planner":{"status":"success","placed":1,"missing":["bedside-table","bedside-table","double-bed"],"nodes":0,"layout":"7046412b","valid":true},"findings":[]},
     {"id":"GEN-bedroom-3200x4800-facing","input":"bd32e14f","kind":"bedroom","scenario":"facing","areaM2":15.36,"requested":5,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"9a87b94c","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":6356,"layout":"bf4a2209","valid":true},"findings":[]},
     {"id":"GEN-bedroom-3200x4800-side-door","input":"f7da25e1","kind":"bedroom","scenario":"side-door","areaM2":15.36,"requested":5,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"9a87b94c","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":6356,"layout":"29ba6da9","valid":true},"findings":[]},
@@ -144,8 +144,8 @@
     {"id":"GEN-living-3300x4800-two-windows","input":"bba565be","kind":"living","scenario":"two-windows","areaM2":15.84,"requested":5,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":90000,"layout":"fbcc8c37","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":8828,"layout":"0ccb40fd","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
     {"id":"GEN-living-3300x4800-l-shape","input":"b225c231","kind":"living","scenario":"l-shape","areaM2":13.37,"requested":5,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"d599522c","valid":true},"planner":{"status":"success","placed":4,"missing":["tv"],"nodes":8868,"layout":"345afc00","valid":true},"findings":[]},
     {"id":"GEN-living-3600x5000-facing","input":"47bf3035","kind":"living","scenario":"facing","areaM2":18,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"9b21b9d0","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":11084,"layout":"e2c5b1ef","valid":true},"findings":["variants-too-similar"]},
-    {"id":"GEN-living-3600x5000-side-door","input":"7768421d","kind":"living","scenario":"side-door","areaM2":18,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"460e1496","valid":true},"planner":{"status":"success","placed":4,"missing":["tv"],"nodes":11084,"layout":"8f283658","valid":true},"findings":["variants-too-similar"]},
-    {"id":"GEN-living-3600x5000-corner-door","input":"e13bc3ee","kind":"living","scenario":"corner-door","areaM2":18,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"8daa8a49","valid":true},"planner":{"status":"success","placed":4,"missing":["tv"],"nodes":11084,"layout":"67541569","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-living-3600x5000-side-door","input":"7768421d","kind":"living","scenario":"side-door","areaM2":18,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"460e1496","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":8000,"layout":"6ec00f5a","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-living-3600x5000-corner-door","input":"e13bc3ee","kind":"living","scenario":"corner-door","areaM2":18,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"8daa8a49","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":8000,"layout":"88ca39df","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-living-3600x5000-long-window","input":"ee270c98","kind":"living","scenario":"long-window","areaM2":18,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"c1f6ada3","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":11084,"layout":"1dcb029a","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
     {"id":"GEN-living-3600x5000-radiator","input":"b34c312f","kind":"living","scenario":"radiator","areaM2":18,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"20371ad0","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":11084,"layout":"0a78f589","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-living-3600x5000-two-windows","input":"85e716d4","kind":"living","scenario":"two-windows","areaM2":18,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"a8ab27b0","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":11084,"layout":"3be95066","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
@@ -153,24 +153,24 @@
     {"id":"GEN-living-3800x5600-facing","input":"48954d13","kind":"living","scenario":"facing","areaM2":21.28,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"b4218b78","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":14412,"layout":"d41722a7","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-living-3800x5600-side-door","input":"3b544248","kind":"living","scenario":"side-door","areaM2":21.28,"requested":6,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"0c216c0d","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":14412,"layout":"0b7621a2","valid":true},"findings":[]},
     {"id":"GEN-living-3800x5600-corner-door","input":"1da91ced","kind":"living","scenario":"corner-door","areaM2":21.28,"requested":6,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"84bcc367","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":14412,"layout":"6462988c","valid":true},"findings":[]},
-    {"id":"GEN-living-3800x5600-long-window","input":"df87c162","kind":"living","scenario":"long-window","areaM2":21.28,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"8d8df686","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":14412,"layout":"06791087","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
-    {"id":"GEN-living-3800x5600-radiator","input":"da6dcf5c","kind":"living","scenario":"radiator","areaM2":21.28,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"f2442cb1","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":14412,"layout":"b7551ded","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-living-3800x5600-long-window","input":"df87c162","kind":"living","scenario":"long-window","areaM2":21.28,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"8d8df686","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":8000,"layout":"d8dbc3eb","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
+    {"id":"GEN-living-3800x5600-radiator","input":"da6dcf5c","kind":"living","scenario":"radiator","areaM2":21.28,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"f2442cb1","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":8000,"layout":"621cec0e","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-living-3800x5600-two-windows","input":"5a72f62c","kind":"living","scenario":"two-windows","areaM2":21.28,"requested":6,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"026fd5c0","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":14412,"layout":"9e0f9683","valid":true},"findings":[]},
     {"id":"GEN-living-3800x5600-l-shape","input":"16cb86e2","kind":"living","scenario":"l-shape","areaM2":17.91,"requested":5,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"ce26caec","valid":true},"planner":{"status":"success","placed":4,"missing":["tv"],"nodes":14412,"layout":"55f52702","valid":true},"findings":[]},
     {"id":"GEN-living-3200x6800-facing","input":"8dfb05b5","kind":"living","scenario":"facing","areaM2":21.76,"requested":6,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"36da5e11","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":13740,"layout":"c9b18d7d","valid":true},"findings":[]},
     {"id":"GEN-living-3200x6800-side-door","input":"5eb00131","kind":"living","scenario":"side-door","areaM2":21.76,"requested":6,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"d7169d25","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":13740,"layout":"4b5af373","valid":true},"findings":[]},
     {"id":"GEN-living-3200x6800-corner-door","input":"b3cb26c2","kind":"living","scenario":"corner-door","areaM2":21.76,"requested":6,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"36da5e11","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":13740,"layout":"4b5af373","valid":true},"findings":[]},
-    {"id":"GEN-living-3200x6800-long-window","input":"39e5ac52","kind":"living","scenario":"long-window","areaM2":21.76,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"f225287e","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":13740,"layout":"41619c0e","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
+    {"id":"GEN-living-3200x6800-long-window","input":"39e5ac52","kind":"living","scenario":"long-window","areaM2":21.76,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"f225287e","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":8000,"layout":"b01e6f0b","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
     {"id":"GEN-living-3200x6800-radiator","input":"e2190162","kind":"living","scenario":"radiator","areaM2":21.76,"requested":6,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"70e1202c","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":13740,"layout":"b7762864","valid":true},"findings":[]},
     {"id":"GEN-living-3200x6800-two-windows","input":"ce1b8fea","kind":"living","scenario":"two-windows","areaM2":21.76,"requested":6,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"77f0f458","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":13740,"layout":"4a7d58b1","valid":true},"findings":[]},
-    {"id":"GEN-living-3200x6800-l-shape","input":"69898fc2","kind":"living","scenario":"l-shape","areaM2":18.25,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"7f7d5e65","valid":true},"planner":{"status":"success","placed":4,"missing":["tv"],"nodes":13812,"layout":"9063f6cc","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-living-3200x6800-l-shape","input":"69898fc2","kind":"living","scenario":"l-shape","areaM2":18.25,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"7f7d5e65","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":8000,"layout":"7f7d5e65","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-living-4000x6000-facing","input":"486c143a","kind":"living","scenario":"facing","areaM2":24,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"860da0ac","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":20000,"layout":"860da0ac","valid":true},"findings":["center-barrier","variants-too-similar","weak-tv-axis"]},
     {"id":"GEN-living-4000x6000-side-door","input":"3b360526","kind":"living","scenario":"side-door","areaM2":24,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"f0e89198","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":20000,"layout":"f0e89198","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
     {"id":"GEN-living-4000x6000-corner-door","input":"1c0570b6","kind":"living","scenario":"corner-door","areaM2":24,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"fbd64665","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":20000,"layout":"379ffc90","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
     {"id":"GEN-living-4000x6000-long-window","input":"a34447ac","kind":"living","scenario":"long-window","areaM2":24,"requested":6,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":90000,"layout":"955f91b6","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":20000,"layout":"955f91b6","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
     {"id":"GEN-living-4000x6000-radiator","input":"a00e32c9","kind":"living","scenario":"radiator","areaM2":24,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"978674c8","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":20000,"layout":"978674c8","valid":true},"findings":["center-barrier","variants-too-similar","weak-tv-axis"]},
     {"id":"GEN-living-4000x6000-two-windows","input":"3c9917ff","kind":"living","scenario":"two-windows","areaM2":24,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"41f0e20b","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":20000,"layout":"44273905","valid":true},"findings":["center-barrier","variants-too-similar","weak-tv-axis"]},
-    {"id":"GEN-living-4000x6000-l-shape","input":"6c562b64","kind":"living","scenario":"l-shape","areaM2":20.16,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"924b6e6e","valid":true},"planner":{"status":"success","placed":5,"missing":["tv"],"nodes":17324,"layout":"a3d09ded","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-living-4000x6000-l-shape","input":"6c562b64","kind":"living","scenario":"l-shape","areaM2":20.16,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"924b6e6e","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":8000,"layout":"c1d3c0ef","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-living-4500x5500-facing","input":"68b67c65","kind":"living","scenario":"facing","areaM2":24.75,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"14617179","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":18524,"layout":"a477210a","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-living-4500x5500-side-door","input":"0c8d8523","kind":"living","scenario":"side-door","areaM2":24.75,"requested":6,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"e8f6a2d4","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":18524,"layout":"56c406a8","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-living-4500x5500-corner-door","input":"a2dd8890","kind":"living","scenario":"corner-door","areaM2":24.75,"requested":6,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"cfb8ef0b","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":18524,"layout":"ca4953f0","valid":true},"findings":[]},
@@ -188,7 +188,7 @@
     {"id":"GEN-children-2700x3300-facing","input":"2e04efc8","kind":"children","scenario":"facing","areaM2":8.91,"requested":3,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"6a065ade","valid":true},"planner":{"status":"success","placed":3,"missing":[],"nodes":420,"layout":"64e41f94","valid":true},"findings":[]},
     {"id":"GEN-children-2700x3300-side-door","input":"dd87c1b9","kind":"children","scenario":"side-door","areaM2":8.91,"requested":3,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"e12fcbd1","valid":true},"planner":{"status":"success","placed":3,"missing":[],"nodes":420,"layout":"3a837178","valid":true},"findings":[]},
     {"id":"GEN-children-2700x3300-corner-door","input":"624f4421","kind":"children","scenario":"corner-door","areaM2":8.91,"requested":3,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"e12fcbd1","valid":true},"planner":{"status":"success","placed":3,"missing":[],"nodes":420,"layout":"fd33af26","valid":true},"findings":[]},
-    {"id":"GEN-children-2700x3300-long-window","input":"319a44ec","kind":"children","scenario":"long-window","areaM2":8.91,"requested":3,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"897a5b6f","valid":true},"planner":{"status":"success","placed":2,"missing":["desk"],"nodes":420,"layout":"c50d6ee0","valid":true},"findings":["center-barrier","variants-too-similar"]},
+    {"id":"GEN-children-2700x3300-long-window","input":"319a44ec","kind":"children","scenario":"long-window","areaM2":8.91,"requested":3,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"897a5b6f","valid":true},"planner":{"status":"success","placed":3,"missing":[],"nodes":8000,"layout":"7dab8593","valid":true},"findings":["center-barrier","variants-too-similar"]},
     {"id":"GEN-children-2700x3300-radiator","input":"8a64f14a","kind":"children","scenario":"radiator","areaM2":8.91,"requested":3,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"3514123a","valid":true},"planner":{"status":"success","placed":2,"missing":["desk"],"nodes":420,"layout":"61d70d32","valid":true},"findings":["center-barrier","variants-too-similar"]},
     {"id":"GEN-children-2700x3300-two-windows","input":"04ab7682","kind":"children","scenario":"two-windows","areaM2":8.91,"requested":3,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"73fb18e0","valid":true},"planner":{"status":"success","placed":2,"missing":["desk"],"nodes":420,"layout":"48b5687f","valid":true},"findings":[]},
     {"id":"GEN-children-2700x3300-l-shape","input":"bdffc45b","kind":"children","scenario":"l-shape","areaM2":7.48,"requested":3,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"418896a1","valid":true},"planner":{"status":"success","placed":2,"missing":["desk"],"nodes":304,"layout":"2f04e222","valid":true},"findings":[]},
@@ -199,7 +199,7 @@
     {"id":"GEN-children-2800x3900-radiator","input":"085fc814","kind":"children","scenario":"radiator","areaM2":10.92,"requested":3,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":90000,"layout":"ac97c90e","valid":true},"planner":{"status":"success","placed":3,"missing":[],"nodes":20000,"layout":"ac97c90e","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-children-2800x3900-two-windows","input":"70a95db9","kind":"children","scenario":"two-windows","areaM2":10.92,"requested":3,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":90000,"layout":"f197e1b4","valid":true},"planner":{"status":"success","placed":3,"missing":[],"nodes":504,"layout":"dda36501","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-children-2800x3900-l-shape","input":"47c87b1d","kind":"children","scenario":"l-shape","areaM2":9.22,"requested":3,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":90000,"layout":"5ca54188","valid":true},"planner":{"status":"success","placed":3,"missing":[],"nodes":390,"layout":"bc73e11d","valid":true},"findings":["variants-too-similar"]},
-    {"id":"GEN-children-3000x4000-facing","input":"d46c65dd","kind":"children","scenario":"facing","areaM2":12,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"d694ae7a","valid":true},"planner":{"status":"success","placed":3,"missing":["desk"],"nodes":540,"layout":"cb1b5fa2","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-children-3000x4000-facing","input":"d46c65dd","kind":"children","scenario":"facing","areaM2":12,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"d694ae7a","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":8000,"layout":"995728af","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-children-3000x4000-side-door","input":"a610fdd4","kind":"children","scenario":"side-door","areaM2":12,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"141f2e33","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":540,"layout":"7ef34f6d","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-children-3000x4000-corner-door","input":"a6fa425e","kind":"children","scenario":"corner-door","areaM2":12,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"14de8055","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":540,"layout":"5f6e2344","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-children-3000x4000-long-window","input":"dc40f773","kind":"children","scenario":"long-window","areaM2":12,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"ef893ad2","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":540,"layout":"34a8272f","valid":true},"findings":["variants-too-similar"]},
@@ -265,7 +265,7 @@
     {"id":"GEN-office-3000x4000-facing","input":"5f96f520","kind":"office","scenario":"facing","areaM2":12,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"f80712d0","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":9871,"layout":"db44c2c9","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-office-3000x4000-side-door","input":"3944f546","kind":"office","scenario":"side-door","areaM2":12,"requested":4,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":90000,"layout":"377fca41","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":9878,"layout":"8011ec39","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-office-3000x4000-corner-door","input":"81ea424c","kind":"office","scenario":"corner-door","areaM2":12,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"ab9ebb8c","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":9576,"layout":"dd31553d","valid":true},"findings":["variants-too-similar"]},
-    {"id":"GEN-office-3000x4000-long-window","input":"8278c866","kind":"office","scenario":"long-window","areaM2":12,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"a33e616f","valid":true},"planner":{"status":"success","placed":3,"missing":["bookcase"],"nodes":9713,"layout":"be1727ca","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-office-3000x4000-long-window","input":"8278c866","kind":"office","scenario":"long-window","areaM2":12,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"a33e616f","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":8000,"layout":"a33e616f","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-office-3000x4000-radiator","input":"19e90fa6","kind":"office","scenario":"radiator","areaM2":12,"requested":4,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":90000,"layout":"0d504873","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":10257,"layout":"66474f8c","valid":true},"findings":["center-barrier","variants-too-similar"]},
     {"id":"GEN-office-3000x4000-two-windows","input":"4eb13158","kind":"office","scenario":"two-windows","areaM2":12,"requested":4,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":90000,"layout":"06efdcc0","valid":true},"planner":{"status":"success","placed":4,"missing":[],"nodes":10036,"layout":"30c4ae28","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-office-3000x4000-l-shape","input":"adfc4c74","kind":"office","scenario":"l-shape","areaM2":10.08,"requested":2,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":90000,"layout":"2b676027","valid":true},"planner":{"status":"success","placed":2,"missing":[],"nodes":9714,"layout":"60816bb0","valid":true},"findings":["variants-too-similar"]},

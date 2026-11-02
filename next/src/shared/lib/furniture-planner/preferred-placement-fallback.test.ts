@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { buildFurnitureInstances } from "./catalog";
+import { validateLayout } from "./geometry";
 import { createDefaultRoom } from "./room";
+import { ROOM_LAB_GENERATED_CASES } from "./room-lab";
 import { solveRoomVariants, solveWithPreferredPlacementFallback } from "./solver";
 import { FurnitureInstance, FurnitureSelection, Room } from "./types";
 
@@ -105,5 +107,29 @@ describe("preferred placement fallback", () => {
         expect(fallback.result.status).toBe("success");
         expect(fallback.result.placements).toHaveLength(denseInstances.length);
         expect(fallback.unplacedInstances).toEqual([]);
+    });
+
+    const generatedCase = (id: string) => {
+        const roomCase = ROOM_LAB_GENERATED_CASES.find((candidate) => candidate.id === id);
+        if (!roomCase) throw new Error(`Unknown generated room: ${id}`);
+        return roomCase;
+    };
+
+    it("recovers the whole set with a block-aware search when the quick plan drops a piece", () => {
+        const { room, instances, preferences } = generatedCase("GEN-living-3600x5000-side-door");
+
+        const fallback = solveWithPreferredPlacementFallback(room, instances, preferences);
+
+        expect(fallback.unplacedInstances).toEqual([]);
+        expect(fallback.result.placements).toHaveLength(instances.length);
+        expect(validateLayout(room, fallback.result.placements, preferences).valid).toBe(true);
+    });
+
+    it("does not retry the whole set when the required piece alone is proven not to fit", () => {
+        const { room, instances, preferences } = generatedCase("GEN-bedroom-3300x3900-side-door");
+
+        const fallback = solveWithPreferredPlacementFallback(room, instances, preferences);
+
+        expect(fallback.unplacedInstances.map((item) => item.definitionId)).toContain("double-bed");
     });
 });
