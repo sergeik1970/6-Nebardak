@@ -33,7 +33,7 @@ export interface RoomBenchmarkRecord {
         layout: string | null;
         valid: boolean;
     };
-    /** The path the planner takes: places what it can and names the rest. */
+    /** What the planner shows: the strict plan, or else what the fallback could place. */
     planner: {
         status: RoomLabExpectedStatus;
         placed: number;
@@ -49,13 +49,8 @@ export interface RoomBenchmarkTotals {
     rooms: number;
     /** The strict search placed the whole set. */
     strictFull: number;
-    /** The planner's path placed the whole set. */
+    /** The planner showed the whole set, by either of its two steps. */
     plannerFull: number;
-    /**
-     * Rooms where some path placed the whole set: a floor on how many can
-     * hold it, since a failed search proves nothing.
-     */
-    knownToFit: number;
     /** Rooms of the promised area, and how many of them got two different plans. */
     variantRooms: number;
     variantRoomsWithChoice: number;
@@ -77,7 +72,7 @@ export interface RoomBenchmarkTiming {
 export interface RoomBenchmarkTimings {
     /** Three variants with every piece required. */
     strict: RoomBenchmarkTiming;
-    /** The planner's path: what a person actually waits for. */
+    /** Both of the planner's steps: what a person actually waits for. */
     planner: RoomBenchmarkTiming;
 }
 
@@ -137,23 +132,29 @@ const round = (value: number): number => Math.round(value * 100) / 100;
 
 const scenarioOf = (roomCase: RoomLabCase): string => roomCase.tags[1] ?? "";
 
-/** Measures one room on both paths. */
+/**
+ * Measures one room as the planner solves it: the strict search first, and
+ * the fallback only when that finds nothing.
+ */
 export const runRoomBenchmarkCase = (roomCase: RoomLabCase): RoomBenchmarkRun => {
     const result = evaluateRoomLabCase(roomCase);
     const { execution, metrics, findings } = result;
-    const plannerStartedAt = performance.now();
-    const fallback = solveWithPreferredPlacementFallback(
-        roomCase.room,
-        roomCase.instances,
-        roomCase.preferences,
-    );
-    const plannerMs = round(performance.now() - plannerStartedAt);
-    const plannerPlacements = fallback.result.placements;
+    const strictPassed = execution.status === "success";
+    const fallbackStartedAt = performance.now();
+    const fallback = strictPassed
+        ? null
+        : solveWithPreferredPlacementFallback(
+              roomCase.room,
+              roomCase.instances,
+              roomCase.preferences,
+          );
+    const fallbackMs = round(performance.now() - fallbackStartedAt);
+    const plannerPlacements = fallback ? fallback.result.placements : execution.placements;
 
     return {
         result,
         strictMs: execution.durationMs,
-        plannerMs,
+        plannerMs: round(execution.durationMs + fallbackMs),
         record: {
             id: roomCase.id,
             input: hashText(
@@ -174,10 +175,15 @@ export const runRoomBenchmarkCase = (roomCase: RoomLabCase): RoomBenchmarkRun =>
                 ),
             },
             planner: {
-                status: fallback.result.status === "success" ? "success" : fallback.result.reason,
+                status:
+                    !fallback || fallback.result.status === "success"
+                        ? "success"
+                        : fallback.result.reason,
                 placed: plannerPlacements.length,
-                missing: fallback.unplacedInstances.map((instance) => instance.definitionId).sort(),
-                nodes: fallback.result.exploredNodes,
+                missing: (fallback?.unplacedInstances ?? [])
+                    .map((instance) => instance.definitionId)
+                    .sort(),
+                nodes: execution.exploredNodes + (fallback?.result.exploredNodes ?? 0),
                 layout: layoutFingerprint(plannerPlacements),
                 valid: isValid(roomCase.room, plannerPlacements, roomCase.preferences),
             },
@@ -199,8 +205,6 @@ const totalsOf = (records: RoomBenchmarkRecord[]): RoomBenchmarkTotals => {
         rooms: records.length,
         strictFull: records.filter(isStrictFull).length,
         plannerFull: records.filter(isPlannerFull).length,
-        knownToFit: records.filter((record) => isStrictFull(record) || isPlannerFull(record))
-            .length,
         variantRooms: variantRooms.length,
         variantRoomsWithChoice: variantRooms.filter((record) => record.strict.distinctVariants >= 2)
             .length,
@@ -323,7 +327,7 @@ const share = (part: number, whole: number): string =>
     whole === 0 ? "—" : `${part}/${whole} (${Math.round((part / whole) * 100)}%)`;
 
 const row = (label: string, totals: RoomBenchmarkTotals): string =>
-    `| ${label} | ${totals.rooms} | ${share(totals.strictFull, totals.rooms)} | ${share(totals.plannerFull, totals.rooms)} | ${share(Math.max(totals.strictFull, totals.plannerFull), totals.knownToFit)} | ${share(totals.variantRoomsWithChoice, totals.variantRooms)} | ${totals.invalidLayouts} |`;
+    `| ${label} | ${totals.rooms} | ${share(totals.strictFull, totals.rooms)} | ${share(totals.plannerFull, totals.rooms)} | ${share(totals.variantRoomsWithChoice, totals.variantRooms)} | ${totals.invalidLayouts} |`;
 
 const listSection = (title: string, items: string[]): string[] =>
     items.length === 0
@@ -347,8 +351,8 @@ export const renderRoomBenchmarkMarkdown = (
     const lines = [
         "# Замер авторасстановки",
         "",
-        "| Комнаты | Всего | Полный набор, строгий поиск | Полный набор, продукт | Лучший путь среди заведомо вместимых | Два разных варианта от 12 м² | Недопустимых планов |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Комнаты | Всего | Полный набор, строгий поиск | Полный набор, продукт | Два разных варианта от 12 м² | Недопустимых планов |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
         row("Все", totals),
         ...Object.entries(report.byKind).map(([kind, kindTotals]) => row(kind, kindTotals)),
         "",

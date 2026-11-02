@@ -90,7 +90,7 @@ describe("generated rooms", () => {
 });
 
 describe("benchmark report", () => {
-    it("counts a room as fitting when either path placed the whole set", () => {
+    it("counts a full plan by the fallback as the planner's, not the strict search's", () => {
         const onlyPlanner: RoomBenchmarkRecord = {
             ...unplaced(record({ id: "GEN-2" })),
             planner: record().planner,
@@ -101,7 +101,6 @@ describe("benchmark report", () => {
             rooms: 3,
             strictFull: 1,
             plannerFull: 2,
-            knownToFit: 2,
             searchExhausted: 2,
         });
     });
