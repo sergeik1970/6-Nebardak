@@ -324,6 +324,7 @@ export interface RadiatorObstacle {
 export type RoomKind =
     | "bedroom"
     | "living"
+    | "kitchen-living"
     | "kitchen"
     | "children"
     | "office"

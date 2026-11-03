@@ -1,4 +1,5 @@
 import { buildFurnitureInstances } from "../../catalog";
+import { kitchenZoneCandidates, withKitchenZone } from "../../furniture-selection";
 import { applyRoomGeometry, createLRoomGeometry, getRoomArea } from "../../room-geometry";
 import type {
     DoorOpening,
@@ -11,7 +12,13 @@ import type {
 } from "../../types";
 import type { RoomLabCase } from "../types";
 
-export const ROOM_BENCHMARK_KINDS = ["bedroom", "living", "children", "office"] as const;
+export const ROOM_BENCHMARK_KINDS = [
+    "bedroom",
+    "living",
+    "kitchen-living",
+    "children",
+    "office",
+] as const;
 export type RoomBenchmarkKind = (typeof ROOM_BENCHMARK_KINDS)[number];
 
 export const ROOM_BENCHMARK_SCENARIOS = [
@@ -43,6 +50,15 @@ const SIZES: Record<RoomBenchmarkKind, [width: number, depth: number][]> = {
         [4000, 6000],
         [4500, 5500],
         [5000, 6000],
+    ],
+    "kitchen-living": [
+        [4000, 5000],
+        [3800, 6000],
+        [4500, 5500],
+        [4000, 7000],
+        [5000, 6000],
+        [6000, 5000],
+        [5500, 6500],
     ],
     children: [
         [2700, 3300],
@@ -76,7 +92,8 @@ const furnitureSet = (kind: RoomBenchmarkKind, areaM2: number): Record<string, n
             if (areaM2 < 11) return { "double-bed": 1, "bedside-table": 2, "wardrobe-small": 1 };
             if (areaM2 < 14) return { "double-bed": 1, "bedside-table": 2, "wardrobe-medium": 1 };
             return { "double-bed": 1, "bedside-table": 2, "wardrobe-large": 1, dresser: 1 };
-        case "living": {
+        case "living":
+        case "kitchen-living": {
             const set: Record<string, number> = {
                 "sofa-three": 1,
                 tv: 1,
@@ -227,8 +244,16 @@ const createCase = (
     scenario: RoomBenchmarkScenario,
 ): RoomLabCase => {
     const id = `GEN-${kind}-${width}x${depth}-${scenario}`;
-    const room = buildRoom(width, depth, scenario, randomFrom(hashText(id)));
-    const areaM2 = getRoomArea(room) / 1_000_000;
+    const emptyRoom = buildRoom(width, depth, scenario, randomFrom(hashText(id)));
+    // A kitchen-living room is measured with its kitchen held in place, as the
+    // planner's own search would see it; automatic selection gets the empty room.
+    const kitchen = kind === "kitchen-living" ? kitchenZoneCandidates(emptyRoom)[0] : undefined;
+    const room = kitchen ? withKitchenZone(emptyRoom, kitchen) : emptyRoom;
+    const reserved = kitchen
+        ? (kitchen.run.width * kitchen.run.depth + kitchen.passage.width * kitchen.passage.depth) /
+          1_000_000
+        : 0;
+    const areaM2 = getRoomArea(room) / 1_000_000 - reserved;
     return {
         id,
         title: `${kind} ${width}×${depth}, ${scenario}`,
@@ -237,7 +262,8 @@ const createCase = (
         tags: [kind, scenario],
         room,
         instances: buildInstances(furnitureSet(kind, areaM2)),
-        preferences: kind === "living" ? { tvTargetCategory: "living" } : {},
+        preferences:
+            kind === "living" || kind === "kitchen-living" ? { tvTargetCategory: "living" } : {},
         requestedVariants: 3,
         // The benchmark judges results as a whole against its baseline, not case by case.
         expectation: {

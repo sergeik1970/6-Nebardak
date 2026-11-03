@@ -149,6 +149,7 @@ export const OFFERED_FURNITURE_MENU: FurnitureMenuSection[] = KITCHEN_BATH_DESIG
 const KIND_SECTIONS: Record<RoomKind, string[]> = {
     bedroom: ["living-bedroom", "wardrobe-hallway", "office"],
     living: ["living-bedroom", "appliances", "wardrobe-hallway"],
+    "kitchen-living": ["living-bedroom", "kitchen-dining", "appliances", "wardrobe-hallway"],
     kitchen: ["kitchen-dining", "appliances"],
     children: ["children", "living-bedroom", "wardrobe-hallway", "office"],
     office: ["office", "living-bedroom", "wardrobe-hallway"],

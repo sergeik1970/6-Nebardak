@@ -1,4 +1,4 @@
-import { furnishRoom, isFurnishableRoomKind } from "../furniture-selection";
+import { furnishRoom, isFurnishableRoomKind, withKitchenZone } from "../furniture-selection";
 import { isTvApartFromStand, validateLayout } from "../geometry";
 import { getRoomArea } from "../room-geometry";
 import { solveWithPreferredPlacementFallback } from "../solver";
@@ -171,7 +171,10 @@ export const runRoomBenchmarkCase = (roomCase: RoomLabCase): RoomBenchmarkRun =>
     const fallbackMs = round(performance.now() - fallbackStartedAt);
     const kind = roomCase.tags[0] as RoomKind;
     const selectionStartedAt = performance.now();
-    const selected = isFurnishableRoomKind(kind) ? furnishRoom(roomCase.room, kind) : null;
+    // Selection starts from the empty room: a kitchen-living room picks its own kitchen wall.
+    const emptyRoom =
+        kind === "kitchen-living" ? { ...roomCase.room, fixedFurniture: undefined } : roomCase.room;
+    const selected = isFurnishableRoomKind(kind) ? furnishRoom(emptyRoom, kind) : null;
     const selectionMs = round(performance.now() - selectionStartedAt);
     const plannerPlacements = fallback ? fallback.result.placements : execution.placements;
 
@@ -223,9 +226,13 @@ export const runRoomBenchmarkCase = (roomCase: RoomLabCase): RoomBenchmarkRun =>
                 ),
                 layout: layoutFingerprint(selected.placements),
                 valid: isValid(
-                    roomCase.room,
+                    selected.kitchenZone
+                        ? withKitchenZone(emptyRoom, selected.kitchenZone)
+                        : emptyRoom,
                     selected.placements,
-                    kind === "living" ? { tvTargetCategory: "living" } : {},
+                    kind === "living" || kind === "kitchen-living"
+                        ? { tvTargetCategory: "living" }
+                        : {},
                 ),
             },
             findings: Array.from(new Set(findings.map((finding) => finding.code))).sort(),

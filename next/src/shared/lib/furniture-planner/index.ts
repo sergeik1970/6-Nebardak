@@ -15,6 +15,7 @@ export * from "./project-draft";
 export * from "./removal";
 export * from "./room";
 export * from "./room-geometry";
+export * from "./room-kind-suggestion";
 export * from "./room-regions";
 export * from "./selection";
 export * from "./solver";
