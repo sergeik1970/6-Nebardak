@@ -410,6 +410,7 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
                 minGap: 50,
                 maxGap: 100,
                 clearanceOverlapException: "target-clearance",
+                besideTargetHead: true,
             }),
         ],
         maxCount: 2,

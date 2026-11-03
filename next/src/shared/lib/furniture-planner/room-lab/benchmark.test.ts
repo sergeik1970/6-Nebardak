@@ -33,6 +33,7 @@ const record = (overrides: Partial<RoomBenchmarkRecord> = {}): RoomBenchmarkReco
         layout: "bbbb",
         valid: true,
         tvApart: false,
+        awayFromHead: false,
     },
     selection: { status: "furnished", rung: 0, changes: [], layout: "eeee", valid: true },
     findings: [],

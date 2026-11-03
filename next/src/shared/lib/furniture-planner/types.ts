@@ -126,6 +126,12 @@ export interface RelationTemplate {
      * declared by the dependent definition itself.
      */
     clearanceOverlapException?: "target-clearance";
+    /**
+     * A search rule, not a validity one: the piece stands beside the target's
+     * head, level with it, e.g. a bedside table at a bed's pillows. Saved
+     * layouts that break it stay valid.
+     */
+    besideTargetHead?: boolean;
 }
 
 export interface FurnitureCatalogSource {
