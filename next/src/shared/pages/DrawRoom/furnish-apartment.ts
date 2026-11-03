@@ -8,7 +8,9 @@ import {
     type FurnishResult,
     type Rect,
     type Room,
-    type RoomBrief,
+    allocateApartmentBrief,
+    type ApartmentBrief,
+    type FurnishOptions,
     type RoomKind,
 } from "@/shared/lib/furniture-planner";
 import {
@@ -41,9 +43,14 @@ export interface FurnishApartmentInput {
     furniture: DrawFurniture[];
     /** Rooms that already hold unpinned furniture are left as they are. */
     keepFurnishedRooms: boolean;
-    brief?: RoomBrief;
+    /** The family's answers; missing ones take an ordinary family's. */
+    brief?: ApartmentBrief;
     /** Lays out one cut-out room; in the planner it runs in a worker. */
-    furnish: (room: Room, kind: FurnishableRoomKind, brief: RoomBrief) => Promise<FurnishResult>;
+    furnish: (
+        room: Room,
+        kind: FurnishableRoomKind,
+        options: FurnishOptions,
+    ) => Promise<FurnishResult>;
     /** The apartment-wide check a hand-placed piece must pass as well. */
     fits: (piece: DrawFurniture, all: DrawFurniture[], room: FurnitureRoom) => boolean;
     onProgress?: (done: number, total: number, roomName: string) => void;
@@ -65,6 +72,8 @@ export interface RoomOutcome {
 }
 
 export interface FurnishApartmentResult {
+    /** What of the brief found no room, e.g. a second bedroom that is not there. */
+    notes: string[];
     /** The whole apartment's furniture: applied at once, so one undo takes it back. */
     furniture: DrawFurniture[];
     rooms: RoomOutcome[];
@@ -117,7 +126,7 @@ const kindsFor = (rooms: ApartmentRoom[], cut: Map<string, Room | null>) => {
 export async function furnishApartment(
     input: FurnishApartmentInput,
 ): Promise<FurnishApartmentResult> {
-    const { rooms, keepFurnishedRooms, brief = {}, furnish, fits, onProgress, signal } = input;
+    const { rooms, keepFurnishedRooms, brief, furnish, fits, onProgress, signal } = input;
     const idPrefix = input.idPrefix ?? `furniture-auto-${Date.now()}`;
     const cuts = new Map(
         rooms.map((room) => [room.signature, buildRegionSolverRoom(room.building, room.region)]),
@@ -131,13 +140,30 @@ export async function furnishApartment(
             ]),
         ),
     );
+    // The family is spread over every room that can be furnished, kept ones included,
+    // so people already sleeping in a furnished bedroom are not given a second bed.
+    const allocation = allocateApartmentBrief(
+        rooms.flatMap((room) => {
+            const kind = room.kind ?? suggested.get(room.signature);
+            return isFurnishableRoomKind(kind)
+                ? [
+                      {
+                          signature: room.signature,
+                          kind,
+                          areaM2: room.areaSquareMillimeters / 1_000_000,
+                      },
+                  ]
+                : [];
+        }),
+        brief,
+    );
     let furniture = [...input.furniture];
     const outcomes: RoomOutcome[] = [];
 
     for (let index = 0; index < rooms.length; index += 1) {
         const room = rooms[index];
         if (signal?.aborted)
-            return { furniture: input.furniture, rooms: outcomes, cancelled: true };
+            return { furniture: input.furniture, rooms: outcomes, notes: [], cancelled: true };
         onProgress?.(index, rooms.length, room.name);
         const kind = room.kind ?? suggested.get(room.signature);
         const base = {
@@ -171,9 +197,12 @@ export async function furnishApartment(
 
         const offset = { x: room.origin.x + cut.origin.x, y: room.origin.y + cut.origin.y };
         const solverRoom = withFixedFurniture(cut.room, solverFixedFurniture(pinned, offset));
-        const result = await furnish(solverRoom, kind, brief);
+        const result = await furnish(solverRoom, kind, {
+            pieces: allocation.pieces.get(room.signature),
+            priorities: brief?.priorities,
+        });
         if (signal?.aborted)
-            return { furniture: input.furniture, rooms: outcomes, cancelled: true };
+            return { furniture: input.furniture, rooms: outcomes, notes: [], cancelled: true };
 
         const pieces = solvedToDrawFurniture(result.placements, offset, `${idPrefix}-${index + 1}`);
         const others = furniture.filter((item) => !movable.includes(item));
@@ -216,5 +245,5 @@ export async function furnishApartment(
     }
 
     onProgress?.(rooms.length, rooms.length, "");
-    return { furniture, rooms: outcomes, cancelled: false };
+    return { furniture, rooms: outcomes, notes: allocation.notes, cancelled: false };
 }

@@ -145,92 +145,254 @@ export const fullFurnitureSet = (
     }
 };
 
+/**
+ * What a person may rank in the brief: the rungs that touch what matters
+ * least to them give way first.
+ */
+export type BriefPriority = "storage" | "bed" | "work" | "living" | "tv" | "dressing";
+
+export const BRIEF_PRIORITIES: readonly BriefPriority[] = [
+    "storage",
+    "bed",
+    "work",
+    "living",
+    "tv",
+    "dressing",
+];
+
 /** One way to give way, tried only when the set holds the piece it names. */
-type Move =
-    | { kind: "size"; definitionId: string; size: FurnitureSize; reason: string }
-    | { kind: "swap"; definitionId: string; to: string; reason: string }
-    | { kind: "less"; definitionId: string; reason: string };
+type Move = { concern: BriefPriority; reason: string } & (
+    | { kind: "size"; definitionId: string; size: FurnitureSize }
+    | { kind: "swap"; definitionId: string; to: string }
+    | { kind: "less"; definitionId: string }
+);
 
 /**
- * The order in which a room gives way: what people miss least goes first.
- * The main piece is never left out.
+ * The order in which a room gives way when the person ranked nothing: what
+ * people miss least goes first. The main piece is never left out.
  */
 const LADDERS: Record<FurnishableRoomKind, Move[]> = {
     bedroom: [
         {
             kind: "size",
+            concern: "bed",
             definitionId: "double-bed",
             size: { width: 1600, depth: 2000 },
             reason: "кровать 1800 мм не помещается с проходами",
         },
-        { kind: "less", definitionId: "desk", reason: "рабочему столу не хватает места" },
-        { kind: "less", definitionId: "dresser", reason: "комоду не хватает места" },
+        {
+            kind: "less",
+            concern: "work",
+            definitionId: "desk",
+            reason: "рабочему столу не хватает места",
+        },
+        {
+            kind: "less",
+            concern: "dressing",
+            definitionId: "dressing-table",
+            reason: "туалетному столику не хватает места",
+        },
+        {
+            kind: "less",
+            concern: "storage",
+            definitionId: "dresser",
+            reason: "комоду не хватает места",
+        },
         {
             kind: "swap",
+            concern: "storage",
             definitionId: "wardrobe-large",
             to: "wardrobe-medium",
             reason: "большой шкаф не помещается",
         },
         {
             kind: "swap",
+            concern: "storage",
             definitionId: "wardrobe-medium",
             to: "wardrobe-small",
             reason: "средний шкаф не помещается",
         },
         {
             kind: "size",
+            concern: "bed",
             definitionId: "double-bed",
             size: { width: 1400, depth: 2000 },
             reason: "кровать 1600 мм не помещается с проходами",
         },
-        { kind: "less", definitionId: "bedside-table", reason: "с двух сторон тумбам тесно" },
-        { kind: "less", definitionId: "wardrobe-small", reason: "шкафу не хватает места" },
+        {
+            kind: "size",
+            concern: "bed",
+            definitionId: "single-bed",
+            size: { width: 1200, depth: 2000 },
+            reason: "кровать 1400 мм не помещается с проходами",
+        },
+        {
+            kind: "less",
+            concern: "bed",
+            definitionId: "bedside-table",
+            reason: "с двух сторон тумбам тесно",
+        },
+        {
+            kind: "size",
+            concern: "bed",
+            definitionId: "single-bed",
+            size: { width: 900, depth: 2000 },
+            reason: "полуторная кровать не помещается с проходами",
+        },
+        {
+            kind: "less",
+            concern: "storage",
+            definitionId: "wardrobe-small",
+            reason: "шкафу не хватает места",
+        },
+        {
+            kind: "less",
+            concern: "bed",
+            definitionId: "cradle",
+            reason: "детской кроватке не хватает места",
+        },
         {
             kind: "swap",
+            concern: "bed",
             definitionId: "double-bed",
             to: "single-bed",
             reason: "двуспальная кровать не помещается даже шириной 1400 мм",
         },
     ],
     living: [
-        { kind: "less", definitionId: "pet-bed", reason: "лежанке не хватает места" },
-        { kind: "less", definitionId: "desk", reason: "рабочему столу не хватает места" },
         {
             kind: "less",
+            concern: "living",
+            definitionId: "pet-bed",
+            reason: "лежанке не хватает места",
+        },
+        {
+            kind: "less",
+            concern: "work",
+            definitionId: "desk",
+            reason: "рабочему столу не хватает места",
+        },
+        {
+            kind: "less",
+            concern: "living",
             definitionId: "dining-square-four",
             reason: "обеденной группе не хватает места",
         },
-        { kind: "less", definitionId: "armchair", reason: "креслу не хватает места" },
+        {
+            kind: "less",
+            concern: "living",
+            definitionId: "armchair",
+            reason: "креслу не хватает места",
+        },
         {
             kind: "swap",
+            concern: "living",
+            definitionId: "sofa-four-left",
+            to: "sofa-three",
+            reason: "диван на 4 места не помещается",
+        },
+        {
+            kind: "swap",
+            concern: "living",
             definitionId: "sofa-three",
             to: "sofa-two",
             reason: "диван на 3 места не помещается",
         },
-        { kind: "less", definitionId: "bookcase", reason: "стеллажу не хватает места" },
         {
             kind: "less",
+            concern: "storage",
+            definitionId: "bookcase",
+            reason: "стеллажу не хватает места",
+        },
+        {
+            kind: "less",
+            concern: "living",
             definitionId: "coffee-table",
             reason: "журнальному столику не хватает места",
         },
     ],
     "kitchen-living": [],
     children: [
-        { kind: "less", definitionId: "bookcase", reason: "стеллажу не хватает места" },
+        {
+            kind: "less",
+            concern: "storage",
+            definitionId: "bookcase",
+            reason: "стеллажу не хватает места",
+        },
+        {
+            kind: "size",
+            concern: "bed",
+            definitionId: "single-bed",
+            size: { width: 1200, depth: 2000 },
+            reason: "кровать 1400 мм не помещается с проходами",
+        },
         {
             kind: "swap",
+            concern: "storage",
             definitionId: "wardrobe-medium",
             to: "wardrobe-small",
             reason: "средний шкаф не помещается",
         },
-        { kind: "less", definitionId: "desk", reason: "рабочему столу не хватает места" },
-        { kind: "less", definitionId: "wardrobe-small", reason: "шкафу не хватает места" },
+        {
+            kind: "less",
+            concern: "work",
+            definitionId: "desk",
+            reason: "рабочему столу не хватает места",
+        },
+        {
+            kind: "size",
+            concern: "bed",
+            definitionId: "single-bed",
+            size: { width: 900, depth: 2000 },
+            reason: "полуторная кровать не помещается с проходами",
+        },
+        {
+            kind: "less",
+            concern: "storage",
+            definitionId: "wardrobe-small",
+            reason: "шкафу не хватает места",
+        },
     ],
     office: [
-        { kind: "less", definitionId: "sofa-two", reason: "дивану не хватает места" },
-        { kind: "less", definitionId: "wardrobe-small", reason: "шкафу не хватает места" },
-        { kind: "less", definitionId: "bookcase", reason: "стеллажу не хватает места" },
+        {
+            kind: "less",
+            concern: "living",
+            definitionId: "sofa-two",
+            reason: "дивану не хватает места",
+        },
+        {
+            kind: "less",
+            concern: "storage",
+            definitionId: "wardrobe-small",
+            reason: "шкафу не хватает места",
+        },
+        {
+            kind: "less",
+            concern: "storage",
+            definitionId: "bookcase",
+            reason: "стеллажу не хватает места",
+        },
     ],
+};
+
+/**
+ * The room's moves with what the person ranked lowest first. Unranked
+ * concerns sit in the middle; ties keep the default order.
+ */
+const orderedMoves = (kind: FurnishableRoomKind, priorities?: readonly BriefPriority[]): Move[] => {
+    const moves = kind === "kitchen-living" ? LADDERS.living : LADDERS[kind];
+    if (!priorities?.length) return moves;
+    const rank = (concern: BriefPriority) => {
+        const index = priorities.indexOf(concern);
+        return index === -1 ? (priorities.length - 1) / 2 : index;
+    };
+    return moves
+        .map((move, index) => ({ move, index }))
+        .sort(
+            (first, second) =>
+                rank(second.move.concern) - rank(first.move.concern) || first.index - second.index,
+        )
+        .map(({ move }) => move);
 };
 
 const sizeLabel = (definitionId: string, size?: FurnitureSize): string => {
@@ -251,6 +413,12 @@ const applyMove = (pieces: SelectedPiece[], move: Move): SelectionStep | null =>
 
     switch (move.kind) {
         case "size": {
+            // A rung only ever shrinks: a 900 mm bed is not «reduced» to 1200.
+            const definition = getFurniture(current.definitionId);
+            const width =
+                current.size?.width ??
+                Math.max(...definition.body.rects.map((rect) => rect.x + rect.width));
+            if (move.size.width >= width) return null;
             const next = [...pieces];
             next[index] = { ...current, size: move.size };
             return {
@@ -312,10 +480,16 @@ export const selectionLadder = (
     kind: FurnishableRoomKind,
     areaM2: number,
     brief: RoomBrief = {},
+): SelectionStep[] => selectionLadderFrom(kind, fullFurnitureSet(kind, areaM2, brief));
+
+/** The ladder from a given set, e.g. one the apartment brief chose for this room. */
+export const selectionLadderFrom = (
+    kind: FurnishableRoomKind,
+    pieces: SelectedPiece[],
+    priorities?: readonly BriefPriority[],
 ): SelectionStep[] => {
-    const steps: SelectionStep[] = [{ pieces: fullFurnitureSet(kind, areaM2, brief), changes: [] }];
-    const moves = kind === "kitchen-living" ? LADDERS.living : LADDERS[kind];
-    for (const move of moves) {
+    const steps: SelectionStep[] = [{ pieces, changes: [] }];
+    for (const move of orderedMoves(kind, priorities)) {
         // A piece left out one at a time may take several rungs, e.g. two bedside tables.
         for (;;) {
             const previous = steps[steps.length - 1];
@@ -468,22 +642,34 @@ const preferencesFor = (kind: FurnishableRoomKind): LayoutPreferences =>
  * reserves its kitchen, trying a few walls and keeping the one that leaves the
  * living part best furnished.
  */
+/** A set chosen elsewhere, e.g. by the apartment brief, and the person's ranking. */
+export interface FurnishOptions {
+    pieces?: SelectedPiece[];
+    priorities?: readonly BriefPriority[];
+}
+
 export const furnishRoom = (
     room: Room,
     kind: FurnishableRoomKind,
     brief: RoomBrief = {},
+    options: FurnishOptions = {},
 ): FurnishResult => {
-    if (kind !== "kitchen-living") return furnishWithin(room, kind, getRoomArea(room), brief);
+    if (kind !== "kitchen-living")
+        return furnishWithin(room, kind, getRoomArea(room), brief, options);
 
     const zones = kitchenZoneCandidates(room).slice(0, KITCHEN_ZONE_TRIALS);
     if (zones.length === 0)
-        return { ...furnishWithin(room, kind, getRoomArea(room), brief), kitchenZone: null };
+        return {
+            ...furnishWithin(room, kind, getRoomArea(room), brief, options),
+            kitchenZone: null,
+        };
     const furnishAround = (zone: KitchenZone, lastRung?: number): FurnishResult => ({
         ...furnishWithin(
             withKitchenZone(room, zone),
             kind,
             getRoomArea(room) - rectArea(zone.run) - rectArea(zone.passage),
             brief,
+            options,
             lastRung,
         ),
         kitchenZone: zone,
@@ -502,10 +688,15 @@ const furnishWithin = (
     kind: FurnishableRoomKind,
     areaMm2: number,
     brief: RoomBrief,
+    options: FurnishOptions,
     /** Stop after this rung, without the partial fallback. */
     lastRung?: number,
 ): FurnishResult => {
-    const fullLadder = selectionLadder(kind, areaMm2 / 1_000_000, brief);
+    const fullLadder = selectionLadderFrom(
+        kind,
+        options.pieces ?? fullFurnitureSet(kind, areaMm2 / 1_000_000, brief),
+        options.priorities,
+    );
     const ladder = lastRung === undefined ? fullLadder : fullLadder.slice(0, lastRung + 1);
     const preferences = preferencesFor(kind);
     const mainFits = new Map<string, boolean>();

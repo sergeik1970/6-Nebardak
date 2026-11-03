@@ -2,7 +2,7 @@ import {
     furnishRoom,
     type FurnishableRoomKind,
     type FurnishResult,
-    type RoomBrief,
+    type FurnishOptions,
 } from "./furniture-selection";
 import {
     solveRoom,
@@ -55,7 +55,7 @@ export type SolverWorkerRequest =
           action: "furnish-room";
           room: Room;
           kind: FurnishableRoomKind;
-          brief?: RoomBrief;
+          options?: FurnishOptions;
       };
 
 export type SolverWorkerResponse =
@@ -136,7 +136,7 @@ workerScope.onmessage = (event) => {
                 requestId: request.requestId,
                 ok: true,
                 action: request.action,
-                result: furnishRoom(request.room, request.kind, request.brief),
+                result: furnishRoom(request.room, request.kind, {}, request.options),
             });
             return;
         }

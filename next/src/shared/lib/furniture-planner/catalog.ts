@@ -220,11 +220,11 @@ export const FURNITURE_CATALOG: FurnitureDefinition[] = [
         equivalentRotationGroups: NO_EQUIVALENT_ROTATIONS,
         placement: wallPlacement(false, true, ["back", "front", "left"], "allowed"),
         relations: [],
-        maxCount: 1,
+        maxCount: 2,
         removalPriority: 90,
         assetKey: "single-bed",
         visualKind: "fabric",
-        sizes: [size(900, 2000), size(1000, 1800)],
+        sizes: [size(900, 2000), size(1000, 1800), size(1200, 2000), size(1400, 2000)],
         source: designerSource(),
     },
     {

@@ -8270,14 +8270,14 @@ const DrawRoom: React.FC = () => {
                         furnitureRadiatorObstacles,
                     ),
                 // The worker keeps the page responsive; stopping ends it at once.
-                furnish: (room, kind, brief) =>
+                furnish: (room, kind, options) =>
                     new Promise((resolve, reject) => {
                         const stop = () => {
                             autoLayoutWorker.current?.terminate();
                             reject(new Error("cancelled"));
                         };
                         controller.signal.addEventListener("abort", stop, { once: true });
-                        requestSolver({ action: "furnish-room", room, kind, brief }).then(
+                        requestSolver({ action: "furnish-room", room, kind, options }).then(
                             (response) => {
                                 controller.signal.removeEventListener("abort", stop);
                                 if (response.ok && response.action === "furnish-room")
