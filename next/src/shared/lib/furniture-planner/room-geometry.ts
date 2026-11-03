@@ -191,7 +191,28 @@ const pointOnSegment = (
     );
 };
 
-export const pointInsideRoom = (room: Room, point: { x: number; y: number }): boolean => {
+/** The contour facts that point and rectangle tests read, worked out once. */
+interface RoomContour {
+    room: Room;
+    isRect: boolean;
+    segments: RoomBoundarySegment[];
+    vertices: RoomVertex[];
+}
+
+const roomContour = (room: Room): RoomContour => {
+    const isRect = canonicalRoomGeometry(room).kind === "rect";
+    return {
+        room,
+        isRect,
+        segments: getRoomBoundarySegments(room),
+        vertices: isRect ? [] : getRoomVertices(room),
+    };
+};
+
+const pointInsideContour = (
+    { room, isRect, segments, vertices }: RoomContour,
+    point: { x: number; y: number },
+): boolean => {
     if (
         point.x < -EPSILON ||
         point.y < -EPSILON ||
@@ -200,13 +221,11 @@ export const pointInsideRoom = (room: Room, point: { x: number; y: number }): bo
     ) {
         return false;
     }
-    if (canonicalRoomGeometry(room).kind === "rect") return true;
+    if (isRect) return true;
 
-    const segments = getRoomBoundarySegments(room);
     if (segments.some((segment) => pointOnSegment(point, segment))) return true;
 
     let inside = false;
-    const vertices = getRoomVertices(room);
     for (
         let index = 0, previous = vertices.length - 1;
         index < vertices.length;
@@ -224,6 +243,15 @@ export const pointInsideRoom = (room: Room, point: { x: number; y: number }): bo
     }
     return inside;
 };
+
+export const pointInsideRoom = (room: Room, point: { x: number; y: number }): boolean =>
+    // A rectangle needs no contour: the bounds check inside decides.
+    pointInsideContour(
+        canonicalRoomGeometry(room).kind === "rect"
+            ? { room, isRect: true, segments: [], vertices: [] }
+            : roomContour(room),
+        point,
+    );
 
 const segmentPassesThroughRectInterior = (segment: RoomBoundarySegment, rect: Rect): boolean => {
     const right = rect.x + rect.width;
@@ -249,7 +277,19 @@ const segmentPassesThroughRectInterior = (segment: RoomBoundarySegment, rect: Re
     );
 };
 
-export const rectInsideRoomGeometry = (rect: Rect, room: Room): boolean => {
+/**
+ * `rectInsideRoomGeometry` for many rectangles in one room: the contour is
+ * read once instead of once per corner. Do not keep it past a room edit.
+ */
+export const createRectInsideRoomGeometry = (room: Room): ((rect: Rect) => boolean) => {
+    const contour = roomContour(room);
+    return (rect) => rectInsideContour(rect, contour);
+};
+
+export const rectInsideRoomGeometry = (rect: Rect, room: Room): boolean =>
+    rectInsideContour(rect, roomContour(room));
+
+const rectInsideContour = (rect: Rect, contour: RoomContour): boolean => {
     if (rect.width < 0 || rect.depth < 0) return false;
     const points = [
         { x: rect.x, y: rect.y },
@@ -260,10 +300,8 @@ export const rectInsideRoomGeometry = (rect: Rect, room: Room): boolean => {
     ];
 
     return (
-        points.every((point) => pointInsideRoom(room, point)) &&
-        !getRoomBoundarySegments(room).some((segment) =>
-            segmentPassesThroughRectInterior(segment, rect),
-        )
+        points.every((point) => pointInsideContour(contour, point)) &&
+        !contour.segments.some((segment) => segmentPassesThroughRectInterior(segment, rect))
     );
 };
 

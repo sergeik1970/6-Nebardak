@@ -28,6 +28,7 @@ import {
     getRoomSegment,
     getSegmentSpanRect,
     pointInsideRoom,
+    createRectInsideRoomGeometry,
     rectInsideRoomGeometry,
     rectTouchesRoomBoundary,
     validateOrthogonalRoomGeometry,
@@ -1344,6 +1345,8 @@ export const analyzeConnectedAccess = (
     );
     const xCells = axisCells(xCoordinates);
     const yCells = axisCells(yCoordinates);
+    const isRectRoom = canonicalRoomGeometry(room).kind === "rect";
+    const insideRoom = createRectInsideRoomGeometry(room);
     const cells: AccessCell[][] = yCells.map((yCell, yIndex) =>
         xCells.map((xCell, xIndex) => {
             const rect: Rect = {
@@ -1358,19 +1361,11 @@ export const analyzeConnectedAccess = (
                 xIndex,
                 yIndex,
                 navigable:
-                    (canonicalRoomGeometry(room).kind === "rect" ||
-                        rectInsideRoomGeometry(
-                            expandRect(rect, ACCESS_PATH_PROOF_WIDTH / 2),
-                            room,
-                        )) &&
+                    (isRectRoom || insideRoom(expandRect(rect, ACCESS_PATH_PROOF_WIDTH / 2))) &&
                     !proofObstacles.some((obstacle) => rectContainsRect(obstacle, rect)),
                 usableAtRequiredWidth:
                     rectContainsRect(requiredDomain, rect) &&
-                    (canonicalRoomGeometry(room).kind === "rect" ||
-                        rectInsideRoomGeometry(
-                            expandRect(rect, MIN_CONNECTED_PASSAGE_WIDTH / 2),
-                            room,
-                        )) &&
+                    (isRectRoom || insideRoom(expandRect(rect, MIN_CONNECTED_PASSAGE_WIDTH / 2))) &&
                     !requiredObstacles.some((obstacle) => rectsIntersect(obstacle, rect)),
             };
         }),
