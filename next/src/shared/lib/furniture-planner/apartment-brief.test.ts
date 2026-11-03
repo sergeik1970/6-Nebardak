@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocateApartmentBrief, type BriefRoom } from "./apartment-brief";
+import { allocateApartmentBrief, normalizeApartmentBrief, type BriefRoom } from "./apartment-brief";
 import { selectionLadderFrom } from "./furniture-selection";
 
 const room = (signature: string, kind: BriefRoom["kind"], areaM2: number): BriefRoom => ({
@@ -87,5 +87,32 @@ describe("apartment brief", () => {
             definitionId: "dresser",
         });
         expect(firstChange(["storage", "bed"])).toMatchObject({ definitionId: "double-bed" });
+    });
+
+    it("reads saved answers back safely", () => {
+        expect(normalizeApartmentBrief(undefined)).toBeUndefined();
+        expect(normalizeApartmentBrief({ version: 2, adults: 2 })).toBeUndefined();
+        expect(
+            normalizeApartmentBrief({
+                version: 1,
+                adults: 99,
+                children: -3,
+                babies: "two",
+                sofaSeats: 5,
+                tv: "large",
+                bedsideTables: "per-sleeper",
+                dressingTable: true,
+                priorities: ["bed", "bed", "sleep", "tv"],
+                extra: "ignored",
+            }),
+        ).toEqual({
+            version: 1,
+            adults: 8,
+            children: 0,
+            tv: "large",
+            bedsideTables: "per-sleeper",
+            dressingTable: true,
+            priorities: ["bed", "tv"],
+        });
     });
 });

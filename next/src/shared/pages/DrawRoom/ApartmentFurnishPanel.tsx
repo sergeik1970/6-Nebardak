@@ -22,6 +22,8 @@ export default function ApartmentFurnishPanel({
     onCancel,
     outcomes,
     status,
+    briefSummary,
+    onEditBrief,
 }: {
     running: boolean;
     progress: { done: number; total: number; roomName: string } | null;
@@ -31,6 +33,9 @@ export default function ApartmentFurnishPanel({
     onCancel: () => void;
     outcomes: RoomOutcome[];
     status: string;
+    /** Who the furniture is chosen for, from the family's answers. */
+    briefSummary: string;
+    onEditBrief: () => void;
 }) {
     return (
         <section className={styles.apartmentFurnish} data-apartment-furnish="true">
@@ -38,6 +43,12 @@ export default function ApartmentFurnishPanel({
             <p>
                 Подберём мебель для каждой жилой комнаты и расставим её. Закреплённые предметы
                 останутся на месте.
+            </p>
+            <p className={styles.apartmentFurnishBrief} data-apartment-brief-summary>
+                <span>{briefSummary}</span>
+                <button type="button" disabled={running} onClick={onEditBrief}>
+                    Изменить
+                </button>
             </p>
             <label className={styles.apartmentFurnishOption}>
                 <input

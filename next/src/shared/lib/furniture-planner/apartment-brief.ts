@@ -256,3 +256,50 @@ export const allocateApartmentBrief = (
     }
     return { pieces, notes };
 };
+
+const BEDSIDE_SETTINGS = ["none", "one", "two", "per-sleeper"] as const;
+const TV_SETTINGS = ["large", "compact", "none"] as const;
+const PRIORITIES: readonly BriefPriority[] = ["storage", "bed", "work", "living", "tv", "dressing"];
+
+/** Limits of the questionnaire's number fields; also applied to saved answers. */
+export const BRIEF_LIMITS = {
+    adults: 8,
+    babies: 4,
+    children: 6,
+    armchairs: 2,
+    desks: 4,
+} as const;
+
+const count = (value: unknown, maximum: number): number | undefined =>
+    typeof value === "number" && Number.isFinite(value)
+        ? Math.min(maximum, Math.max(0, Math.round(value)))
+        : undefined;
+
+/**
+ * Answers read back from a saved project: anything unknown or out of range is
+ * dropped or clamped, so a damaged answer never blocks opening the drawing.
+ */
+export const normalizeApartmentBrief = (input: unknown): ApartmentBrief | undefined => {
+    if (!input || typeof input !== "object" || (input as ApartmentBrief).version !== 1)
+        return undefined;
+    const source = input as Record<string, unknown>;
+    const brief: ApartmentBrief = { version: 1 };
+    for (const key of Object.keys(BRIEF_LIMITS) as (keyof typeof BRIEF_LIMITS)[]) {
+        const value = count(source[key], BRIEF_LIMITS[key]);
+        if (value !== undefined) brief[key] = value;
+    }
+    if (source.sofaSeats === 2 || source.sofaSeats === 3 || source.sofaSeats === 4)
+        brief.sofaSeats = source.sofaSeats;
+    if (BEDSIDE_SETTINGS.includes(source.bedsideTables as never))
+        brief.bedsideTables = source.bedsideTables as ApartmentBrief["bedsideTables"];
+    if (TV_SETTINGS.includes(source.tv as never)) brief.tv = source.tv as ApartmentBrief["tv"];
+    if (typeof source.dressingTable === "boolean") brief.dressingTable = source.dressingTable;
+    if (Array.isArray(source.priorities)) {
+        const priorities = source.priorities.filter(
+            (item, index, all): item is BriefPriority =>
+                PRIORITIES.includes(item as BriefPriority) && all.indexOf(item) === index,
+        );
+        if (priorities.length) brief.priorities = priorities;
+    }
+    return brief;
+};
