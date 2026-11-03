@@ -2,9 +2,11 @@ import React, { useEffect, useState } from "react";
 import Dialog from "@/shared/components/Dialog";
 import {
     BRIEF_LIMITS,
+    STORAGE_LIMITS,
     DEFAULT_APARTMENT_BRIEF,
     type ApartmentBrief,
     type BriefPriority,
+    type StorageBrief,
 } from "@/shared/lib/furniture-planner";
 import styles from "./ApartmentBriefDialog.module.scss";
 
@@ -34,6 +36,7 @@ export const describeApartmentBrief = (brief?: ApartmentBrief): string => {
         ...(children ? [plural(children, "ребёнок", "ребёнка", "детей")] : []),
         answers.tv === "none" ? "без ТВ" : answers.tv === "large" ? "большой ТВ" : "ТВ до 50″",
         ...(answers.desks ? [plural(answers.desks, "стол", "стола", "столов")] : []),
+        ...(brief.storage ? ["шкафы по вещам"] : []),
     ].join(", ");
 };
 
@@ -121,6 +124,9 @@ export default function ApartmentBriefDialog({
         setRanking(next);
         setRanked(true);
     };
+    const setStorage = <Key extends keyof StorageBrief>(key: Key, value: StorageBrief[Key]) =>
+        setBrief((current) => ({ ...current, storage: { ...current.storage, [key]: value } }));
+    const storage = brief.storage;
     const submit = () => {
         const { priorities: _priorities, ...answers } = brief;
         onSubmit({ ...answers, version: 1, ...(ranked ? { priorities: ranking } : {}) });
@@ -255,6 +261,134 @@ export default function ApartmentBriefDialog({
                             />
                             Туалетный столик с зеркалом
                         </label>
+                    </fieldset>
+                    <fieldset>
+                        <legend>Хранение</legend>
+                        <label className={styles.check}>
+                            <input
+                                type="checkbox"
+                                checked={Boolean(storage)}
+                                onChange={(event) =>
+                                    set("storage", event.target.checked ? {} : undefined)
+                                }
+                            />
+                            Посчитать шкафы по вещам
+                        </label>
+                        {storage ? (
+                            <>
+                                <p className={styles.hint}>
+                                    Верхняя одежда, обувь и крупные вещи — в прихожую, остальное — в
+                                    шкафы спален. Высота шкафа 2200 мм.
+                                </p>
+                                <label className={styles.choice}>
+                                    <span>
+                                        Верхняя одежда, вешалок
+                                        <small>Пальто, куртки, пиджаки: 1 вешалка ≈ 12 см</small>
+                                    </span>
+                                    <select
+                                        value={storage.longHangers ?? "10-20"}
+                                        onChange={(event) =>
+                                            setStorage(
+                                                "longHangers",
+                                                event.target.value as StorageBrief["longHangers"],
+                                            )
+                                        }
+                                    >
+                                        <option value="up-to-10">До 10</option>
+                                        <option value="10-20">10–20</option>
+                                        <option value="20-40">20–40</option>
+                                        <option value="40+">Больше 40</option>
+                                        <option value="none">Не храним</option>
+                                    </select>
+                                </label>
+                                <NumberField
+                                    label="Обычная одежда, вешалок"
+                                    hint="Рубашки, платья, брюки: 1 вешалка ≈ 4 см"
+                                    value={storage.shortHangers ?? 30}
+                                    maximum={STORAGE_LIMITS.shortHangers}
+                                    onChange={(value) => setStorage("shortHangers", value)}
+                                />
+                                <label className={styles.choice}>
+                                    <span>
+                                        Полки для одежды
+                                        <small>Блоки шириной 40 см на всю высоту</small>
+                                    </span>
+                                    <select
+                                        value={storage.shelfBlocks ?? 1}
+                                        onChange={(event) =>
+                                            setStorage("shelfBlocks", Number(event.target.value))
+                                        }
+                                    >
+                                        <option value={0}>Не нужны</option>
+                                        <option value={1}>6 полок</option>
+                                        <option value={2}>12 полок</option>
+                                        <option value={3}>18 полок</option>
+                                        <option value={4}>24 полки</option>
+                                    </select>
+                                </label>
+                                <label className={styles.choice}>
+                                    <span>
+                                        Обувь, пар
+                                        <small>20 пар — секция шкафа шириной 1 м</small>
+                                    </span>
+                                    <select
+                                        value={storage.shoePairs ?? "10-20"}
+                                        onChange={(event) =>
+                                            setStorage(
+                                                "shoePairs",
+                                                event.target.value as StorageBrief["shoePairs"],
+                                            )
+                                        }
+                                    >
+                                        <option value="up-to-10">До 10</option>
+                                        <option value="10-20">10–20</option>
+                                        <option value="20-30">20–30</option>
+                                        <option value="30+">Больше 30</option>
+                                    </select>
+                                </label>
+                                <label className={styles.choice}>
+                                    <span>
+                                        Крупные вещи
+                                        <small>
+                                            Чемодан, лыжи, коляска, пылесос, гладильная доска
+                                        </small>
+                                    </span>
+                                    <select
+                                        value={storage.bulkyItems ?? "0-2"}
+                                        onChange={(event) =>
+                                            setStorage(
+                                                "bulkyItems",
+                                                event.target.value as StorageBrief["bulkyItems"],
+                                            )
+                                        }
+                                    >
+                                        <option value="0-2">0–2</option>
+                                        <option value="3-5">3–5</option>
+                                        <option value="6+">6 и больше</option>
+                                    </select>
+                                </label>
+                                <label className={styles.choice}>
+                                    <span>
+                                        Книги и документы, метров полок
+                                        <small>1 м полки ≈ 30 книг</small>
+                                    </span>
+                                    <select
+                                        value={storage.bookMeters ?? "1-3"}
+                                        onChange={(event) =>
+                                            setStorage(
+                                                "bookMeters",
+                                                event.target.value as StorageBrief["bookMeters"],
+                                            )
+                                        }
+                                    >
+                                        <option value="up-to-1">До 1 м, до 30 книг</option>
+                                        <option value="1-3">1–3 м, до 90 книг</option>
+                                        <option value="3-5">3–5 м, до 150 книг</option>
+                                        <option value="5+">Больше 5 м</option>
+                                    </select>
+                                </label>
+                            </>
+                        ) : null}
                     </fieldset>
                     <fieldset>
                         <legend>Что важнее, если места не хватит</legend>

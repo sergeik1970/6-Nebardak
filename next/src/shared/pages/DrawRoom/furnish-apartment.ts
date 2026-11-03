@@ -9,6 +9,7 @@ import {
     type Rect,
     type Room,
     allocateApartmentBrief,
+    withExtraWardrobe,
     type ApartmentBrief,
     type FurnishOptions,
     type RoomKind,
@@ -86,6 +87,9 @@ const shift = (rect: Rect, offset: Point): Rect => ({
     y: rect.y + offset.y,
 });
 
+const metres = (millimetres: number) =>
+    `${(Math.round(millimetres / 100) / 10).toLocaleString("ru-RU")} м`;
+
 const pieceName = (definitionId: string) => getFurniture(definitionId).shortLabel.toLowerCase();
 
 const changeText = (result: FurnishResult): string =>
@@ -160,19 +164,53 @@ export async function furnishApartment(
     let furniture = [...input.furniture];
     const outcomes: RoomOutcome[] = [];
 
-    for (let index = 0; index < rooms.length; index += 1) {
+    // Hallways first: what their wardrobe cannot hold moves to the main bedroom.
+    const kindOf = (room: ApartmentRoom) => room.kind ?? suggested.get(room.signature);
+    const order = rooms
+        .map((_, index) => index)
+        .sort(
+            (first, second) =>
+                Number(kindOf(rooms[second]) === "hallway") -
+                    Number(kindOf(rooms[first]) === "hallway") || first - second,
+        );
+    const piecesFor = new Map(allocation.pieces);
+    const notes = [...allocation.notes];
+    const hallwayStorage = allocation.hallwayStorage;
+    const placedOrder: number[] = [];
+    const settleHallway = (placedMm: number) => {
+        if (!hallwayStorage) return;
+        const shortfall = hallwayStorage.lengthMm - placedMm;
+        if (shortfall <= 50) return;
+        const target = hallwayStorage.overflowTo;
+        if (target)
+            piecesFor.set(target, withExtraWardrobe(piecesFor.get(target) ?? [], shortfall));
+        notes.push(
+            target
+                ? `В прихожей поместилось ${metres(placedMm)} шкафа из ${metres(hallwayStorage.lengthMm)}: остальное — в шкафу спальни.`
+                : `В прихожей поместилось ${metres(placedMm)} шкафа из ${metres(hallwayStorage.lengthMm)}.`,
+        );
+    };
+
+    for (let step = 0; step < order.length; step += 1) {
+        const index = order[step];
         const room = rooms[index];
         if (signal?.aborted)
             return { furniture: input.furniture, rooms: outcomes, notes: [], cancelled: true };
-        onProgress?.(index, rooms.length, room.name);
-        const kind = room.kind ?? suggested.get(room.signature);
+        onProgress?.(step, rooms.length, room.name);
+        placedOrder.push(index);
+        const isHallwayStore = room.signature === hallwayStorage?.signature;
+        const kind = kindOf(room);
         const base = {
             signature: room.signature,
             name: room.name,
             kind,
             suggested: !room.kind && kind !== undefined,
         };
-        const skip = (message: string) => outcomes.push({ ...base, status: "skipped", message });
+        const skip = (message: string) => {
+            outcomes.push({ ...base, status: "skipped", message });
+            // A hallway left as it is holds none of the planned storage.
+            if (isHallwayStore) settleHallway(0);
+        };
 
         const own = furniture.filter((item) => furnitureBelongsToRoom(item, room.furnitureRoom));
         const pinned = own.filter((item) => item.locked);
@@ -198,7 +236,7 @@ export async function furnishApartment(
         const offset = { x: room.origin.x + cut.origin.x, y: room.origin.y + cut.origin.y };
         const solverRoom = withFixedFurniture(cut.room, solverFixedFurniture(pinned, offset));
         const result = await furnish(solverRoom, kind, {
-            pieces: allocation.pieces.get(room.signature),
+            pieces: piecesFor.get(room.signature),
             priorities: brief?.priorities,
         });
         if (signal?.aborted)
@@ -216,6 +254,12 @@ export async function furnishApartment(
             continue;
         }
         furniture = all;
+        if (isHallwayStore)
+            settleHallway(
+                pieces
+                    .filter((piece) => piece.definitionId.startsWith("wardrobe-"))
+                    .reduce((sum, piece) => sum + piece.width, 0),
+            );
 
         const kitchenZone = result.kitchenZone
             ? {
@@ -245,5 +289,10 @@ export async function furnishApartment(
     }
 
     onProgress?.(rooms.length, rooms.length, "");
-    return { furniture, rooms: outcomes, notes: allocation.notes, cancelled: false };
+    // Back in the planner's own order of rooms.
+    const ordered = placedOrder
+        .map((index, position) => ({ index, outcome: outcomes[position] }))
+        .sort((first, second) => first.index - second.index)
+        .map(({ outcome }) => outcome);
+    return { furniture, rooms: ordered, notes, cancelled: false };
 }

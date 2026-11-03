@@ -45,7 +45,7 @@ export interface RoomBrief {
 
 export type FurnishableRoomKind = Extract<
     RoomKind,
-    "bedroom" | "living" | "kitchen-living" | "children" | "office"
+    "bedroom" | "living" | "kitchen-living" | "children" | "office" | "hallway"
 >;
 
 export const isFurnishableRoomKind = (kind: RoomKind | undefined): kind is FurnishableRoomKind =>
@@ -53,13 +53,19 @@ export const isFurnishableRoomKind = (kind: RoomKind | undefined): kind is Furni
     kind === "living" ||
     kind === "kitchen-living" ||
     kind === "children" ||
-    kind === "office";
+    kind === "office" ||
+    kind === "hallway";
 
 export interface SelectedPiece {
     definitionId: string;
     count: number;
     /** A size other than the catalogue's. */
     size?: FurnitureSize;
+    /**
+     * Smaller sizes this piece may take before anything else gives way, each
+     * with its reason, e.g. a hallway wardrobe with its coats in two tiers.
+     */
+    smaller?: { size: FurnitureSize; reason: string }[];
 }
 
 export type SelectionChange =
@@ -136,6 +142,8 @@ export const fullFurnitureSet = (
                 ...(areaM2 >= 11 ? [piece("bookcase")] : []),
             ];
         }
+        case "hallway":
+            return [piece("wardrobe-medium")];
         case "office":
             return [
                 piece("desk"),
@@ -312,6 +320,15 @@ const LADDERS: Record<FurnishableRoomKind, Move[]> = {
         },
     ],
     "kitchen-living": [],
+    hallway: [
+        {
+            kind: "swap",
+            concern: "storage",
+            definitionId: "wardrobe-medium",
+            to: "wardrobe-small",
+            reason: "средний шкаф не помещается",
+        },
+    ],
     children: [
         {
             kind: "less",
@@ -379,8 +396,12 @@ const LADDERS: Record<FurnishableRoomKind, Move[]> = {
  * The room's moves with what the person ranked lowest first. Unranked
  * concerns sit in the middle; ties keep the default order.
  */
-const orderedMoves = (kind: FurnishableRoomKind, priorities?: readonly BriefPriority[]): Move[] => {
-    const moves = kind === "kitchen-living" ? LADDERS.living : LADDERS[kind];
+const orderedMoves = (
+    kind: FurnishableRoomKind,
+    priorities?: readonly BriefPriority[],
+    own: Move[] = [],
+): Move[] => {
+    const moves = [...own, ...(kind === "kitchen-living" ? LADDERS.living : LADDERS[kind])];
     if (!priorities?.length) return moves;
     const rank = (concern: BriefPriority) => {
         const index = priorities.indexOf(concern);
@@ -489,7 +510,19 @@ export const selectionLadderFrom = (
     priorities?: readonly BriefPriority[],
 ): SelectionStep[] => {
     const steps: SelectionStep[] = [{ pieces, changes: [] }];
-    for (const move of orderedMoves(kind, priorities)) {
+    // A piece's own smaller sizes come first among what touches storage.
+    const own: Move[] = pieces.flatMap((item) =>
+        (item.smaller ?? []).map(
+            (rung): Move => ({
+                kind: "size",
+                concern: "storage",
+                definitionId: item.definitionId,
+                size: rung.size,
+                reason: rung.reason,
+            }),
+        ),
+    );
+    for (const move of orderedMoves(kind, priorities, own)) {
         // A piece left out one at a time may take several rungs, e.g. two bedside tables.
         for (;;) {
             const previous = steps[steps.length - 1];

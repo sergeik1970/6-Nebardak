@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { allocateApartmentBrief, normalizeApartmentBrief, type BriefRoom } from "./apartment-brief";
+import {
+    allocateApartmentBrief,
+    normalizeApartmentBrief,
+    storageNeeds,
+    wardrobesFor,
+    type BriefRoom,
+} from "./apartment-brief";
 import { selectionLadderFrom } from "./furniture-selection";
 
 const room = (signature: string, kind: BriefRoom["kind"], areaM2: number): BriefRoom => ({
@@ -103,6 +109,7 @@ describe("apartment brief", () => {
                 bedsideTables: "per-sleeper",
                 dressingTable: true,
                 priorities: ["bed", "bed", "sleep", "tv"],
+                storage: { longHangers: "20-40", shoePairs: "lots", shortHangers: 999 },
                 extra: "ignored",
             }),
         ).toEqual({
@@ -113,6 +120,88 @@ describe("apartment brief", () => {
             bedsideTables: "per-sleeper",
             dressingTable: true,
             priorities: ["bed", "tv"],
+            storage: { longHangers: "20-40", shortHangers: 300 },
+        });
+    });
+
+    describe("storage", () => {
+        it("follows the designer's numbers", () => {
+            // 20 coats = 2.4 m of rail in one tier; 20 pairs = a 1 m section; 0–2 bulky = 40 cm.
+            expect(
+                storageNeeds({ longHangers: "10-20", shoePairs: "10-20", bulkyItems: "0-2" }),
+            ).toMatchObject({ hallway: 2400 + 1000 + 400, hallwayTwoTiers: 1200 + 1000 + 400 });
+            // 30 shirts in two tiers = 0.6 m, one shelf block = 0.4 m; 5+ m of books = 2 bookcases.
+            expect(
+                storageNeeds({ shortHangers: 30, shelfBlocks: 1, bookMeters: "5+" }),
+            ).toMatchObject({ clothes: 600 + 400, bookcases: 2 });
+        });
+
+        it("turns a length into wardrobes of that length", () => {
+            expect(wardrobesFor(1000)).toEqual([
+                { definitionId: "wardrobe-medium", count: 1, size: { width: 1000, depth: 600 } },
+            ]);
+            expect(wardrobesFor(620)[0]).toMatchObject({
+                definitionId: "wardrobe-small",
+                size: { width: 650, depth: 500 },
+            });
+            expect(wardrobesFor(3800)[0]).toMatchObject({
+                definitionId: "wardrobe-large",
+                count: 2,
+                size: { width: 1900 },
+            });
+            expect(wardrobesFor(0)).toEqual([]);
+        });
+
+        const withHall = [...flat, room("hall", "hallway", 6)];
+
+        it("sizes the hallway wardrobe and gives way to two tiers first", () => {
+            const { pieces, hallwayStorage } = allocateApartmentBrief(withHall, {
+                version: 1,
+                storage: { longHangers: "10-20", shoePairs: "10-20", bulkyItems: "0-2" },
+            });
+
+            const [wardrobe] = pieces.get("hall")!;
+            expect(wardrobe).toMatchObject({ definitionId: "wardrobe-large", count: 2 });
+            expect(wardrobe.smaller?.[0]).toMatchObject({
+                reason: "верхняя одежда в два яруса",
+                size: { width: 1300 },
+            });
+            expect(hallwayStorage).toEqual({
+                signature: "hall",
+                lengthMm: 3800,
+                overflowTo: "big",
+            });
+        });
+
+        it("shares clothes by who sleeps where, and sends coats to a bedroom without a hallway", () => {
+            const { pieces, notes } = allocateApartmentBrief(flat, {
+                version: 1,
+                adults: 2,
+                children: 2,
+                storage: { shortHangers: 60, shelfBlocks: 2, longHangers: "none" },
+            });
+            const wardrobe = (signature: string) =>
+                pieces.get(signature)!.find((item) => item.definitionId.startsWith("wardrobe-"));
+
+            // 60 × 4 cm in two tiers + 2 × 40 cm = 2 m, half for the parents, half for the children;
+            // without a hallway the parents also take 20 pairs of shoes (1 m) and 0.4 m of bulky things.
+            expect(wardrobe("big")?.size?.width).toBe(1000 + 1000 + 400);
+            expect(wardrobe("kids")?.size?.width).toBe(1000);
+            expect(notes).toContain(
+                "В квартире нет прихожей: верхняя одежда и обувь — в шкафу спальни.",
+            );
+        });
+
+        it("puts bookcases where the books need them", () => {
+            const { pieces } = allocateApartmentBrief([...flat, room("study", "office", 9)], {
+                version: 1,
+                storage: { bookMeters: "5+" },
+            });
+            const has = (signature: string) => ids(pieces.get(signature)).includes("bookcase");
+
+            expect(has("living")).toBe(true);
+            expect(has("study")).toBe(true);
+            expect(has("kids")).toBe(false);
         });
     });
 });
