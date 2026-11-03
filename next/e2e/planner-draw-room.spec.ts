@@ -5551,6 +5551,9 @@ test("the family brief is asked once, saved with the plan and shapes the furnitu
     const brief = page.getByRole("dialog", { name: "Расскажите о семье" });
     await brief.getByLabel("Детей от 3 лет").fill("1");
     await brief.getByLabel("Прикроватные тумбы").selectOption("none");
+    // Block 3 opens on request; its answers size the wardrobes.
+    await brief.getByLabel("Посчитать шкафы по вещам").check();
+    await brief.getByLabel(/Обувь, пар/).selectOption("30+");
     // «Больше мест хранения» goes to the top of the ranking.
     await brief.getByRole("button", { name: "Выше: Больше мест хранения" }).click();
     await expect(brief.locator("[data-brief-priority]").first()).toHaveAttribute(
@@ -5570,6 +5573,9 @@ test("the family brief is asked once, saved with the plan and shapes the furnitu
     await expect(page.locator("[data-definition-id='bedside-table']")).toHaveCount(0);
     await expect(apartment.locator("[data-apartment-brief-summary]")).toContainText(
         "2 взрослых, 1 ребёнок",
+    );
+    await expect(apartment.locator("[data-apartment-brief-summary]")).toContainText(
+        "шкафы по вещам",
     );
 
     // The answers are part of the saved plan.

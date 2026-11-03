@@ -213,4 +213,25 @@ describe("furnish the whole apartment", () => {
         expect(ids).toEqual(expect.arrayContaining(["double-bed", "single-bed"]));
         expect(result.notes).toEqual(["Не хватило спален: 2 взрослым нужна ещё спальня."]);
     });
+
+    it("moves what the hallway cannot hold to the main bedroom's wardrobe", async () => {
+        const result = await furnishApartment({
+            rooms: apartment(["hallway", "bedroom"]),
+            furniture: [],
+            keepFurnishedRooms: false,
+            brief: {
+                version: 1,
+                storage: { longHangers: "40+", shoePairs: "30+", bulkyItems: "6+" },
+            },
+            furnish,
+            fits,
+        });
+
+        expect(result.rooms[0].status).not.toBe("skipped");
+        expect(result.notes.some((note) => note.startsWith("В прихожей поместилось"))).toBe(true);
+        const bedroomWardrobes = result.furniture.filter(
+            (item) => item.definitionId.startsWith("wardrobe-") && item.x > 3000,
+        );
+        expect(bedroomWardrobes.length).toBeGreaterThan(0);
+    });
 });
