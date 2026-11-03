@@ -1697,6 +1697,15 @@ interface InternalSolveOptions {
     maxRelationCandidates?: number;
     excludedLayouts?: readonly Placement[][];
     excludedStructureSignatures?: ReadonlySet<string>;
+    /** Pieces fixed before the search starts; only the rest is searched. */
+    seedPlacements?: readonly Placement[];
+    /**
+     * Places what depends on the seed first: a position that cannot hold its
+     * bedside tables or television then fails at once, before any wardrobe.
+     */
+    dependentsFirst?: boolean;
+    /** Once a plan is found, look only this many nodes further for a better one. */
+    maxNodesAfterSolution?: number;
 }
 
 const solveRoomInternal = (
@@ -1813,8 +1822,26 @@ const solveRoomInternal = (
         };
     }
 
-    const orderedInstances = orderInstances(instances, options.preferences, options.profileId);
+    const seedPlacements = [...(options.seedPlacements ?? [])];
+    const unseededInstances = orderInstances(
+        instances.filter(
+            (instance) => !seedPlacements.some((seed) => seed.instanceId === instance.instanceId),
+        ),
+        options.preferences,
+        options.profileId,
+    );
+    const dependsOnSeed = (instance: FurnitureInstance) => {
+        const definition = getFurniture(instance.definitionId);
+        return definition.category === "media" || hasRequiredDependency(definition);
+    };
+    const orderedInstances = options.dependentsFirst
+        ? [
+              ...unseededInstances.filter(dependsOnSeed),
+              ...unseededInstances.filter((instance) => !dependsOnSeed(instance)),
+          ]
+        : unseededInstances;
     let exploredNodes = 0;
+    let searchLimit = nodeBudget;
     let reachedSearchLimit = false;
     let deepestIndex = 0;
     let deepestPlacements: Placement[] = [];
@@ -1863,10 +1890,13 @@ const solveRoomInternal = (
                 bestScore = candidateScore;
                 bestTieKey = tieKey;
             }
+            if (options.maxNodesAfterSolution !== undefined && searchLimit === nodeBudget) {
+                searchLimit = Math.min(nodeBudget, exploredNodes + options.maxNodesAfterSolution);
+            }
             return;
         }
 
-        if (exploredNodes >= nodeBudget) {
+        if (exploredNodes >= searchLimit) {
             reachedSearchLimit = true;
             return;
         }
@@ -1884,14 +1914,14 @@ const solveRoomInternal = (
             instances,
             options.preferences,
             options.profileId,
-            nodeBudget - exploredNodes,
+            searchLimit - exploredNodes,
             options.maxRelationCandidates,
         );
 
         const iterator = generation.candidates[Symbol.iterator]();
         for (let next = iterator.next(); !next.done; next = iterator.next()) {
             const candidate = next.value;
-            if (exploredNodes >= nodeBudget) {
+            if (exploredNodes >= searchLimit) {
                 reachedSearchLimit = true;
                 break;
             }
@@ -1906,7 +1936,7 @@ const solveRoomInternal = (
         if (generation.state.truncated) reachedSearchLimit = true;
     };
 
-    search(0, []);
+    search(0, seedPlacements);
 
     if (bestPlacements !== null) {
         const notes: string[] = [];
@@ -2057,9 +2087,8 @@ export const getVariantProfileIds = (
                 ? "daylight"
                 : "perimeter";
 
-    // The fit-first plan is always the first and default result. The two
-    // remaining profiles are deliberately optional alternatives for people
-    // who do care about a visual arrangement.
+    // The search from the main piece runs the scenario profile; this order
+    // is the older search it falls back on, fit-first with two alternatives.
     return ["fit-all", scenarioProfile, "open-center"];
 };
 
@@ -2225,6 +2254,9 @@ export const solveRoomVariants = (
         return { status: "success", variants: [], exploredNodes: 0, notes: [] };
     }
 
+    const fromMainPiece = solveRoomFromMainPiece(room, instances, preferences, requestedLimit);
+    if (fromMainPiece.status === "success") return fromMainPiece;
+
     const variants: LayoutVariant[] = [];
     const structureSignatures = new Set<string>();
     let exploredNodes = 0;
@@ -2282,6 +2314,157 @@ export const solveRoomVariants = (
         };
     }
 
+    const result =
+        firstFailure ??
+        failure(
+            "search-exhausted",
+            "Поиск вариантов завершён без результата; это не доказывает, что мебель не помещается.",
+        );
+    return { ...result, exploredNodes, variants: [] };
+};
+
+/** How far to look for the main piece's positions, and how many to try in full. */
+const MAX_MAIN_PIECE_CANDIDATES = 4_000;
+const MAX_MAIN_PIECE_POSITIONS = 8;
+const MAIN_PIECE_SEARCH_NODES = 12_000;
+const MAIN_PIECE_NODES_AFTER_SOLUTION = 300;
+
+/**
+ * The main piece's structurally different positions: one per wall, corner or
+ * room region, each in its own rotation, in the order the profile prefers them.
+ */
+const mainPiecePositions = (
+    room: Room,
+    instances: FurnitureInstance[],
+    preferences: LayoutPreferences,
+    profileId: LayoutVariantProfileId,
+): Placement[] => {
+    const mainPiece = orderInstances(instances, preferences, profileId)[0];
+    if (!mainPiece || validateRoomGeometry(room)) return [];
+    const { candidates } = generateCandidates(
+        mainPiece,
+        room,
+        [],
+        instances,
+        preferences,
+        profileId,
+        MAX_MAIN_PIECE_CANDIDATES,
+    );
+    const positions = new Map<string, Placement>();
+    const iterator = candidates[Symbol.iterator]();
+    for (let next = iterator.next(); !next.done; next = iterator.next()) {
+        const candidate = next.value;
+        if (positions.size >= MAX_MAIN_PIECE_POSITIONS) break;
+        const signature = getLayoutStructureSignature(room, [candidate]);
+        if (positions.has(signature)) continue;
+        if (validatePlacement(candidate, room, []).valid) positions.set(signature, candidate);
+    }
+    return Array.from(positions.values());
+};
+
+/** A bed's head or a sofa's back against a wall reads as a plan, not as a leftover spot. */
+const hasBackAtWall = (room: Room, position: Placement): boolean => {
+    const { width, depth } = getRotatedGeometry(
+        getFurniture(position.definitionId),
+        position.rotation,
+    );
+    return rectTouchesRoomBoundary(
+        { x: position.x, y: position.y, width, depth },
+        room,
+        wallForBack(position.rotation),
+    );
+};
+
+/** Where the main piece stands, which is what tells one plan from another. */
+const mainPieceLabel = (room: Room, position: Placement): string => {
+    const definition = getFurniture(position.definitionId);
+    const geometry = getRotatedGeometry(definition, position.rotation);
+    const atTop = position.y === 0;
+    const atBottom = position.y + geometry.depth === room.depth;
+    const atLeft = position.x === 0;
+    const atRight = position.x + geometry.width === room.width;
+    const vertical = atTop ? "верхнем" : atBottom ? "нижнем" : null;
+    const horizontal = atLeft ? "левом" : atRight ? "правом" : null;
+    const place =
+        vertical && horizontal
+            ? `в ${horizontal} ${vertical} углу`
+            : atTop
+              ? "у верхней стены"
+              : atBottom
+                ? "у нижней стены"
+                : atLeft
+                  ? "у левой стены"
+                  : atRight
+                    ? "у правой стены"
+                    : "в центре комнаты";
+    return `${definition.shortLabel} ${place}`;
+};
+
+/**
+ * Searches from each position of the main piece with its own share of nodes,
+ * so one hopeless branch cannot spend the whole budget and the plans differ in
+ * where the room's main piece stands, not in small shifts.
+ */
+export const solveRoomFromMainPiece = (
+    room: Room,
+    instances: FurnitureInstance[],
+    preferences: LayoutPreferences = {},
+    limit = 3,
+): LayoutVariantsResult => {
+    const profileId = getVariantProfileIds(room, instances)[1];
+    const positions = mainPiecePositions(room, instances, preferences, profileId);
+    let exploredNodes = 0;
+    const found: { result: LayoutSuccess; position: Placement }[] = [];
+    let firstFailure: LayoutFailure | null = null;
+
+    for (let index = 0; index < positions.length; index += 1) {
+        const position = positions[index];
+        // A position that needs less leaves more for those after it.
+        const share = Math.floor(
+            (MAIN_PIECE_SEARCH_NODES - exploredNodes) / (positions.length - index),
+        );
+        const result = solveRoomInternal(room, instances, {
+            preferences,
+            profileId,
+            dependentsFirst: true,
+            maxSearchNodes: share,
+            maxNodesAfterSolution: MAIN_PIECE_NODES_AFTER_SOLUTION,
+            seedPlacements: [position],
+        });
+        exploredNodes += result.exploredNodes;
+        if (result.status === "success") found.push({ result, position });
+        else firstFailure ??= result;
+    }
+
+    const variants: LayoutVariant[] = [];
+    [...found]
+        .sort(
+            (first, second) =>
+                Number(hasBackAtWall(room, second.position)) -
+                    Number(hasBackAtWall(room, first.position)) ||
+                second.result.score - first.result.score,
+        )
+        .forEach(({ result, position }) => {
+            if (variants.length >= limit) return;
+            const different = variants.every(
+                (variant) =>
+                    areLayoutsNoticeablyDifferent(variant.placements, result.placements) &&
+                    areLayoutsStructurallyDifferent(room, variant.placements, result.placements),
+            );
+            if (!different) return;
+            const label = mainPieceLabel(room, position);
+            const repeated = variants.some((variant) => variant.profile.label === label);
+            variants.push({
+                ...result,
+                variantId: `${profileId}-${variants.length + 1}`,
+                profile: {
+                    ...profileForLayout(profileId, room, result.placements, variants.length + 1),
+                    label: repeated ? `${label}, вариант ${variants.length + 1}` : label,
+                },
+            });
+        });
+
+    if (variants.length > 0) return { status: "success", variants, exploredNodes, notes: [] };
     const result =
         firstFailure ??
         failure(
@@ -2426,7 +2609,8 @@ export const solveWithAutomaticRemoval = (
 
 /**
  * Builds a usable plan even when the complete requested set cannot be found
- * quickly. Required furniture is solved first. If that complete required set
+ * quickly. The search from the main piece goes first; failing that, required
+ * furniture is solved first. If that complete required set
  * hits the search budget, the same geometry checks build a working plan from
  * scratch instead of returning an empty room. Every remaining item then gets
  * a direct attempt in the already valid layout before the bounded re-solve
@@ -2438,6 +2622,11 @@ export const solveWithPreferredPlacementFallback = (
     instances: FurnitureInstance[],
     preferences: LayoutPreferences = {},
 ): PreferredPlacementFallbackResult => {
+    const fromMainPiece = solveRoomFromMainPiece(room, instances, preferences, 1);
+    if (fromMainPiece.status === "success") {
+        return { result: fromMainPiece.variants[0], unplacedInstances: [] };
+    }
+
     const requiredInstances = instances.filter((instance) => instance.priority === "required");
     const compareRemainingInstances = (first: FurnitureInstance, second: FurnitureInstance) =>
         Number(first.priority === "optional") - Number(second.priority === "optional") ||

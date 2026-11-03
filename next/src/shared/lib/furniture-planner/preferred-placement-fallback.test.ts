@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { buildFurnitureInstances } from "./catalog";
+import { validateLayout } from "./geometry";
 import { createDefaultRoom } from "./room";
-import { solveRoomVariants, solveWithPreferredPlacementFallback } from "./solver";
+import { ROOM_LAB_GENERATED_CASES } from "./room-lab";
+import { solveWithPreferredPlacementFallback } from "./solver";
 import { FurnitureInstance, FurnitureSelection, Room } from "./types";
 
 const room: Room = {
@@ -77,7 +79,7 @@ describe("preferred placement fallback", () => {
         expect(result.unplacedInstances).toEqual([]);
     });
 
-    it("keeps a dense all-required questionnaire usable when the variants search reaches its limit", () => {
+    it("keeps a dense all-required questionnaire usable", () => {
         const selection: FurnitureSelection = {
             "double-bed": { count: 1, priority: "required", required: true },
             bookcase: { count: 1, priority: "required", required: true },
@@ -89,12 +91,9 @@ describe("preferred placement fallback", () => {
             tv: { count: 1, priority: "required", required: true },
             cradle: { count: 1, priority: "required", required: true },
         };
-        // Deep enough that the strict search runs out before it finds every piece a place.
         const denseRoom = createDefaultRoom(7200, 5400);
         const denseInstances = buildFurnitureInstances(selection);
         const preferences = { tvTargetCategory: "sleep" as const };
-
-        expect(solveRoomVariants(denseRoom, denseInstances, preferences, 3).status).toBe("failure");
 
         const fallback = solveWithPreferredPlacementFallback(
             denseRoom,
@@ -105,5 +104,29 @@ describe("preferred placement fallback", () => {
         expect(fallback.result.status).toBe("success");
         expect(fallback.result.placements).toHaveLength(denseInstances.length);
         expect(fallback.unplacedInstances).toEqual([]);
+    });
+
+    const generatedCase = (id: string) => {
+        const roomCase = ROOM_LAB_GENERATED_CASES.find((candidate) => candidate.id === id);
+        if (!roomCase) throw new Error(`Unknown generated room: ${id}`);
+        return roomCase;
+    };
+
+    it("finds the whole set from the main piece where the old search ran out", () => {
+        const { room, instances, preferences } = generatedCase("GEN-living-3600x5000-side-door");
+
+        const fallback = solveWithPreferredPlacementFallback(room, instances, preferences);
+
+        expect(fallback.unplacedInstances).toEqual([]);
+        expect(fallback.result.placements).toHaveLength(instances.length);
+        expect(validateLayout(room, fallback.result.placements, preferences).valid).toBe(true);
+    });
+
+    it("names the main piece as left out when it alone has no valid spot", () => {
+        const { room, instances, preferences } = generatedCase("GEN-bedroom-3300x3900-side-door");
+
+        const fallback = solveWithPreferredPlacementFallback(room, instances, preferences);
+
+        expect(fallback.unplacedInstances.map((item) => item.definitionId)).toContain("double-bed");
     });
 });

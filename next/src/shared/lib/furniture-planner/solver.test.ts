@@ -991,10 +991,18 @@ describe("solver trust guarantees", () => {
         for (const variant of result.variants) {
             expect(validateLayout(ROOM, variant.placements).valid).toBe(true);
         }
-        expect(result.variants[0]?.profile).toMatchObject({
-            id: "fit-all",
-            label: "Уместить всё",
-        });
+        expect(result.variants[0]?.profile.id).toBe("perimeter");
+    });
+
+    it("names each variant after where its main piece stands", () => {
+        const result = solveRoomVariants(ROOM, [instance("bookcase-1", "bookcase")], {}, 3);
+
+        expect(result.status).toBe("success");
+        if (result.status !== "success") throw new Error(result.message);
+        const labels = result.variants.map((variant) => variant.profile.label);
+        expect(labels.length).toBeGreaterThan(1);
+        expect(new Set(labels).size).toBe(labels.length);
+        labels.forEach((label) => expect(label).toMatch(/^Книжный шкаф (у|в) /));
     });
 
     it("selects a scenario profile from the actual furniture set", () => {
