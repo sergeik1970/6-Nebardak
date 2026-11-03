@@ -1,4 +1,10 @@
 import {
+    furnishRoom,
+    type FurnishableRoomKind,
+    type FurnishResult,
+    type RoomBrief,
+} from "./furniture-selection";
+import {
     solveRoom,
     solveRoomVariants,
     solveWithAutomaticRemoval,
@@ -43,6 +49,13 @@ export type SolverWorkerRequest =
           room: Room;
           instances: FurnitureInstance[];
           preferences?: LayoutPreferences;
+      }
+    | {
+          requestId: number;
+          action: "furnish-room";
+          room: Room;
+          kind: FurnishableRoomKind;
+          brief?: RoomBrief;
       };
 
 export type SolverWorkerResponse =
@@ -69,6 +82,12 @@ export type SolverWorkerResponse =
           ok: true;
           action: "solve-preferred-fallback";
           result: PreferredPlacementFallbackResult;
+      }
+    | {
+          requestId: number;
+          ok: true;
+          action: "furnish-room";
+          result: FurnishResult;
       }
     | {
           requestId: number;
@@ -108,6 +127,16 @@ workerScope.onmessage = (event) => {
                     request.preferences,
                     request.limit,
                 ),
+            });
+            return;
+        }
+
+        if (request.action === "furnish-room") {
+            workerScope.postMessage({
+                requestId: request.requestId,
+                ok: true,
+                action: request.action,
+                result: furnishRoom(request.room, request.kind, request.brief),
             });
             return;
         }
