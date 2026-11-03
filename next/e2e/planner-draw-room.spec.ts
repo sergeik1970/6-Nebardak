@@ -5511,6 +5511,10 @@ test("«Обставить квартиру» furnishes every room in one step t
     const apartment = page.locator("[data-apartment-furnish='true']");
     await expect(apartment.getByRole("checkbox")).toBeChecked();
     await apartment.getByRole("button", { name: "Обставить квартиру" }).click();
+    // The first run asks about the family; an ordinary one is a single click.
+    const brief = page.getByRole("dialog", { name: "Расскажите о семье" });
+    await brief.getByRole("button", { name: "Обычная семья — подберите сами" }).click();
+    await expect(brief).toBeHidden();
 
     await expect(apartment.locator("[data-apartment-furnish-outcome='furnished']")).toHaveCount(1, {
         timeout: 60_000,
@@ -5525,4 +5529,54 @@ test("«Обставить квартиру» furnishes every room in one step t
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Отменить", exact: true }).click();
     await expect(pieces).toHaveCount(0);
+});
+
+test("the family brief is asked once, saved with the plan and shapes the furniture", async ({
+    page,
+}, testInfo) => {
+    test.setTimeout(120_000);
+    test.skip(testInfo.project.name !== "desktop-chromium", "Solver flow runs once on desktop");
+    await page.goto("/planner");
+    await buildRectRoom(page);
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
+    await page.locator("[data-draw-room-step='furniture']").click();
+    await page.locator("[data-furniture-auto-layout]").click();
+    const apartment = page.locator("[data-apartment-furnish='true']");
+    await expect(apartment.locator("[data-apartment-brief-summary]")).toContainText(
+        "Анкета не заполнена",
+    );
+
+    await apartment.getByRole("button", { name: "Обставить квартиру" }).click();
+    const brief = page.getByRole("dialog", { name: "Расскажите о семье" });
+    await brief.getByLabel("Детей от 3 лет").fill("1");
+    await brief.getByLabel("Прикроватные тумбы").selectOption("none");
+    // «Больше мест хранения» goes to the top of the ranking.
+    await brief.getByRole("button", { name: "Выше: Больше мест хранения" }).click();
+    await expect(brief.locator("[data-brief-priority]").first()).toHaveAttribute(
+        "data-brief-priority",
+        "storage",
+    );
+    await brief.getByRole("button", { name: "Сохранить и обставить" }).click();
+    await expect(brief).toBeHidden();
+
+    await expect(apartment.locator("[data-apartment-furnish-outcome]")).toHaveCount(1, {
+        timeout: 60_000,
+    });
+    // One bedroom for two adults: the child is named, not dropped.
+    await expect(apartment.getByRole("status").first()).toContainText("1 ребёнку");
+    await expect(page.locator("[data-draw-furniture]")).not.toHaveCount(0);
+    await expect(page.locator("[data-definition-id='double-bed']")).toHaveCount(1);
+    await expect(page.locator("[data-definition-id='bedside-table']")).toHaveCount(0);
+    await expect(apartment.locator("[data-apartment-brief-summary]")).toContainText(
+        "2 взрослых, 1 ребёнок",
+    );
+
+    // The answers are part of the saved plan.
+    await page.reload();
+    await page.locator("[data-draw-room-step='furniture']").click();
+    await page.locator("[data-furniture-auto-layout]").click();
+    await expect(
+        page.locator("[data-apartment-furnish='true'] [data-apartment-brief-summary]"),
+    ).toContainText("2 взрослых, 1 ребёнок");
 });

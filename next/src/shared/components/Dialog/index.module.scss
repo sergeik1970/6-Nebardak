@@ -1,4 +1,6 @@
 .dialog {
+    // The global reset clears every margin; a modal <dialog> centres itself with auto.
+    margin: auto;
     width: min(calc(100vw - 32px), 30rem);
     max-height: calc(100dvh - 32px);
     padding: var(--sf-space-6);
