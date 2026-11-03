@@ -73,6 +73,18 @@ const sofaFor = (seats: ApartmentBrief["sofaSeats"], areaM2: number) =>
               ? "sofa-three"
               : "sofa-two";
 
+/**
+ * Screen and stand by the answer: a 65″ screen is about 1450 mm wide and gets
+ * the catalogue's 1655 mm stand; a 50″ one is about 1120 mm on the usual stand.
+ */
+const tvPieces = (tv: "large" | "compact"): SelectedPiece[] =>
+    tv === "large"
+        ? [
+              piece("tv", 1, { width: 1450, depth: 100 }),
+              piece("tv-console", 1, { width: 1655, depth: 400 }),
+          ]
+        : [piece("tv", 1, { width: 1120, depth: 100 }), piece("tv-console")];
+
 const plural = (count: number, one: string, few: string, many: string) => {
     const tens = count % 100;
     const units = count % 10;
@@ -237,7 +249,7 @@ export const allocateApartmentBrief = (
                 pieces.set(room.signature, [
                     piece(sofaFor(brief.sofaSeats, room.areaM2)),
                     piece("coffee-table"),
-                    ...(brief.tv === "none" ? [] : [piece("tv"), piece("tv-console")]),
+                    ...(brief.tv === "none" ? [] : tvPieces(brief.tv)),
                     piece("bookcase"),
                     ...(armchairs > 0 ? [piece("armchair", armchairs)] : []),
                     ...(room.areaM2 >= 26 ? [piece("dining-square-four")] : []),

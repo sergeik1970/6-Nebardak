@@ -1705,7 +1705,11 @@ export const tvFacesTarget = (
     }
 
     if (!aligned || gap < 0) return false;
-    const viewingDistance = getViewingDistanceRange(getFurniture(tv.definitionId), targetCategory);
+    const viewingDistance = getViewingDistanceRange(
+        getFurniture(tv.definitionId),
+        targetCategory,
+        tv.width,
+    );
 
     return gap >= viewingDistance.minimum && gap <= viewingDistance.maximum;
 };
@@ -1747,7 +1751,11 @@ const tvRelationIssues = (
         if (targets.some((target) => tvFacesTarget(television, target, category))) return [];
 
         const viewingDistance = category
-            ? getViewingDistanceRange(getFurniture(television.definitionId), category)
+            ? getViewingDistanceRange(
+                  getFurniture(television.definitionId),
+                  category,
+                  television.width,
+              )
             : null;
 
         return [
