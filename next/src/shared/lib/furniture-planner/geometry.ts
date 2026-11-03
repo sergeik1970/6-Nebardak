@@ -1122,8 +1122,67 @@ export const isAwayFromTargetHead = (placements: Placement[]): boolean =>
  * over its stand, bedside tables at the bed's head. Saved and hand-made
  * layouts that break them still load, so they are never validity issues.
  */
-export const breaksSearchRules = (placements: Placement[]): boolean =>
-    isTvApartFromStand(placements) || isAwayFromTargetHead(placements);
+export const breaksSearchRules = (
+    placements: Placement[],
+    /** Automatic selection also keeps armchairs at the coffee table; rearranging a person's own pieces does not. */
+    options: { armchairsInSofaGroup?: boolean } = {},
+): boolean =>
+    isTvApartFromStand(placements) ||
+    isAwayFromTargetHead(placements) ||
+    (options.armchairsInSofaGroup === true && isArmchairAwayFromSofaGroup(placements));
+
+/** How far an armchair may stand from the coffee table it faces, mm. */
+export const ARMCHAIR_TABLE_GAP_MAX = 700;
+
+const centre = (rect: Rect) => ({ x: rect.x + rect.width / 2, y: rect.y + rect.depth / 2 });
+
+/** The way a seat looks: away from its back. */
+export const frontDirection = (rotation: Rotation): { x: number; y: number } => {
+    switch (wallForBack(rotation)) {
+        case "right":
+            return { x: -1, y: 0 };
+        case "bottom":
+            return { x: 0, y: -1 };
+        case "left":
+            return { x: 1, y: 0 };
+        default:
+            return { x: 0, y: 1 };
+    }
+};
+
+const rectGap = (first: Rect, second: Rect) =>
+    Math.max(
+        first.x - (second.x + second.width),
+        second.x - (first.x + first.width),
+        first.y - (second.y + second.depth),
+        second.y - (first.y + first.depth),
+        0,
+    );
+
+/**
+ * An armchair belongs to the sofa group: beside the coffee table, across the
+ * sofa's axis so it never blocks the TV, close to it and turned to it.
+ */
+export const isArmchairAwayFromSofaGroup = (placements: Placement[]): boolean => {
+    const table = placements.find((placement) => placement.definitionId === "coffee-table");
+    const sofa = placements.find((placement) => placement.definitionId.startsWith("sofa-"));
+    if (!table || !sofa) return false;
+    const tableBox = getBounds(getWorldBodyRects(table));
+    const tableCentre = centre(tableBox);
+    const sofaFront = frontDirection(sofa.rotation);
+    return placements
+        .filter((placement) => placement.definitionId === "armchair")
+        .some((armchair) => {
+            const box = getBounds(getWorldBodyRects(armchair));
+            const seat = centre(box);
+            const front = frontDirection(armchair.rotation);
+            const toTable = { x: tableCentre.x - seat.x, y: tableCentre.y - seat.y };
+            const facesTable = front.x * toTable.x + front.y * toTable.y > 0;
+            // Across the sofa's axis: it looks along neither the sofa's front nor its back.
+            const across = front.x * sofaFront.x + front.y * sofaFront.y === 0;
+            return !(facesTable && across && rectGap(box, tableBox) <= ARMCHAIR_TABLE_GAP_MAX);
+        });
+};
 
 /**
  * A TV and a stand placed apart. The solver never proposes it; a person's own

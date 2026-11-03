@@ -13,7 +13,11 @@ import {
     getSegmentSpanRect,
     rectInsideRoomGeometry,
 } from "./room-geometry";
-import { solveRoom, solveRoomFromMainPiece, solveWithPreferredPlacementFallback } from "./solver";
+import {
+    solveFromMainPieceWithArmchairs,
+    solveRoom,
+    solveWithPreferredPlacementFallback,
+} from "./solver";
 import type {
     FurnitureInstance,
     FurnitureSelection,
@@ -283,14 +287,14 @@ const LADDERS: Record<FurnishableRoomKind, Move[]> = {
         {
             kind: "less",
             concern: "living",
-            definitionId: "dining-square-four",
-            reason: "обеденной группе не хватает места",
+            definitionId: "armchair",
+            reason: "креслу не хватает места",
         },
         {
             kind: "less",
             concern: "living",
-            definitionId: "armchair",
-            reason: "креслу не хватает места",
+            definitionId: "dining-square-four",
+            reason: "обеденной группе не хватает места",
         },
         {
             kind: "swap",
@@ -745,7 +749,12 @@ const furnishWithin = (
             }
             if (!mainFits.get(key)) continue;
         }
-        const result = solveRoomFromMainPiece(room, instances, preferences, 3);
+        const { result, withoutArmchairs } = solveFromMainPieceWithArmchairs(
+            room,
+            instances,
+            preferences,
+            3,
+        );
         if (result.status === "success") {
             return {
                 status: "furnished",
@@ -753,6 +762,29 @@ const furnishWithin = (
                 rung,
                 variants: result.variants,
                 placements: result.variants[0].placements,
+                unplaced: [],
+            };
+        }
+        // No room for the armchairs at the coffee table: the plan goes without them, said so.
+        if (withoutArmchairs?.status === "success") {
+            const armchairs = instances.filter((instance) => instance.definitionId === "armchair");
+            return {
+                status: "furnished",
+                step: {
+                    pieces: step.pieces.filter((item) => item.definitionId !== "armchair"),
+                    changes: [
+                        ...step.changes,
+                        {
+                            kind: "left-out",
+                            definitionId: "armchair",
+                            count: armchairs.length,
+                            reason: "креслу не хватает места у журнального столика",
+                        },
+                    ],
+                },
+                rung,
+                variants: withoutArmchairs.variants,
+                placements: withoutArmchairs.variants[0].placements,
                 unplaced: [],
             };
         }

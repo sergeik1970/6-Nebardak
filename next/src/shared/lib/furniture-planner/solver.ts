@@ -35,6 +35,7 @@ import {
     wallForBodyEdge,
     TV_STAND_ID,
     breaksSearchRules,
+    frontDirection,
     isBesideTargetHead,
     standPlacementUnderTv,
     tvPlacementOverStand,
@@ -1031,6 +1032,84 @@ export const getRequiredRelationCandidates = (
 };
 
 /**
+ * Adds armchairs to a finished plan at its coffee table, one at a time, each
+ * at the first spot that keeps the plan valid; null when one finds none.
+ */
+export const addArmchairs = (
+    room: Room,
+    placements: Placement[],
+    armchairs: FurnitureInstance[],
+    preferences: LayoutPreferences = {},
+): Placement[] | null => {
+    const table = placements.find((placement) => placement.definitionId === "coffee-table");
+    const sofa = placements.find((placement) => placement.definitionId.startsWith("sofa-"));
+    if (armchairs.length && (!table || !sofa)) return null;
+    let plan = placements;
+    for (const armchair of armchairs) {
+        const spot = armchairCandidates(armchair, room, table!, sofa!).find((candidate) => {
+            const next = [...plan, candidate];
+            return (
+                validatePlacement(candidate, room, plan).valid &&
+                validateLayout(room, next, preferences).valid &&
+                !breaksSearchRules(next, { armchairsInSofaGroup: true })
+            );
+        });
+        if (!spot) return null;
+        plan = [...plan, spot];
+    }
+    return plan;
+};
+
+/**
+ * Spots for an armchair beside the coffee table, across the sofa's axis and
+ * turned to the table: each side, two gaps, level with the table or drawn
+ * toward the sofa.
+ */
+const armchairCandidates = (
+    instance: FurnitureInstance,
+    room: Room,
+    table: Placement,
+    sofa: Placement,
+): Placement[] => {
+    const definition = getFurniture(instance.definitionId);
+    const tableBox = getBounds(getWorldBodyRects(table));
+    const sofaFront = frontDirection(sofa.rotation);
+    const candidates: Placement[] = [];
+    for (const rotation of canonicalRotations(definition)) {
+        const front = frontDirection(rotation);
+        if (front.x * sofaFront.x + front.y * sofaFront.y !== 0) continue;
+        const { width, depth } = getRotatedGeometry(definition, rotation, instance);
+        for (const gap of [300, 500, 700]) {
+            for (const towardSofa of [0, 250, 500, -250]) {
+                // The armchair sits on the side its front looks away from.
+                const x =
+                    front.x > 0
+                        ? tableBox.x - gap - width
+                        : front.x < 0
+                          ? tableBox.x + tableBox.width + gap
+                          : tableBox.x + tableBox.width / 2 - width / 2 - sofaFront.x * towardSofa;
+                const y =
+                    front.y > 0
+                        ? tableBox.y - gap - depth
+                        : front.y < 0
+                          ? tableBox.y + tableBox.depth + gap
+                          : tableBox.y + tableBox.depth / 2 - depth / 2 - sofaFront.y * towardSofa;
+                if (x < 0 || y < 0 || x + width > room.width || y + depth > room.depth) continue;
+                candidates.push({
+                    instanceId: instance.instanceId,
+                    definitionId: instance.definitionId,
+                    ...instanceSize(instance),
+                    x: snapToGrid(x),
+                    y: snapToGrid(y),
+                    rotation,
+                });
+            }
+        }
+    }
+    return candidates;
+};
+
+/**
  * The few spots beside a target's head, built directly: each side of the
  * head, level with it, at the relation's nearest and farthest gap. Scanning
  * every side position and discarding the foot took seconds per bed.
@@ -1330,6 +1409,8 @@ const generateCandidates = (
     profileId: LayoutVariantProfileId,
     generationLimit: number,
     relationGenerationLimit?: number,
+    /** Armchairs only at the coffee table: automatic selection asks for it. */
+    armchairsInSofaGroup = false,
 ): { candidates: Iterable<Placement>; state: CandidateGenerationState } => {
     const definition = getFurniture(instance.definitionId);
     const targetCategory = resolveTvTargetCategory(allInstances, preferences);
@@ -1349,6 +1430,18 @@ const generateCandidates = (
         );
         return {
             candidates: uniqueCandidates(facesTarget ? [overStand] : [], generationLimit, state),
+            state,
+        };
+    }
+    const coffeeTable = placements.find((placement) => placement.definitionId === "coffee-table");
+    const sofa = placements.find((placement) => placement.definitionId.startsWith("sofa-"));
+    if (armchairsInSofaGroup && instance.definitionId === "armchair" && coffeeTable && sofa) {
+        return {
+            candidates: uniqueCandidates(
+                armchairCandidates(instance, room, coffeeTable, sofa),
+                generationLimit,
+                state,
+            ),
             state,
         };
     }
@@ -1822,6 +1915,8 @@ interface InternalSolveOptions {
     dependentsFirst?: boolean;
     /** Once a plan is found, look only this many nodes further for a better one. */
     maxNodesAfterSolution?: number;
+    /** Keep armchairs at the coffee table: automatic selection asks for it. */
+    armchairsInSofaGroup?: boolean;
 }
 
 const solveRoomInternal = (
@@ -1949,6 +2044,7 @@ const solveRoomInternal = (
     const hasTelevision = instances.some(
         (instance) => getFurniture(instance.definitionId).category === "media",
     );
+    const hasSofaGroup = instances.some((instance) => instance.definitionId === "coffee-table");
     const dependsOnSeed = (instance: FurnitureInstance) => {
         const definition = getFurniture(instance.definitionId);
         return (
@@ -1957,6 +2053,11 @@ const solveRoomInternal = (
             hasRequiredDependency(definition)
         );
     };
+    // An armchair is placed at the coffee table, so it comes after everything else.
+    const lastRank = (instance: FurnitureInstance) =>
+        options.armchairsInSofaGroup && hasSofaGroup && instance.definitionId === "armchair"
+            ? 1
+            : 0;
     const largestFirst = (first: FurnitureInstance, second: FurnitureInstance) =>
         bodyArea(getFurniture(second.definitionId)) - bodyArea(getFurniture(first.definitionId)) ||
         first.instanceId.localeCompare(second.instanceId);
@@ -1966,7 +2067,10 @@ const solveRoomInternal = (
               ...unseededInstances.filter(dependsOnSeed),
               // Then the largest first: a dining group left last fails only after
               // every wall piece has been tried.
-              ...[...independent].sort(largestFirst),
+              ...[...independent].sort(
+                  (first, second) =>
+                      lastRank(first) - lastRank(second) || largestFirst(first, second),
+              ),
           ]
         : unseededInstances;
     let exploredNodes = 0;
@@ -1993,7 +2097,13 @@ const solveRoomInternal = (
     const search = (index: number, placements: Placement[]): void => {
         if (index >= orderedInstances.length) {
             const validation = validateLayout(room, placements, options.preferences);
-            if (!validation.valid || breaksSearchRules(placements)) return;
+            if (
+                !validation.valid ||
+                breaksSearchRules(placements, {
+                    armchairsInSofaGroup: options.armchairsInSofaGroup,
+                })
+            )
+                return;
             if (
                 options.excludedStructureSignatures?.has(
                     getLayoutStructureSignature(room, placements),
@@ -2045,6 +2155,7 @@ const solveRoomInternal = (
             options.profileId,
             searchLimit - exploredNodes,
             options.maxRelationCandidates,
+            options.armchairsInSofaGroup,
         );
 
         const iterator = generation.candidates[Symbol.iterator]();
@@ -2538,11 +2649,12 @@ const mainPieceLabel = (room: Room, position: Placement): string => {
  * so one hopeless branch cannot spend the whole budget and the plans differ in
  * where the room's main piece stands, not in small shifts.
  */
-export const solveRoomFromMainPiece = (
+const searchFromMainPiece = (
     room: Room,
     instances: FurnitureInstance[],
     preferences: LayoutPreferences = {},
     limit = 3,
+    armchairsInSofaGroup = false,
 ): LayoutVariantsResult => {
     const profileId = getVariantProfileIds(room, instances)[1];
     const positions = mainPiecePositions(room, instances, preferences, profileId);
@@ -2563,6 +2675,7 @@ export const solveRoomFromMainPiece = (
             maxSearchNodes: share,
             maxNodesAfterSolution: MAIN_PIECE_NODES_AFTER_SOLUTION,
             seedPlacements: [position],
+            armchairsInSofaGroup,
         });
         exploredNodes += result.exploredNodes;
         if (result.status === "success") found.push({ result, position });
@@ -2600,6 +2713,47 @@ export const solveRoomFromMainPiece = (
     if (variants.length > 0) return { status: "success", variants, exploredNodes, notes: [] };
     return { ...mainPieceSearchFailure(firstFailure), exploredNodes, variants: [] };
 };
+
+/**
+ * The search from the main piece, armchairs last of all: the plan is found
+ * without them and each variant takes them at its coffee table; only if no
+ * variant can, one search places them with everything else. The plan found
+ * without them comes back too, so a caller may give them up without another
+ * search.
+ */
+export const solveFromMainPieceWithArmchairs = (
+    room: Room,
+    instances: FurnitureInstance[],
+    preferences: LayoutPreferences = {},
+    limit = 3,
+): { result: LayoutVariantsResult; withoutArmchairs?: LayoutVariantsResult } => {
+    const armchairs = instances.filter((instance) => instance.definitionId === "armchair");
+    const sofaGroup =
+        instances.some((instance) => instance.definitionId === "coffee-table") &&
+        instances.some((instance) => instance.definitionId.startsWith("sofa-"));
+    if (!armchairs.length || !sofaGroup)
+        return { result: searchFromMainPiece(room, instances, preferences, limit) };
+    const core = instances.filter((instance) => instance.definitionId !== "armchair");
+    const withoutArmchairs = searchFromMainPiece(room, core, preferences, limit);
+    if (withoutArmchairs.status === "success") {
+        const variants = withoutArmchairs.variants.flatMap((variant) => {
+            const placements = addArmchairs(room, variant.placements, armchairs, preferences);
+            return placements ? [{ ...variant, placements }] : [];
+        });
+        if (variants.length) return { result: { ...withoutArmchairs, variants } };
+    }
+    return {
+        result: searchFromMainPiece(room, instances, preferences, limit, true),
+        withoutArmchairs,
+    };
+};
+
+export const solveRoomFromMainPiece = (
+    room: Room,
+    instances: FurnitureInstance[],
+    preferences: LayoutPreferences = {},
+    limit = 3,
+): LayoutVariantsResult => searchFromMainPiece(room, instances, preferences, limit);
 
 /**
  * Only some positions of the main piece are tried, so a failure of that search

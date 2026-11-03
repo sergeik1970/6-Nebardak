@@ -1,5 +1,10 @@
 import { furnishRoom, isFurnishableRoomKind, withKitchenZone } from "../furniture-selection";
-import { isAwayFromTargetHead, isTvApartFromStand, validateLayout } from "../geometry";
+import {
+    isArmchairAwayFromSofaGroup,
+    isAwayFromTargetHead,
+    isTvApartFromStand,
+    validateLayout,
+} from "../geometry";
 import { getRoomArea } from "../room-geometry";
 import { solveWithPreferredPlacementFallback } from "../solver";
 import type { LayoutPreferences, Placement, Room, RoomKind } from "../types";
@@ -55,6 +60,8 @@ export interface RoomBenchmarkRecord {
         changes: string[];
         layout: string | null;
         valid: boolean;
+        /** An armchair stands away from the coffee table it belongs to. */
+        armchairAway?: boolean;
     } | null;
     findings: RoomLabFindingCode[];
 }
@@ -77,6 +84,8 @@ export interface RoomBenchmarkTotals {
     /** Automatic selection: rooms furnished in full, and of those with no change. */
     selectionFurnished: number;
     selectionUnchanged: number;
+    /** Selected plans with an armchair away from the sofa group. */
+    selectionArmchairAway: number;
     searchExhausted: number;
     provenImpossible: number;
     maximumNodes: number;
@@ -229,6 +238,7 @@ export const runRoomBenchmarkCase = (roomCase: RoomLabCase): RoomBenchmarkRun =>
                         ? `${change.from} → ${change.to}`
                         : `без: ${change.definitionId}`,
                 ),
+                armchairAway: isArmchairAwayFromSofaGroup(selected.placements),
                 layout: layoutFingerprint(selected.placements),
                 valid: isValid(
                     selected.kitchenZone
@@ -273,6 +283,7 @@ const totalsOf = (records: RoomBenchmarkRecord[]): RoomBenchmarkTotals => {
         awayFromHead: records.filter((record) => record.planner.awayFromHead).length,
         selectionFurnished: records.filter((record) => record.selection?.status === "furnished")
             .length,
+        selectionArmchairAway: records.filter((record) => record.selection?.armchairAway).length,
         selectionUnchanged: records.filter(
             (record) => record.selection?.status === "furnished" && record.selection.rung === 0,
         ).length,
@@ -389,6 +400,12 @@ export const compareRoomBenchmark = (
 
         const furnished = (record: RoomBenchmarkRecord) =>
             +(record.selection?.status === "furnished");
+        compare(
+            "автоподбор, кресло у столика",
+            +!(before.selection?.armchairAway ?? false),
+            +!(after.selection?.armchairAway ?? false),
+            yesNo,
+        );
         compare("автоподбор, полный план", furnished(before), furnished(after), yesNo);
         if (before.selection && after.selection) {
             // A lower rung gives way less: fewer rungs is better.
@@ -448,7 +465,7 @@ export const renderRoomBenchmarkMarkdown = (
         "",
         `ТВ отдельно от тумбы в планах продукта: ${totals.tvApart}. Тумба не у изголовья кровати: ${totals.awayFromHead}.`,
         "",
-        `Автоподбор в пустой комнате: полный план в ${share(totals.selectionFurnished, totals.rooms)}, из них без уступок ${totals.selectionUnchanged}; время ${renderTiming(timing.selection)}.`,
+        `Автоподбор в пустой комнате: полный план в ${share(totals.selectionFurnished, totals.rooms)}, из них без уступок ${totals.selectionUnchanged}, кресло в стороне от дивана: ${totals.selectionArmchairAway}; время ${renderTiming(timing.selection)}.`,
         "",
         `Узлов поиска: всего ${totals.totalNodes}, максимум на путь ${totals.maximumNodes}.`,
         "",
