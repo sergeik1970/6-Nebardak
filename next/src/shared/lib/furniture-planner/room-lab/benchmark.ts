@@ -1,4 +1,4 @@
-import { validateLayout } from "../geometry";
+import { isTvApartFromStand, validateLayout } from "../geometry";
 import { getRoomArea } from "../room-geometry";
 import { solveWithPreferredPlacementFallback } from "../solver";
 import type { LayoutPreferences, Placement, Room } from "../types";
@@ -41,6 +41,8 @@ export interface RoomBenchmarkRecord {
         nodes: number;
         layout: string | null;
         valid: boolean;
+        /** A TV hangs away from its stand: the designer wants it over the stand. */
+        tvApart: boolean;
     };
     findings: RoomLabFindingCode[];
 }
@@ -56,6 +58,8 @@ export interface RoomBenchmarkTotals {
     variantRoomsWithChoice: number;
     /** Plans `validateLayout` rejects. Must stay zero. */
     invalidLayouts: number;
+    /** Planner plans with the TV away from its stand. */
+    tvApart: number;
     searchExhausted: number;
     provenImpossible: number;
     maximumNodes: number;
@@ -186,6 +190,7 @@ export const runRoomBenchmarkCase = (roomCase: RoomLabCase): RoomBenchmarkRun =>
                 nodes: execution.exploredNodes + (fallback?.result.exploredNodes ?? 0),
                 layout: layoutFingerprint(plannerPlacements),
                 valid: isValid(roomCase.room, plannerPlacements, roomCase.preferences),
+                tvApart: isTvApartFromStand(plannerPlacements),
             },
             findings: Array.from(new Set(findings.map((finding) => finding.code))).sort(),
         },
@@ -212,6 +217,7 @@ const totalsOf = (records: RoomBenchmarkRecord[]): RoomBenchmarkTotals => {
             (count, record) => count + Number(!record.strict.valid) + Number(!record.planner.valid),
             0,
         ),
+        tvApart: records.filter((record) => record.planner.tvApart).length,
         searchExhausted: records.filter((record) => record.strict.status === "search-exhausted")
             .length,
         provenImpossible: records.filter((record) => record.strict.status === "proven-impossible")
@@ -309,6 +315,12 @@ export const compareRoomBenchmark = (
         compare("разных вариантов", before.strict.distinctVariants, after.strict.distinctVariants);
         compare("план допустим", +before.strict.valid, +after.strict.valid, yesNo);
         compare("план продукта допустим", +before.planner.valid, +after.planner.valid, yesNo);
+        compare(
+            "ТВ над тумбой",
+            +!(before.planner.tvApart ?? false),
+            +!after.planner.tvApart,
+            yesNo,
+        );
 
         if (
             before.strict.layout !== after.strict.layout ||
@@ -357,6 +369,8 @@ export const renderRoomBenchmarkMarkdown = (
         ...Object.entries(report.byKind).map(([kind, kindTotals]) => row(kind, kindTotals)),
         "",
         `Строгий поиск: исчерпан лимит в ${totals.searchExhausted}, доказано «не помещается» в ${totals.provenImpossible}.`,
+        "",
+        `ТВ отдельно от тумбы в планах продукта: ${totals.tvApart}.`,
         "",
         `Узлов поиска: всего ${totals.totalNodes}, максимум на путь ${totals.maximumNodes}.`,
         "",

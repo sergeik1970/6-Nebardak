@@ -32,6 +32,7 @@ const record = (overrides: Partial<RoomBenchmarkRecord> = {}): RoomBenchmarkReco
         nodes: 50,
         layout: "bbbb",
         valid: true,
+        tvApart: false,
     },
     findings: [],
     ...overrides,
