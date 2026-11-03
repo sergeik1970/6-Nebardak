@@ -1872,10 +1872,16 @@ const solveRoomInternal = (
             hasRequiredDependency(definition)
         );
     };
+    const largestFirst = (first: FurnitureInstance, second: FurnitureInstance) =>
+        bodyArea(getFurniture(second.definitionId)) - bodyArea(getFurniture(first.definitionId)) ||
+        first.instanceId.localeCompare(second.instanceId);
+    const independent = unseededInstances.filter((instance) => !dependsOnSeed(instance));
     const orderedInstances = options.dependentsFirst
         ? [
               ...unseededInstances.filter(dependsOnSeed),
-              ...unseededInstances.filter((instance) => !dependsOnSeed(instance)),
+              // Then the largest first: a dining group left last fails only after
+              // every wall piece has been tried.
+              ...[...independent].sort(largestFirst),
           ]
         : unseededInstances;
     let exploredNodes = 0;
@@ -2505,17 +2511,21 @@ export const solveRoomFromMainPiece = (
         });
 
     if (variants.length > 0) return { status: "success", variants, exploredNodes, notes: [] };
-    // Only some positions of the main piece were tried, so a failure here proves
-    // nothing about the room: report the limit, and keep request or room errors.
-    const result =
-        firstFailure && firstFailure.reason !== "proven-impossible"
-            ? firstFailure
-            : failure(
-                  "search-exhausted",
-                  "Поиск вариантов завершён без результата; это не доказывает, что мебель не помещается.",
-              );
-    return { ...result, exploredNodes, variants: [] };
+    return { ...mainPieceSearchFailure(firstFailure), exploredNodes, variants: [] };
 };
+
+/**
+ * Only some positions of the main piece are tried, so a failure of that search
+ * proves nothing about the room: it reports the limit, and keeps room or
+ * request errors as they are.
+ */
+export const mainPieceSearchFailure = (firstFailure: LayoutFailure | null): LayoutFailure =>
+    firstFailure && firstFailure.reason !== "proven-impossible"
+        ? firstFailure
+        : failure(
+              "search-exhausted",
+              "Поиск вариантов завершён без результата; это не доказывает, что мебель не помещается.",
+          );
 
 const combinationCount = (itemCount: number, selectionCount: number, cap: number): number => {
     const effectiveSelection = Math.min(selectionCount, itemCount - selectionCount);
