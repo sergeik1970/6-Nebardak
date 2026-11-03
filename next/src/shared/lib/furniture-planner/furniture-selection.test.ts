@@ -61,6 +61,15 @@ describe("furniture selection", () => {
         expect(ladder.at(-1)?.pieces).toEqual([{ definitionId: "single-bed", count: 1 }]);
     });
 
+    it("never makes a piece larger on the way down", () => {
+        const ladder = selectionLadder("children", 12);
+
+        for (const step of ladder)
+            for (const change of step.changes)
+                if (change.kind === "smaller" && change.definitionId === "single-bed")
+                    throw new Error(`${change.from} → ${change.to}`);
+    });
+
     it("passes a chosen size to the solver", () => {
         const [bed] = selectionInstances([
             { definitionId: "double-bed", count: 1, size: { width: 1600, depth: 2000 } },

@@ -1,3 +1,4 @@
+export * from "./apartment-brief";
 export * from "./assets";
 export * from "./catalog";
 export * from "./draw-room-draft";

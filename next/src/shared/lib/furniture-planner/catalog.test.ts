@@ -334,7 +334,7 @@ const CLEARANCE_MANIFEST: Record<string, ClearanceZone[]> = {
     pouf: [],
 };
 const MAX_COUNT_MANIFEST: Record<string, number> = {
-    "single-bed": 1,
+    "single-bed": 2,
     "double-bed": 1,
     cradle: 1,
     bookcase: 1,
@@ -834,6 +834,8 @@ const SIZE_MANIFEST: Record<string, [number, number][]> = {
     "single-bed": [
         [900, 2000],
         [1000, 1800],
+        [1200, 2000],
+        [1400, 2000],
     ],
     "double-bed": [
         [1400, 2000],

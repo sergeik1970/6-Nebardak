@@ -3,8 +3,8 @@ import {
     furnishRoom,
     getDrawRoomRegions,
     type FurnishableRoomKind,
+    type FurnishOptions,
     type Room,
-    type RoomBrief,
     type RoomKind,
 } from "@/shared/lib/furniture-planner";
 import { furnishApartment, type ApartmentRoom } from "./furnish-apartment";
@@ -49,8 +49,8 @@ const apartment = (kinds: (RoomKind | undefined)[]): ApartmentRoom[] =>
         furnitureRoom: { name: `Комната ${index + 1}`, rects: region.clearRects },
     }));
 
-const furnish = async (room: Room, kind: FurnishableRoomKind, brief: RoomBrief) =>
-    furnishRoom(room, kind, brief);
+const furnish = async (room: Room, kind: FurnishableRoomKind, options: FurnishOptions) =>
+    furnishRoom(room, kind, {}, options);
 const fits = () => true;
 
 const piece = (id: string, definitionId: string, x: number, y: number, locked = false) =>
@@ -168,9 +168,9 @@ describe("furnish the whole apartment", () => {
             rooms: apartment(["bedroom", "office"]),
             furniture: [loose],
             keepFurnishedRooms: false,
-            furnish: async (room, kind, brief) => {
+            furnish: async (room, kind, options) => {
                 controller.abort();
-                return furnishRoom(room, kind, brief);
+                return furnishRoom(room, kind, {}, options);
             },
             fits,
             signal: controller.signal,
@@ -197,5 +197,20 @@ describe("furnish the whole apartment", () => {
             [1, 2, "Комната 2"],
             [2, 2, ""],
         ]);
+    });
+
+    it("follows the family's brief and says what found no room", async () => {
+        const result = await furnishApartment({
+            rooms: apartment(["bedroom", "children"]),
+            furniture: [],
+            keepFurnishedRooms: false,
+            brief: { version: 1, adults: 4, children: 1, tv: "none" },
+            furnish,
+            fits,
+        });
+
+        const ids = result.furniture.map((item) => item.definitionId);
+        expect(ids).toEqual(expect.arrayContaining(["double-bed", "single-bed"]));
+        expect(result.notes).toEqual(["Не хватило спален: 2 взрослым нужна ещё спальня."]);
     });
 });
