@@ -107,6 +107,12 @@ export interface SolverSearchOptions {
     maxRelationCandidates?: number;
 }
 
+/** The size a placement carries for its instance, when it is not the catalogue's. */
+const instanceSize = (instance: FurnitureInstance): Pick<Placement, "width" | "depth"> =>
+    instance.width !== undefined && instance.depth !== undefined
+        ? { width: instance.width, depth: instance.depth }
+        : {};
+
 const canonicalRotations = (definition: FurnitureDefinition): Rotation[] => {
     const seen = new Set<Rotation>();
 
@@ -341,13 +347,14 @@ const candidateForWall = (
     wall: Wall,
     along: number,
 ): Placement => {
-    const geometry = getRotatedGeometry(getFurniture(instance.definitionId), rotation);
+    const geometry = getRotatedGeometry(getFurniture(instance.definitionId), rotation, instance);
 
     switch (wall) {
         case "top":
             return {
                 instanceId: instance.instanceId,
                 definitionId: instance.definitionId,
+                ...instanceSize(instance),
                 x: along,
                 y: 0,
                 rotation,
@@ -356,6 +363,7 @@ const candidateForWall = (
             return {
                 instanceId: instance.instanceId,
                 definitionId: instance.definitionId,
+                ...instanceSize(instance),
                 x: room.width - geometry.width,
                 y: along,
                 rotation,
@@ -364,6 +372,7 @@ const candidateForWall = (
             return {
                 instanceId: instance.instanceId,
                 definitionId: instance.definitionId,
+                ...instanceSize(instance),
                 x: along,
                 y: room.depth - geometry.depth,
                 rotation,
@@ -372,6 +381,7 @@ const candidateForWall = (
             return {
                 instanceId: instance.instanceId,
                 definitionId: instance.definitionId,
+                ...instanceSize(instance),
                 x: 0,
                 y: along,
                 rotation,
@@ -385,7 +395,7 @@ const candidateForBoundarySegment = (
     segment: ReturnType<typeof getRoomBoundarySegments>[number],
     along: number,
 ): Placement => {
-    const geometry = getRotatedGeometry(getFurniture(instance.definitionId), rotation);
+    const geometry = getRotatedGeometry(getFurniture(instance.definitionId), rotation, instance);
     const tangentX = (segment.end.x - segment.start.x) / segment.length;
     const tangentY = (segment.end.y - segment.start.y) / segment.length;
     const horizontal = segment.orientation === "horizontal";
@@ -398,6 +408,7 @@ const candidateForBoundarySegment = (
     return {
         instanceId: instance.instanceId,
         definitionId: instance.definitionId,
+        ...instanceSize(instance),
         x: horizontal
             ? tangentX > 0
                 ? alongStart.x
@@ -460,7 +471,7 @@ function* wallCandidates(
 
     if (canonicalRoomGeometry(room).kind === "orthogonal") {
         for (const rotation of canonicalRotations(definition)) {
-            const geometry = getRotatedGeometry(definition, rotation);
+            const geometry = getRotatedGeometry(definition, rotation, instance);
             for (const edge of definition.placement.allowedWallContactEdges) {
                 const wall = wallForBodyEdge(rotation, edge);
                 for (const segment of getRoomBoundarySegments(room).filter(
@@ -493,7 +504,7 @@ function* wallCandidates(
     // is materialized.
     for (const tier of ["critical", "grid"] as const) {
         for (const rotation of canonicalRotations(definition)) {
-            const geometry = getRotatedGeometry(definition, rotation);
+            const geometry = getRotatedGeometry(definition, rotation, instance);
             for (const edge of definition.placement.allowedWallContactEdges) {
                 const wall = wallForBodyEdge(rotation, edge);
                 const axis = wall === "top" || wall === "bottom" ? "x" : "y";
@@ -532,7 +543,7 @@ function* centerCandidates(
     ] as const;
 
     const rotationCoordinates = canonicalRotations(definition).map((rotation) => {
-        const geometry = getRotatedGeometry(definition, rotation);
+        const geometry = getRotatedGeometry(definition, rotation, instance);
         const xValues = coordinateSets(room, geometry, placements, "x", order);
         const yValues = coordinateSets(room, geometry, placements, "y", order);
 
@@ -548,6 +559,7 @@ function* centerCandidates(
                     yield {
                         instanceId: instance.instanceId,
                         definitionId: instance.definitionId,
+                        ...instanceSize(instance),
                         x,
                         y,
                         rotation,
@@ -681,7 +693,7 @@ const livingTargetCandidatesForTv = (
         if (!definition.rotations.includes(targetRotation)) return;
 
         const tvGeometry = getRotatedGeometry(television, tvRotation);
-        const targetGeometry = getRotatedGeometry(definition, targetRotation);
+        const targetGeometry = getRotatedGeometry(definition, targetRotation, instance);
         const horizontalFacing = tvRotation === 90 || tvRotation === 270;
         const alongMaximum = horizontalFacing
             ? room.depth - targetGeometry.depth
@@ -714,6 +726,7 @@ const livingTargetCandidatesForTv = (
                 candidates.push({
                     instanceId: instance.instanceId,
                     definitionId: instance.definitionId,
+                    ...instanceSize(instance),
                     x: snapToGrid(x),
                     y: snapToGrid(y),
                     rotation: targetRotation,
@@ -740,7 +753,7 @@ const tvCandidates = (
         const rotation = oppositeRotation(target.rotation);
         if (!definition.rotations.includes(rotation)) return [];
 
-        const geometry = getRotatedGeometry(definition, rotation);
+        const geometry = getRotatedGeometry(definition, rotation, instance);
         const wall = wallForBack(rotation);
         const axis = wall === "top" || wall === "bottom" ? "x" : "y";
         const coordinates = coordinateSets(room, geometry, placements, axis, "center");
@@ -875,7 +888,7 @@ function* relationCandidateSource(
     for (const target of targets) {
         const targetBounds = getBounds(getWorldBodyRects(target));
         for (const rotation of rotations) {
-            const geometry = getRotatedGeometry(definition, rotation);
+            const geometry = getRotatedGeometry(definition, rotation, instance);
             const maximumX = room.width - geometry.width;
             const maximumY = room.depth - geometry.depth;
             if (maximumX < 0 || maximumY < 0) continue;
@@ -929,6 +942,7 @@ function* relationCandidateSource(
                             yield {
                                 instanceId: instance.instanceId,
                                 definitionId: instance.definitionId,
+                                ...instanceSize(instance),
                                 x,
                                 y,
                                 rotation,
@@ -952,6 +966,7 @@ function* relationCandidateSource(
                             yield {
                                 instanceId: instance.instanceId,
                                 definitionId: instance.definitionId,
+                                ...instanceSize(instance),
                                 x,
                                 y,
                                 rotation,
@@ -974,6 +989,7 @@ function* relationCandidateSource(
                             yield {
                                 instanceId: instance.instanceId,
                                 definitionId: instance.definitionId,
+                                ...instanceSize(instance),
                                 x,
                                 y,
                                 rotation,
@@ -1063,7 +1079,7 @@ const functionalSupportCandidates = (
     const candidates: Placement[] = [];
 
     canonicalRotations(definition).forEach((rotation) => {
-        const geometry = getRotatedGeometry(definition, rotation);
+        const geometry = getRotatedGeometry(definition, rotation, instance);
         definition.placement.allowedWallContactEdges.forEach((edge) => {
             const wall = wallForBodyEdge(rotation, edge);
             const maximumAlong =
@@ -1372,6 +1388,7 @@ const countPerimeterItems = (room: Room, placements: Placement[]): number =>
         const geometry = getRotatedGeometry(
             getFurniture(placement.definitionId),
             placement.rotation,
+            placement,
         );
         const rect = {
             x: placement.x,
@@ -2413,6 +2430,7 @@ const hasBackAtWall = (room: Room, position: Placement): boolean => {
     const { width, depth } = getRotatedGeometry(
         getFurniture(position.definitionId),
         position.rotation,
+        position,
     );
     return rectTouchesRoomBoundary(
         { x: position.x, y: position.y, width, depth },
@@ -2424,7 +2442,7 @@ const hasBackAtWall = (room: Room, position: Placement): boolean => {
 /** Where the main piece stands, which is what tells one plan from another. */
 const mainPieceLabel = (room: Room, position: Placement): string => {
     const definition = getFurniture(position.definitionId);
-    const geometry = getRotatedGeometry(definition, position.rotation);
+    const geometry = getRotatedGeometry(definition, position.rotation, position);
     const atTop = position.y === 0;
     const atBottom = position.y + geometry.depth === room.depth;
     const atLeft = position.x === 0;
