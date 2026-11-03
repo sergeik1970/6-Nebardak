@@ -1019,12 +1019,19 @@ const alongCenter = (bounds: Rect, rotation: Rotation): number =>
  * Places `piece` against the same wall as `anchor`, centred on it: a TV over
  * its stand, or a stand under its TV.
  */
-const centredOnWallWith = (
-    piece: Pick<Placement, "instanceId" | "definitionId">,
-    anchor: Placement,
-): Placement => {
+type PairPiece = Pick<Placement, "instanceId" | "definitionId" | "width" | "depth">;
+
+const centredOnWallWith = (piece: PairPiece, anchor: Placement): Placement => {
     const anchorBounds = getBounds(getWorldBodyRects(anchor));
-    const { width, depth } = getRotatedGeometry(getFurniture(piece.definitionId), anchor.rotation);
+    const size =
+        piece.width !== undefined && piece.depth !== undefined
+            ? { width: piece.width, depth: piece.depth }
+            : {};
+    const { width, depth } = getRotatedGeometry(
+        getFurniture(piece.definitionId),
+        anchor.rotation,
+        size,
+    );
     const centreX = Math.round(anchorBounds.x + anchorBounds.width / 2 - width / 2);
     const centreY = Math.round(anchorBounds.y + anchorBounds.depth / 2 - depth / 2);
     const back = backEdge(anchorBounds, anchor.rotation);
@@ -1044,19 +1051,16 @@ const centredOnWallWith = (
         instanceId: piece.instanceId,
         definitionId: piece.definitionId,
         rotation: anchor.rotation,
+        ...size,
         ...position,
     };
 };
 
-export const tvPlacementOverStand = (
-    tv: Pick<Placement, "instanceId" | "definitionId">,
-    stand: Placement,
-): Placement => centredOnWallWith(tv, stand);
+export const tvPlacementOverStand = (tv: PairPiece, stand: Placement): Placement =>
+    centredOnWallWith(tv, stand);
 
-export const standPlacementUnderTv = (
-    stand: Pick<Placement, "instanceId" | "definitionId">,
-    tv: Placement,
-): Placement => centredOnWallWith(stand, tv);
+export const standPlacementUnderTv = (stand: PairPiece, tv: Placement): Placement =>
+    centredOnWallWith(stand, tv);
 
 /** The TV hangs on the stand's wall, centred over it. */
 export const isTvOverStand = (tv: Placement, stand: Placement): boolean => {

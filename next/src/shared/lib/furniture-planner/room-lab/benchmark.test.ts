@@ -34,13 +34,14 @@ const record = (overrides: Partial<RoomBenchmarkRecord> = {}): RoomBenchmarkReco
         valid: true,
         tvApart: false,
     },
+    selection: { status: "furnished", rung: 0, changes: [], layout: "eeee", valid: true },
     findings: [],
     ...overrides,
 });
 
 const report = (...records: RoomBenchmarkRecord[]) =>
     createRoomBenchmarkReport(
-        records.map((item) => ({ record: item, strictMs: 10, plannerMs: 10 })),
+        records.map((item) => ({ record: item, strictMs: 10, plannerMs: 10, selectionMs: 10 })),
     );
 
 const unplaced = (base = record()): RoomBenchmarkRecord => ({
@@ -121,7 +122,7 @@ describe("benchmark report", () => {
 describe("baseline comparison", () => {
     it("is silent when nothing changed, whatever the clock said", () => {
         const slower = createRoomBenchmarkReport([
-            { record: record(), strictMs: 9000, plannerMs: 9000 },
+            { record: record(), strictMs: 9000, plannerMs: 9000, selectionMs: 9000 },
         ]);
         expect(compareRoomBenchmark(report(record()), slower)).toEqual({
             regressions: [],
@@ -163,6 +164,22 @@ describe("baseline comparison", () => {
             report(record({ id: "GEN-2" })),
         );
         expect(regressions).toHaveLength(2);
+    });
+
+    it("fails when automatic selection gives way more than before", () => {
+        const worse = record({
+            selection: {
+                status: "furnished",
+                rung: 2,
+                changes: ["без: dresser"],
+                layout: "ffff",
+                valid: true,
+            },
+        });
+
+        const { regressions } = compareRoomBenchmark(report(record()), report(worse));
+
+        expect(regressions).toEqual(["GEN-1: автоподбор, уступок 0 → 2."]);
     });
 
     it("lists a moved plan apart from better or worse", () => {

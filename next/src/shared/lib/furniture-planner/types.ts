@@ -212,6 +212,12 @@ export interface FurnitureInstance {
     priority: FurniturePriority;
     /** @deprecated Compatibility mirror. Use `priority` for solver policy. */
     required: boolean;
+    /**
+     * A size other than the catalogue's, in the unrotated frame, e.g. a 1600 mm
+     * bed instead of 1800. Both or neither; the solver's placements carry it.
+     */
+    width?: number;
+    depth?: number;
 }
 
 export type RemovalMethod = "automatic" | "manual";
