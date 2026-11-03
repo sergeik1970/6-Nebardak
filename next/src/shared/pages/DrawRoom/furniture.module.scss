@@ -797,3 +797,59 @@
         display: none;
     }
 }
+.apartmentFurnish {
+    display: grid;
+    gap: 8px;
+    padding: 12px 15px;
+    border-bottom: 1px solid #34424a;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #edf2f1;
+    p {
+        margin: 0;
+        padding: 0;
+        color: #c9d3d5;
+    }
+    button {
+        font: inherit;
+    }
+}
+.apartmentFurnishOption {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #edf2f1;
+    cursor: pointer;
+}
+.apartmentFurnishProgress {
+    display: grid;
+    gap: 6px;
+    progress {
+        width: 100%;
+        accent-color: var(--draw-orange-strong);
+    }
+    button {
+        justify-self: start;
+        border: 1px solid #46525a;
+        padding: 6px 12px;
+        color: #edf2f1;
+        background: transparent;
+        cursor: pointer;
+    }
+}
+.apartmentFurnishOutcomes {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    li {
+        display: grid;
+        gap: 2px;
+        border-bottom: 1px solid #34424a;
+        padding: 6px 0;
+    }
+    small {
+        color: #c9d3d5;
+    }
+}

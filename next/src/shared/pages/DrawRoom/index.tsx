@@ -85,7 +85,9 @@ import {
     type FurnitureRoom,
 } from "./furniture";
 import ResultPanel, { type ResultItem, type ResultRoom } from "./ResultPanel";
+import ApartmentFurnishPanel from "./ApartmentFurnishPanel";
 import AutoLayoutPanel, { type AutoLayoutVariantSummary } from "./AutoLayoutPanel";
+import { furnishApartment, type ApartmentRoom, type RoomOutcome } from "./furnish-apartment";
 import {
     WORKING_CORE_OBSERVATION_ID,
     createPlannerObservationRequests,
@@ -8212,6 +8214,135 @@ const DrawRoom: React.FC = () => {
         },
         [autoLayoutTarget, commitScene, currentAutoLayoutVariants, scene],
     );
+    // «Обставить квартиру»: every room at once, as one step that «Отменить» takes back.
+    const [apartmentKeepFurnished, setApartmentKeepFurnished] = useState(true);
+    const [apartmentRunning, setApartmentRunning] = useState(false);
+    const [apartmentProgress, setApartmentProgress] = useState<{
+        done: number;
+        total: number;
+        roomName: string;
+    } | null>(null);
+    const [apartmentOutcomes, setApartmentOutcomes] = useState<RoomOutcome[]>([]);
+    const [apartmentStatus, setApartmentStatus] = useState("");
+    const apartmentAbort = useRef<AbortController | null>(null);
+    useEffect(() => () => apartmentAbort.current?.abort(), []);
+    const furnishWholeApartment = useCallback(async () => {
+        if (apartmentRunning) return;
+        const before = sceneForInteractionRef.current;
+        const rooms: ApartmentRoom[] = regionRooms.flatMap(({ region, room }) => {
+            const owner = previews.find((item) => regionPrefix(item) === region.buildingId);
+            return owner
+                ? [
+                      {
+                          signature: region.signature,
+                          name: region.name,
+                          kind: region.kind,
+                          areaSquareMillimeters: region.areaSquareMillimeters,
+                          region,
+                          building: owner.room,
+                          origin: owner.origin,
+                          furnitureRoom: room,
+                      },
+                  ]
+                : [];
+        });
+        const controller = new AbortController();
+        apartmentAbort.current = controller;
+        setApartmentRunning(true);
+        setApartmentOutcomes([]);
+        setApartmentStatus("");
+        try {
+            const result = await furnishApartment({
+                rooms,
+                furniture: before.furniture ?? [],
+                keepFurnishedRooms: apartmentKeepFurnished,
+                signal: controller.signal,
+                onProgress: (done, total, roomName) =>
+                    setApartmentProgress({ done, total, roomName }),
+                fits: (piece, all, room) =>
+                    !furnitureError(
+                        piece,
+                        all,
+                        before.segments,
+                        renderedWallThickness,
+                        furnitureDoorObstacles,
+                        room,
+                        furnitureRadiatorObstacles,
+                    ),
+                // The worker keeps the page responsive; stopping ends it at once.
+                furnish: (room, kind, brief) =>
+                    new Promise((resolve, reject) => {
+                        const stop = () => {
+                            autoLayoutWorker.current?.terminate();
+                            reject(new Error("cancelled"));
+                        };
+                        controller.signal.addEventListener("abort", stop, { once: true });
+                        requestSolver({ action: "furnish-room", room, kind, brief }).then(
+                            (response) => {
+                                controller.signal.removeEventListener("abort", stop);
+                                if (response.ok && response.action === "furnish-room")
+                                    resolve(response.result);
+                                else
+                                    reject(
+                                        new Error(
+                                            response.ok
+                                                ? "Не удалось выполнить расчёт."
+                                                : response.error,
+                                        ),
+                                    );
+                            },
+                            reject,
+                        );
+                    }),
+            });
+            if (result.cancelled || controller.signal.aborted) {
+                setApartmentStatus("Прервано. Мебель не изменилась.");
+                return;
+            }
+            const now = sceneForInteractionRef.current;
+            if (now.furniture !== before.furniture || now.segments !== before.segments) {
+                setApartmentStatus(
+                    "Пока шёл расчёт, план изменился. Запустите расстановку ещё раз.",
+                );
+                return;
+            }
+            const furnished = result.rooms.filter((room) => room.status !== "skipped").length;
+            if (furnished > 0) commitScene({ ...now, furniture: result.furniture });
+            setApartmentOutcomes(result.rooms);
+            const summary = furnished
+                ? `Обставлено комнат: ${furnished} из ${result.rooms.length}. Отменить можно кнопкой «Отменить».`
+                : "Ни одну комнату не удалось обставить.";
+            setApartmentStatus(summary);
+            setNotice(summary);
+            trackGoal(furnished ? "layout_generated" : "layout_failed", {
+                source: "apartment",
+                rooms: result.rooms.length,
+                furnished,
+            });
+        } catch (error) {
+            setApartmentStatus(
+                controller.signal.aborted
+                    ? "Прервано. Мебель не изменилась."
+                    : error instanceof Error
+                      ? error.message
+                      : "Не удалось выполнить расчёт.",
+            );
+        } finally {
+            apartmentAbort.current = null;
+            setApartmentRunning(false);
+            setApartmentProgress(null);
+        }
+    }, [
+        apartmentKeepFurnished,
+        apartmentRunning,
+        commitScene,
+        furnitureDoorObstacles,
+        furnitureRadiatorObstacles,
+        previews,
+        regionRooms,
+        renderedWallThickness,
+        requestSolver,
+    ]);
     // Opening the contour again takes away the rooms and the furniture step.
     const activeStepLost =
         (activeToolGroup === "rooms" && renderedRoomRegions.length === 0) ||
@@ -10932,57 +11063,71 @@ const DrawRoom: React.FC = () => {
                             presented={activeToolGroup === "result"}
                             autoLayout={
                                 furnitureRegion ? (
-                                    <AutoLayoutPanel
-                                        key={furnitureRegion.signature}
-                                        set={autoLayoutSet}
-                                        resized={autoLayoutResized}
-                                        pinned={autoLayoutPinned.map(
-                                            (item) =>
-                                                furnitureDefinition(item.definitionId)?.label ??
-                                                item.definitionId,
-                                        )}
-                                        onSolve={() => void solveAutoLayout()}
-                                        solving={autoLayoutSolving}
-                                        status={
-                                            // A result for other pieces than now is stale.
-                                            autoLayoutSolving ||
-                                            autoLayoutVariants?.setKey === autoLayoutSetKey
-                                                ? autoLayoutStatus
-                                                : ""
-                                        }
-                                        variants={currentAutoLayoutVariants.map(
-                                            (variant) => variant.summary,
-                                        )}
-                                        appliedIndex={autoLayoutApplied}
-                                        onApply={(index) => {
-                                            setAutoLayoutReviewStatus("");
-                                            applyAutoLayout(index);
-                                        }}
-                                        reviewable={
-                                            // Without accounts there is no review queue.
-                                            isAuthEnabled &&
-                                            autoLayoutApplied !== null &&
-                                            Boolean(
-                                                currentAutoLayoutVariants[autoLayoutApplied]
-                                                    ?.observation,
-                                            )
-                                        }
-                                        reviewHint={
-                                            isAuthEnabled && !isAuthenticated
-                                                ? "Войдите, чтобы отправить вариант на разбор."
-                                                : null
-                                        }
-                                        reviewStatus={autoLayoutReviewStatus}
-                                        onReview={(review) => void submitAutoLayoutReview(review)}
-                                        blockedReason={
-                                            !isRoomDesignAvailable(furnitureRoom?.kind)
-                                                ? ROOM_DESIGN_UNAVAILABLE_MESSAGE
-                                                : autoLayoutTarget &&
-                                                    autoLayoutTarget.status !== "ready"
-                                                  ? autoLayoutTarget.message
-                                                  : null
-                                        }
-                                    />
+                                    <>
+                                        <ApartmentFurnishPanel
+                                            running={apartmentRunning}
+                                            progress={apartmentProgress}
+                                            keepFurnishedRooms={apartmentKeepFurnished}
+                                            onKeepFurnishedRoomsChange={setApartmentKeepFurnished}
+                                            onRun={() => void furnishWholeApartment()}
+                                            onCancel={() => apartmentAbort.current?.abort()}
+                                            outcomes={apartmentOutcomes}
+                                            status={apartmentStatus}
+                                        />
+                                        <AutoLayoutPanel
+                                            key={furnitureRegion.signature}
+                                            set={autoLayoutSet}
+                                            resized={autoLayoutResized}
+                                            pinned={autoLayoutPinned.map(
+                                                (item) =>
+                                                    furnitureDefinition(item.definitionId)?.label ??
+                                                    item.definitionId,
+                                            )}
+                                            onSolve={() => void solveAutoLayout()}
+                                            solving={autoLayoutSolving}
+                                            status={
+                                                // A result for other pieces than now is stale.
+                                                autoLayoutSolving ||
+                                                autoLayoutVariants?.setKey === autoLayoutSetKey
+                                                    ? autoLayoutStatus
+                                                    : ""
+                                            }
+                                            variants={currentAutoLayoutVariants.map(
+                                                (variant) => variant.summary,
+                                            )}
+                                            appliedIndex={autoLayoutApplied}
+                                            onApply={(index) => {
+                                                setAutoLayoutReviewStatus("");
+                                                applyAutoLayout(index);
+                                            }}
+                                            reviewable={
+                                                // Without accounts there is no review queue.
+                                                isAuthEnabled &&
+                                                autoLayoutApplied !== null &&
+                                                Boolean(
+                                                    currentAutoLayoutVariants[autoLayoutApplied]
+                                                        ?.observation,
+                                                )
+                                            }
+                                            reviewHint={
+                                                isAuthEnabled && !isAuthenticated
+                                                    ? "Войдите, чтобы отправить вариант на разбор."
+                                                    : null
+                                            }
+                                            reviewStatus={autoLayoutReviewStatus}
+                                            onReview={(review) =>
+                                                void submitAutoLayoutReview(review)
+                                            }
+                                            blockedReason={
+                                                !isRoomDesignAvailable(furnitureRoom?.kind)
+                                                    ? ROOM_DESIGN_UNAVAILABLE_MESSAGE
+                                                    : autoLayoutTarget &&
+                                                        autoLayoutTarget.status !== "ready"
+                                                      ? autoLayoutTarget.message
+                                                      : null
+                                            }
+                                        />
+                                    </>
                                 ) : null
                             }
                             room={furnitureRoom}

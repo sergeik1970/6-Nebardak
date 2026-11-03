@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import sharp from "sharp";
+import { buildRectRoom } from "./project-flow";
 
 // These tests measure the drawing canvas in screen pixels; the project steps
 // above it are covered in project-path.spec.ts, so they keep the old canvas.
@@ -5493,4 +5494,35 @@ test("a wall carries its own parameters and a narrow door warns about furniture"
     await expect(warning).toContainText("только в разобранном виде");
     await warning.getByRole("button", { name: "Понятно" }).click();
     await expect(warning).toBeHidden();
+});
+
+test("«Обставить квартиру» furnishes every room in one step that undo takes back", async ({
+    page,
+}, testInfo) => {
+    test.setTimeout(120_000);
+    test.skip(testInfo.project.name !== "desktop-chromium", "Solver flow runs once on desktop");
+    await page.goto("/planner");
+    await buildRectRoom(page);
+    await page.locator("[data-draw-room-step='rooms']").click();
+    await page.locator("[data-draw-room-region-item] select").first().selectOption("bedroom");
+
+    await page.locator("[data-draw-room-step='furniture']").click();
+    await page.locator("[data-furniture-auto-layout]").click();
+    const apartment = page.locator("[data-apartment-furnish='true']");
+    await expect(apartment.getByRole("checkbox")).toBeChecked();
+    await apartment.getByRole("button", { name: "Обставить квартиру" }).click();
+
+    await expect(apartment.locator("[data-apartment-furnish-outcome='furnished']")).toHaveCount(1, {
+        timeout: 60_000,
+    });
+    await expect(apartment.getByRole("status").first()).toContainText("Обставлено комнат: 1 из 1");
+    const pieces = page.locator("[data-draw-furniture^='furniture-']");
+    await expect(pieces).not.toHaveCount(0);
+    const placed = await pieces.count();
+    expect(placed).toBeGreaterThan(2);
+
+    // The whole apartment is one step: a single undo empties the room again.
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Отменить", exact: true }).click();
+    await expect(pieces).toHaveCount(0);
 });
