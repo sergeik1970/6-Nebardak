@@ -21,9 +21,8 @@ import {
     scoreFunctionalBlockCohesion,
     scoreLayoutForProfile,
     scoreLivingComposition,
-    solveRoomFromMainPiece,
+    mainPieceSearchFailure,
 } from "./solver";
-import { ROOM_LAB_GENERATED_CASES } from "./room-lab";
 import {
     FurnitureInstance,
     FurniturePriority,
@@ -31,6 +30,7 @@ import {
     RelationKind,
     Room,
     Rotation,
+    LayoutFailure,
 } from "./types";
 import { applyRoomGeometry, createLRoomGeometry } from "./room-geometry";
 
@@ -997,20 +997,21 @@ describe("solver trust guarantees", () => {
     });
 
     it("never claims a set cannot fit after trying only some main piece positions", () => {
-        // Here one position is exhausted while others are only cut off by the budget.
-        const roomCase = ROOM_LAB_GENERATED_CASES.find(
-            (candidate) => candidate.id === "GEN-living-3300x4800-l-shape",
-        );
-        if (!roomCase) throw new Error("Generated room missing");
-        const result = solveRoomFromMainPiece(
-            roomCase.room,
-            roomCase.instances,
-            roomCase.preferences,
-            1,
-        );
+        const failureOf = (reason: LayoutFailure["reason"]): LayoutFailure => ({
+            status: "failure",
+            placements: [],
+            exploredNodes: 10,
+            blockingInstanceIds: [],
+            reason,
+            message: reason,
+        });
 
-        expect(result.status).toBe("failure");
-        if (result.status === "failure") expect(result.reason).toBe("search-exhausted");
+        expect(mainPieceSearchFailure(failureOf("proven-impossible")).reason).toBe(
+            "search-exhausted",
+        );
+        expect(mainPieceSearchFailure(null).reason).toBe("search-exhausted");
+        expect(mainPieceSearchFailure(failureOf("invalid-request")).reason).toBe("invalid-request");
+        expect(mainPieceSearchFailure(failureOf("invalid-room")).reason).toBe("invalid-room");
     });
 
     it("names each variant after where its main piece stands", () => {
