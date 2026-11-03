@@ -1,7 +1,8 @@
+import { furnishRoom, isFurnishableRoomKind } from "../furniture-selection";
 import { isTvApartFromStand, validateLayout } from "../geometry";
 import { getRoomArea } from "../room-geometry";
 import { solveWithPreferredPlacementFallback } from "../solver";
-import type { LayoutPreferences, Placement, Room } from "../types";
+import type { LayoutPreferences, Placement, Room, RoomKind } from "../types";
 import { evaluateRoomLabCase } from "./evaluate";
 import type {
     RoomLabCase,
@@ -44,6 +45,15 @@ export interface RoomBenchmarkRecord {
         /** A TV hangs away from its stand: the designer wants it over the stand. */
         tvApart: boolean;
     };
+    /** The empty room furnished by automatic selection, from its own set. */
+    selection: {
+        status: "furnished" | "partial";
+        /** 0 is the full set; each rung gives way a little more. */
+        rung: number;
+        changes: string[];
+        layout: string | null;
+        valid: boolean;
+    } | null;
     findings: RoomLabFindingCode[];
 }
 
@@ -60,6 +70,9 @@ export interface RoomBenchmarkTotals {
     invalidLayouts: number;
     /** Planner plans with the TV away from its stand. */
     tvApart: number;
+    /** Automatic selection: rooms furnished in full, and of those with no change. */
+    selectionFurnished: number;
+    selectionUnchanged: number;
     searchExhausted: number;
     provenImpossible: number;
     maximumNodes: number;
@@ -78,6 +91,8 @@ export interface RoomBenchmarkTimings {
     strict: RoomBenchmarkTiming;
     /** Both of the planner's steps: what a person actually waits for. */
     planner: RoomBenchmarkTiming;
+    /** Choosing the set and laying it out in an empty room. */
+    selection: RoomBenchmarkTiming;
 }
 
 export interface RoomBenchmarkReport {
@@ -95,6 +110,7 @@ export interface RoomBenchmarkRun {
     result: RoomLabCaseResult;
     strictMs: number;
     plannerMs: number;
+    selectionMs: number;
 }
 
 export interface RoomBenchmarkComparison {
@@ -153,12 +169,17 @@ export const runRoomBenchmarkCase = (roomCase: RoomLabCase): RoomBenchmarkRun =>
               roomCase.preferences,
           );
     const fallbackMs = round(performance.now() - fallbackStartedAt);
+    const kind = roomCase.tags[0] as RoomKind;
+    const selectionStartedAt = performance.now();
+    const selected = isFurnishableRoomKind(kind) ? furnishRoom(roomCase.room, kind) : null;
+    const selectionMs = round(performance.now() - selectionStartedAt);
     const plannerPlacements = fallback ? fallback.result.placements : execution.placements;
 
     return {
         result,
         strictMs: execution.durationMs,
         plannerMs: round(execution.durationMs + fallbackMs),
+        selectionMs,
         record: {
             id: roomCase.id,
             input: hashText(
@@ -192,6 +213,21 @@ export const runRoomBenchmarkCase = (roomCase: RoomLabCase): RoomBenchmarkRun =>
                 valid: isValid(roomCase.room, plannerPlacements, roomCase.preferences),
                 tvApart: isTvApartFromStand(plannerPlacements),
             },
+            selection: selected && {
+                status: selected.status,
+                rung: selected.rung,
+                changes: selected.step.changes.map((change) =>
+                    change.kind === "smaller"
+                        ? `${change.from} → ${change.to}`
+                        : `без: ${change.definitionId}`,
+                ),
+                layout: layoutFingerprint(selected.placements),
+                valid: isValid(
+                    roomCase.room,
+                    selected.placements,
+                    kind === "living" ? { tvTargetCategory: "living" } : {},
+                ),
+            },
             findings: Array.from(new Set(findings.map((finding) => finding.code))).sort(),
         },
     };
@@ -214,10 +250,19 @@ const totalsOf = (records: RoomBenchmarkRecord[]): RoomBenchmarkTotals => {
         variantRoomsWithChoice: variantRooms.filter((record) => record.strict.distinctVariants >= 2)
             .length,
         invalidLayouts: records.reduce(
-            (count, record) => count + Number(!record.strict.valid) + Number(!record.planner.valid),
+            (count, record) =>
+                count +
+                Number(!record.strict.valid) +
+                Number(!record.planner.valid) +
+                Number(record.selection?.valid === false),
             0,
         ),
         tvApart: records.filter((record) => record.planner.tvApart).length,
+        selectionFurnished: records.filter((record) => record.selection?.status === "furnished")
+            .length,
+        selectionUnchanged: records.filter(
+            (record) => record.selection?.status === "furnished" && record.selection.rung === 0,
+        ).length,
         searchExhausted: records.filter((record) => record.strict.status === "search-exhausted")
             .length,
         provenImpossible: records.filter((record) => record.strict.status === "proven-impossible")
@@ -248,7 +293,7 @@ const timingOf = (durations: number[]): RoomBenchmarkTiming => {
 };
 
 export const createRoomBenchmarkReport = (
-    runs: Pick<RoomBenchmarkRun, "record" | "strictMs" | "plannerMs">[],
+    runs: Pick<RoomBenchmarkRun, "record" | "strictMs" | "plannerMs" | "selectionMs">[],
 ): RoomBenchmarkReport => {
     const records = runs.map((run) => run.record);
     const kinds = Array.from(new Set(records.map((record) => record.kind)));
@@ -267,6 +312,7 @@ export const createRoomBenchmarkReport = (
         timing: {
             strict: timingOf(runs.map((run) => run.strictMs)),
             planner: timingOf(runs.map((run) => run.plannerMs)),
+            selection: timingOf(runs.map((run) => run.selectionMs)),
         },
         cases: records,
     };
@@ -322,9 +368,20 @@ export const compareRoomBenchmark = (
             yesNo,
         );
 
+        const furnished = (record: RoomBenchmarkRecord) =>
+            +(record.selection?.status === "furnished");
+        compare("автоподбор, полный план", furnished(before), furnished(after), yesNo);
+        if (before.selection && after.selection) {
+            // A lower rung gives way less: fewer rungs is better.
+            compare("автоподбор, уступок", -before.selection.rung, -after.selection.rung, (value) =>
+                String(-value),
+            );
+        }
+
         if (
             before.strict.layout !== after.strict.layout ||
-            before.planner.layout !== after.planner.layout
+            before.planner.layout !== after.planner.layout ||
+            before.selection?.layout !== after.selection?.layout
         )
             changedLayouts.push(before.id);
     });
@@ -371,6 +428,8 @@ export const renderRoomBenchmarkMarkdown = (
         `Строгий поиск: исчерпан лимит в ${totals.searchExhausted}, доказано «не помещается» в ${totals.provenImpossible}.`,
         "",
         `ТВ отдельно от тумбы в планах продукта: ${totals.tvApart}.`,
+        "",
+        `Автоподбор в пустой комнате: полный план в ${share(totals.selectionFurnished, totals.rooms)}, из них без уступок ${totals.selectionUnchanged}; время ${renderTiming(timing.selection)}.`,
         "",
         `Узлов поиска: всего ${totals.totalNodes}, максимум на путь ${totals.maximumNodes}.`,
         "",

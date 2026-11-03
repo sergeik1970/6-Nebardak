@@ -3,6 +3,7 @@ export * from "./catalog";
 export * from "./draw-room-draft";
 export * from "./draw-room-grid";
 export * from "./draw-room-wall-graph";
+export * from "./furniture-selection";
 export * from "./geometry";
 export * from "./handoff";
 export * from "./kitchen-layout";
