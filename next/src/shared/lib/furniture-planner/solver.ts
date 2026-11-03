@@ -33,6 +33,10 @@ import {
     validateRoomGeometry,
     wallForBack,
     wallForBodyEdge,
+    TV_STAND_ID,
+    isTvApartFromStand,
+    standPlacementUnderTv,
+    tvPlacementOverStand,
 } from "./geometry";
 import {
     NOTICEABLE_VARIANT_TOLERANCE_MM,
@@ -1255,6 +1259,33 @@ const generateCandidates = (
     const functionalBlocks = getFunctionalBlocks(allInstances, preferences);
     const state: CandidateGenerationState = { emitted: 0, truncated: false };
 
+    const stand = placements.find((placement) => placement.definitionId === TV_STAND_ID);
+    const television = placements.find(
+        (placement) => getFurniture(placement.definitionId).category === "media",
+    );
+    if (definition.category === "media" && stand && targetCategory) {
+        const overStand = tvPlacementOverStand(instance, stand);
+        const facesTarget = placements.some(
+            (placement) =>
+                isTvTargetDefinition(getFurniture(placement.definitionId), targetCategory) &&
+                tvFacesTarget(overStand, placement, targetCategory),
+        );
+        return {
+            candidates: uniqueCandidates(facesTarget ? [overStand] : [], generationLimit, state),
+            state,
+        };
+    }
+    if (instance.definitionId === TV_STAND_ID && television) {
+        return {
+            candidates: uniqueCandidates(
+                [standPlacementUnderTv(instance, television)],
+                generationLimit,
+                state,
+            ),
+            state,
+        };
+    }
+
     if (definition.category === "media") {
         const source = targetCategory
             ? tvCandidates(instance, room, placements, targetCategory)
@@ -1830,9 +1861,16 @@ const solveRoomInternal = (
         options.preferences,
         options.profileId,
     );
+    const hasTelevision = instances.some(
+        (instance) => getFurniture(instance.definitionId).category === "media",
+    );
     const dependsOnSeed = (instance: FurnitureInstance) => {
         const definition = getFurniture(instance.definitionId);
-        return definition.category === "media" || hasRequiredDependency(definition);
+        return (
+            definition.category === "media" ||
+            (hasTelevision && instance.definitionId === TV_STAND_ID) ||
+            hasRequiredDependency(definition)
+        );
     };
     const orderedInstances = options.dependentsFirst
         ? [
@@ -1864,7 +1902,7 @@ const solveRoomInternal = (
     const search = (index: number, placements: Placement[]): void => {
         if (index >= orderedInstances.length) {
             const validation = validateLayout(room, placements, options.preferences);
-            if (!validation.valid) return;
+            if (!validation.valid || isTvApartFromStand(placements)) return;
             if (
                 options.excludedStructureSignatures?.has(
                     getLayoutStructureSignature(room, placements),
@@ -2669,7 +2707,11 @@ export const solveWithPreferredPlacementFallback = (
         for (let next = iterator.next(); !next.done; next = iterator.next()) {
             const candidate = next.value;
             if (!validatePlacement(candidate, room, acceptedPlacements).valid) continue;
-            if (validateLayout(room, [...acceptedPlacements, candidate], preferences).valid) {
+            const withCandidate = [...acceptedPlacements, candidate];
+            if (
+                validateLayout(room, withCandidate, preferences).valid &&
+                !isTvApartFromStand(withCandidate)
+            ) {
                 return candidate;
             }
         }

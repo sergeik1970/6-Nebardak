@@ -992,14 +992,110 @@ const alternativeClearanceIssues = (
     ];
 };
 
+export const TV_STAND_ID = "tv-console";
+
+const isTelevision = (placement: Placement) =>
+    getFurniture(placement.definitionId).category === "media";
+
+/** The coordinate of a piece's back edge, which lies on its wall. */
+const backEdge = (bounds: Rect, rotation: Rotation): number => {
+    switch (rotation) {
+        case 90:
+            return bounds.x + bounds.width;
+        case 180:
+            return bounds.y + bounds.depth;
+        case 270:
+            return bounds.x;
+        default:
+            return bounds.y;
+    }
+};
+
+const alongCenter = (bounds: Rect, rotation: Rotation): number =>
+    rotation === 90 || rotation === 270 ? bounds.y + bounds.depth / 2 : bounds.x + bounds.width / 2;
+
+/**
+ * Places `piece` against the same wall as `anchor`, centred on it: a TV over
+ * its stand, or a stand under its TV.
+ */
+const centredOnWallWith = (
+    piece: Pick<Placement, "instanceId" | "definitionId">,
+    anchor: Placement,
+): Placement => {
+    const anchorBounds = getBounds(getWorldBodyRects(anchor));
+    const { width, depth } = getRotatedGeometry(getFurniture(piece.definitionId), anchor.rotation);
+    const centreX = Math.round(anchorBounds.x + anchorBounds.width / 2 - width / 2);
+    const centreY = Math.round(anchorBounds.y + anchorBounds.depth / 2 - depth / 2);
+    const back = backEdge(anchorBounds, anchor.rotation);
+    const position = (() => {
+        switch (anchor.rotation) {
+            case 90:
+                return { x: back - width, y: centreY };
+            case 180:
+                return { x: centreX, y: back - depth };
+            case 270:
+                return { x: back, y: centreY };
+            default:
+                return { x: centreX, y: back };
+        }
+    })();
+    return {
+        instanceId: piece.instanceId,
+        definitionId: piece.definitionId,
+        rotation: anchor.rotation,
+        ...position,
+    };
+};
+
+export const tvPlacementOverStand = (
+    tv: Pick<Placement, "instanceId" | "definitionId">,
+    stand: Placement,
+): Placement => centredOnWallWith(tv, stand);
+
+export const standPlacementUnderTv = (
+    stand: Pick<Placement, "instanceId" | "definitionId">,
+    tv: Placement,
+): Placement => centredOnWallWith(stand, tv);
+
+/** The TV hangs on the stand's wall, centred over it. */
+export const isTvOverStand = (tv: Placement, stand: Placement): boolean => {
+    if (tv.rotation !== stand.rotation) return false;
+    const tvBounds = getBounds(getWorldBodyRects(tv));
+    const standBounds = getBounds(getWorldBodyRects(stand));
+    return (
+        Math.abs(backEdge(tvBounds, tv.rotation) - backEdge(standBounds, stand.rotation)) <= 1 &&
+        Math.abs(alongCenter(tvBounds, tv.rotation) - alongCenter(standBounds, stand.rotation)) <= 1
+    );
+};
+
+/**
+ * A TV and a stand placed apart. The solver never proposes it; a person's own
+ * layout may still have it, so this is not a validity issue.
+ */
+export const isTvApartFromStand = (placements: Placement[]): boolean => {
+    const stands = placements.filter((placement) => placement.definitionId === TV_STAND_ID);
+    const televisions = placements.filter(isTelevision);
+    if (stands.length === 0 || televisions.length === 0) return false;
+    return !televisions.some((tv) => stands.some((stand) => isTvOverStand(tv, stand)));
+};
+
 const pairIssues = (first: Placement, second: Placement): ValidationIssue[] => {
     const firstDefinition = getFurniture(first.definitionId);
     const secondDefinition = getFurniture(second.definitionId);
     const firstBodies = getWorldBodyRects(first);
     const secondBodies = getWorldBodyRects(second);
     const issues: ValidationIssue[] = [];
+    // A wall-mounted TV over its stand shares its footprint on the plan.
+    const tvOverStand =
+        (first.definitionId === TV_STAND_ID &&
+            isTelevision(second) &&
+            isTvOverStand(second, first)) ||
+        (second.definitionId === TV_STAND_ID &&
+            isTelevision(first) &&
+            isTvOverStand(first, second));
 
     if (
+        !tvOverStand &&
         firstBodies.some((firstRect) =>
             secondBodies.some((secondRect) =>
                 rectsIntersect(expandRect(firstRect, DEFAULT_BODY_GAP), secondRect),
