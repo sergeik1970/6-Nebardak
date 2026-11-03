@@ -1074,6 +1074,58 @@ export const isTvOverStand = (tv: Placement, stand: Placement): boolean => {
 };
 
 /**
+ * Beside the target's head and level with it: for a bed with its head at the
+ * top, to its left or right with the same top edge, whichever way it turns.
+ */
+export const isBesideTargetHead = (placement: Placement, target: Placement): boolean => {
+    const piece = getBounds(getWorldBodyRects(placement));
+    const bed = getBounds(getWorldBodyRects(target));
+    const beside = (from: number, size: number, start: number, length: number) =>
+        from + size <= start || from >= start + length;
+    switch (wallForBack(target.rotation)) {
+        case "right":
+            return (
+                Math.abs(piece.x + piece.width - (bed.x + bed.width)) <= 1 &&
+                beside(piece.y, piece.depth, bed.y, bed.depth)
+            );
+        case "bottom":
+            return (
+                Math.abs(piece.y + piece.depth - (bed.y + bed.depth)) <= 1 &&
+                beside(piece.x, piece.width, bed.x, bed.width)
+            );
+        case "left":
+            return Math.abs(piece.x - bed.x) <= 1 && beside(piece.y, piece.depth, bed.y, bed.depth);
+        default:
+            return Math.abs(piece.y - bed.y) <= 1 && beside(piece.x, piece.width, bed.x, bed.width);
+    }
+};
+
+/** A piece that belongs beside its target's head stands elsewhere, e.g. at a bed's foot. */
+export const isAwayFromTargetHead = (placements: Placement[]): boolean =>
+    placements.some((placement) =>
+        getFurniture(placement.definitionId).relations.some((relation) => {
+            if (!relation.besideTargetHead) return false;
+            const targets = placements.filter(
+                (candidate) =>
+                    candidate.instanceId !== placement.instanceId &&
+                    relationTargetsDefinition(relation, getFurniture(candidate.definitionId)),
+            );
+            return (
+                targets.length > 0 &&
+                !targets.some((target) => isBesideTargetHead(placement, target))
+            );
+        }),
+    );
+
+/**
+ * Composition the solver keeps although a validity check would not: the TV
+ * over its stand, bedside tables at the bed's head. Saved and hand-made
+ * layouts that break them still load, so they are never validity issues.
+ */
+export const breaksSearchRules = (placements: Placement[]): boolean =>
+    isTvApartFromStand(placements) || isAwayFromTargetHead(placements);
+
+/**
  * A TV and a stand placed apart. The solver never proposes it; a person's own
  * layout may still have it, so this is not a validity issue.
  */

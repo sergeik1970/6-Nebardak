@@ -34,7 +34,8 @@ import {
     wallForBack,
     wallForBodyEdge,
     TV_STAND_ID,
-    isTvApartFromStand,
+    breaksSearchRules,
+    isBesideTargetHead,
     standPlacementUnderTv,
     tvPlacementOverStand,
 } from "./geometry";
@@ -1020,9 +1021,66 @@ export const getRequiredRelationCandidates = (
     const rotations = canonicalRotations(definition).filter(
         (rotation) => rotationFilter === undefined || rotationFilter.includes(rotation),
     );
-    return hasTarget
-        ? relationCandidateSource(instance, room, placements, rotations, relation)
-        : [];
+    if (!hasTarget) return [];
+    return relation.besideTargetHead
+        ? besideHeadCandidates(instance, room, placements, rotations, relation)
+        : relationCandidateSource(instance, room, placements, rotations, relation);
+};
+
+/**
+ * The few spots beside a target's head, built directly: each side of the
+ * head, level with it, at the relation's nearest and farthest gap. Scanning
+ * every side position and discarding the foot took seconds per bed.
+ */
+const besideHeadCandidates = (
+    instance: FurnitureInstance,
+    room: Room,
+    placements: Placement[],
+    rotations: readonly Rotation[],
+    relation: RelationTemplate,
+): Placement[] => {
+    const definition = getFurniture(instance.definitionId);
+    const { minimumGap, maximumGap } = resolveRelationGapRange({
+        ...relation,
+        kind: relation.kind as "front-gap" | "adjacent" | "aligned-side",
+    });
+    const gaps = Array.from(new Set([minimumGap, maximumGap]));
+    const targets = placements.filter((placement) =>
+        relationTargetsDefinition(relation, getFurniture(placement.definitionId)),
+    );
+    const candidates: Placement[] = [];
+    for (const target of targets) {
+        const bed = getBounds(getWorldBodyRects(target));
+        const head = wallForBack(target.rotation);
+        for (const rotation of rotations) {
+            const { width, depth } = getRotatedGeometry(definition, rotation, instance);
+            for (const gap of gaps) {
+                const spots =
+                    head === "top" || head === "bottom"
+                        ? [bed.x - gap - width, bed.x + bed.width + gap].map((x) => ({
+                              x,
+                              y: head === "top" ? bed.y : bed.y + bed.depth - depth,
+                          }))
+                        : [bed.y - gap - depth, bed.y + bed.depth + gap].map((y) => ({
+                              x: head === "left" ? bed.x : bed.x + bed.width - width,
+                              y,
+                          }));
+                for (const spot of spots) {
+                    if (spot.x < 0 || spot.y < 0) continue;
+                    if (spot.x + width > room.width || spot.y + depth > room.depth) continue;
+                    candidates.push({
+                        instanceId: instance.instanceId,
+                        definitionId: instance.definitionId,
+                        ...instanceSize(instance),
+                        x: spot.x,
+                        y: spot.y,
+                        rotation,
+                    });
+                }
+            }
+        }
+    }
+    return candidates;
 };
 
 /**
@@ -1925,7 +1983,7 @@ const solveRoomInternal = (
     const search = (index: number, placements: Placement[]): void => {
         if (index >= orderedInstances.length) {
             const validation = validateLayout(room, placements, options.preferences);
-            if (!validation.valid || isTvApartFromStand(placements)) return;
+            if (!validation.valid || breaksSearchRules(placements)) return;
             if (
                 options.excludedStructureSignatures?.has(
                     getLayoutStructureSignature(room, placements),
@@ -2743,7 +2801,7 @@ export const solveWithPreferredPlacementFallback = (
             const withCandidate = [...acceptedPlacements, candidate];
             if (
                 validateLayout(room, withCandidate, preferences).valid &&
-                !isTvApartFromStand(withCandidate)
+                !breaksSearchRules(withCandidate)
             ) {
                 return candidate;
             }

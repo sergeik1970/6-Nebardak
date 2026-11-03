@@ -1,5 +1,5 @@
 import { furnishRoom, isFurnishableRoomKind, withKitchenZone } from "../furniture-selection";
-import { isTvApartFromStand, validateLayout } from "../geometry";
+import { isAwayFromTargetHead, isTvApartFromStand, validateLayout } from "../geometry";
 import { getRoomArea } from "../room-geometry";
 import { solveWithPreferredPlacementFallback } from "../solver";
 import type { LayoutPreferences, Placement, Room, RoomKind } from "../types";
@@ -44,6 +44,8 @@ export interface RoomBenchmarkRecord {
         valid: boolean;
         /** A TV hangs away from its stand: the designer wants it over the stand. */
         tvApart: boolean;
+        /** A bedside table stands away from the bed's head, e.g. at its foot. */
+        awayFromHead?: boolean;
     };
     /** The empty room furnished by automatic selection, from its own set. */
     selection: {
@@ -70,6 +72,8 @@ export interface RoomBenchmarkTotals {
     invalidLayouts: number;
     /** Planner plans with the TV away from its stand. */
     tvApart: number;
+    /** Planner plans with a bedside table away from the bed's head. */
+    awayFromHead: number;
     /** Automatic selection: rooms furnished in full, and of those with no change. */
     selectionFurnished: number;
     selectionUnchanged: number;
@@ -215,6 +219,7 @@ export const runRoomBenchmarkCase = (roomCase: RoomLabCase): RoomBenchmarkRun =>
                 layout: layoutFingerprint(plannerPlacements),
                 valid: isValid(roomCase.room, plannerPlacements, roomCase.preferences),
                 tvApart: isTvApartFromStand(plannerPlacements),
+                awayFromHead: isAwayFromTargetHead(plannerPlacements),
             },
             selection: selected && {
                 status: selected.status,
@@ -265,6 +270,7 @@ const totalsOf = (records: RoomBenchmarkRecord[]): RoomBenchmarkTotals => {
             0,
         ),
         tvApart: records.filter((record) => record.planner.tvApart).length,
+        awayFromHead: records.filter((record) => record.planner.awayFromHead).length,
         selectionFurnished: records.filter((record) => record.selection?.status === "furnished")
             .length,
         selectionUnchanged: records.filter(
@@ -374,6 +380,12 @@ export const compareRoomBenchmark = (
             +!after.planner.tvApart,
             yesNo,
         );
+        compare(
+            "тумбы у изголовья",
+            +!(before.planner.awayFromHead ?? false),
+            +!after.planner.awayFromHead,
+            yesNo,
+        );
 
         const furnished = (record: RoomBenchmarkRecord) =>
             +(record.selection?.status === "furnished");
@@ -434,7 +446,7 @@ export const renderRoomBenchmarkMarkdown = (
         "",
         `Строгий поиск: исчерпан лимит в ${totals.searchExhausted}, доказано «не помещается» в ${totals.provenImpossible}.`,
         "",
-        `ТВ отдельно от тумбы в планах продукта: ${totals.tvApart}.`,
+        `ТВ отдельно от тумбы в планах продукта: ${totals.tvApart}. Тумба не у изголовья кровати: ${totals.awayFromHead}.`,
         "",
         `Автоподбор в пустой комнате: полный план в ${share(totals.selectionFurnished, totals.rooms)}, из них без уступок ${totals.selectionUnchanged}; время ${renderTiming(timing.selection)}.`,
         "",

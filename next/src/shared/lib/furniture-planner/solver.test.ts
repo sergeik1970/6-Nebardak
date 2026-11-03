@@ -118,6 +118,8 @@ interface RelationCoverageCase {
     minimumGap: number;
     maximumGap: number;
     temporarilyRequired?: boolean;
+    /** Checks the plain relation stream without the search rule that narrows it. */
+    withoutHeadRule?: boolean;
 }
 
 const placementBounds = (candidate: Placement): Bounds => {
@@ -374,6 +376,7 @@ const RELATION_COVERAGE_CASES: RelationCoverageCase[] = [
         kind: "adjacent",
         minimumGap: 50,
         maximumGap: 100,
+        withoutHeadRule: true,
     },
     {
         name: "aligned-side",
@@ -856,7 +859,9 @@ describe("solver trust guarantees", () => {
                 (candidate) => candidate.kind === testCase.kind,
             );
             const originalRequired = relation?.required;
+            const originalHeadRule = relation?.besideTargetHead;
             if (relation && testCase.temporarilyRequired) relation.required = true;
+            if (relation && testCase.withoutHeadRule) relation.besideTargetHead = false;
             const canonicalRotations = Array.from(
                 new Set(
                     definition.rotations.map((rotation) =>
@@ -922,6 +927,7 @@ describe("solver trust guarantees", () => {
             } finally {
                 if (relation && originalRequired !== undefined)
                     relation.required = originalRequired;
+                if (relation) relation.besideTargetHead = originalHeadRule;
             }
         },
         10_000,

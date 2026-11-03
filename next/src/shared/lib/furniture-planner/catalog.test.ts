@@ -403,6 +403,7 @@ const RELATION_MANIFEST: Record<string, RelationTemplate[]> = {
             minGap: 50,
             maxGap: 100,
             clearanceOverlapException: "target-clearance",
+            besideTargetHead: true,
         },
     ],
     dresser: [],
