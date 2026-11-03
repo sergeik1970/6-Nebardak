@@ -1,19 +1,19 @@
 {
   "version": 1,
   "totals": {
-    "rooms": 196,
-    "strictFull": 178,
-    "plannerFull": 180,
-    "variantRooms": 140,
-    "variantRoomsWithChoice": 119,
+    "rooms": 245,
+    "strictFull": 221,
+    "plannerFull": 223,
+    "variantRooms": 189,
+    "variantRoomsWithChoice": 158,
     "invalidLayouts": 0,
     "tvApart": 0,
-    "selectionFurnished": 196,
-    "selectionUnchanged": 173,
-    "searchExhausted": 18,
+    "selectionFurnished": 245,
+    "selectionUnchanged": 222,
+    "searchExhausted": 24,
     "provenImpossible": 0,
-    "maximumNodes": 110000,
-    "totalNodes": 7978937
+    "maximumNodes": 121324,
+    "totalNodes": 10385325
   },
   "byKind": {
     "bedroom": {
@@ -45,6 +45,21 @@
       "provenImpossible": 0,
       "maximumNodes": 110000,
       "totalNodes": 1612736
+    },
+    "kitchen-living": {
+      "rooms": 49,
+      "strictFull": 43,
+      "plannerFull": 43,
+      "variantRooms": 49,
+      "variantRoomsWithChoice": 39,
+      "invalidLayouts": 0,
+      "tvApart": 0,
+      "selectionFurnished": 49,
+      "selectionUnchanged": 49,
+      "searchExhausted": 6,
+      "provenImpossible": 0,
+      "maximumNodes": 121324,
+      "totalNodes": 2406388
     },
     "children": {
       "rooms": 49,
@@ -78,25 +93,25 @@
     }
   },
   "findingCounts": {
-    "center-barrier": 25,
-    "variants-too-similar": 30,
-    "weak-tv-axis": 1
+    "center-barrier": 26,
+    "variants-too-similar": 38,
+    "weak-tv-axis": 10
   },
   "timing": {
     "strict": {
-      "medianMs": 226.76,
-      "p95Ms": 820.23,
-      "maximumMs": 3662.38
+      "medianMs": 245.76,
+      "p95Ms": 828.91,
+      "maximumMs": 3949.94
     },
     "planner": {
-      "medianMs": 229.11,
-      "p95Ms": 1171.47,
-      "maximumMs": 3662.38
+      "medianMs": 248.83,
+      "p95Ms": 1505.45,
+      "maximumMs": 3949.94
     },
     "selection": {
-      "medianMs": 424.24,
-      "p95Ms": 1558.52,
-      "maximumMs": 2551.58
+      "medianMs": 517.36,
+      "p95Ms": 2180.99,
+      "maximumMs": 5778.08
     }
   },
   "cases": [
@@ -198,6 +213,55 @@
     {"id":"GEN-living-5000x6000-radiator","input":"eaedb81f","kind":"living","scenario":"radiator","areaM2":30,"requested":7,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"0cb10683","valid":true},"planner":{"status":"success","placed":6,"missing":["tv"],"nodes":110000,"layout":"b170b0e7","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":1,"changes":["без: dining-square-four"],"layout":"ae561649","valid":true},"findings":[]},
     {"id":"GEN-living-5000x6000-two-windows","input":"6d91a113","kind":"living","scenario":"two-windows","areaM2":30,"requested":7,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":16000,"layout":"0cc3c6ba","valid":true},"planner":{"status":"success","placed":7,"missing":[],"nodes":16000,"layout":"0cc3c6ba","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"0cc3c6ba","valid":true},"findings":["variants-too-similar"]},
     {"id":"GEN-living-5000x6000-l-shape","input":"88c07e91","kind":"living","scenario":"l-shape","areaM2":25.2,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":14587,"layout":"11fc90c4","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":14587,"layout":"11fc90c4","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"11fc90c4","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4000x5000-facing","input":"dfa8f580","kind":"kitchen-living","scenario":"facing","areaM2":20,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":12769,"layout":"4cea06a6","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":12769,"layout":"4cea06a6","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"e534f65b","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
+    {"id":"GEN-kitchen-living-4000x5000-side-door","input":"78b5ccab","kind":"kitchen-living","scenario":"side-door","areaM2":20,"requested":5,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":12266,"layout":"f81316e6","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":12266,"layout":"f81316e6","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"75dae136","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-kitchen-living-4000x5000-corner-door","input":"ce146ede","kind":"kitchen-living","scenario":"corner-door","areaM2":20,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":12121,"layout":"edb5c459","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":12121,"layout":"edb5c459","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"c769d5ae","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4000x5000-long-window","input":"0b9a2e73","kind":"kitchen-living","scenario":"long-window","areaM2":20,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":11898,"layout":"d28dd78c","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":11898,"layout":"d28dd78c","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"b2992104","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4000x5000-radiator","input":"c7dc4db7","kind":"kitchen-living","scenario":"radiator","areaM2":20,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":12149,"layout":"4cea06a6","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":12149,"layout":"4cea06a6","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"e534f65b","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
+    {"id":"GEN-kitchen-living-4000x5000-two-windows","input":"5b63a017","kind":"kitchen-living","scenario":"two-windows","areaM2":20,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":10584,"layout":"fd17e5ac","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":10584,"layout":"fd17e5ac","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"8306347e","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-kitchen-living-4000x5000-l-shape","input":"88b9e92f","kind":"kitchen-living","scenario":"l-shape","areaM2":16.8,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":14347,"layout":"72efc26f","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":14347,"layout":"72efc26f","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"4620f611","valid":true},"findings":["center-barrier"]},
+    {"id":"GEN-kitchen-living-3800x6000-facing","input":"9955d542","kind":"kitchen-living","scenario":"facing","areaM2":22.8,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":13903,"layout":"e2cf4178","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":13903,"layout":"e2cf4178","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"e2cf4178","valid":true},"findings":["weak-tv-axis"]},
+    {"id":"GEN-kitchen-living-3800x6000-side-door","input":"4b878fe4","kind":"kitchen-living","scenario":"side-door","areaM2":22.8,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":15198,"layout":"e2cf4178","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":15198,"layout":"e2cf4178","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"e2cf4178","valid":true},"findings":["weak-tv-axis"]},
+    {"id":"GEN-kitchen-living-3800x6000-corner-door","input":"ef6d967d","kind":"kitchen-living","scenario":"corner-door","areaM2":22.8,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":15360,"layout":"8227f11f","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":15360,"layout":"8227f11f","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"8227f11f","valid":true},"findings":["weak-tv-axis"]},
+    {"id":"GEN-kitchen-living-3800x6000-long-window","input":"9fcf81cf","kind":"kitchen-living","scenario":"long-window","areaM2":22.8,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":12009,"layout":"2de800b4","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":12009,"layout":"2de800b4","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"2de800b4","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-3800x6000-radiator","input":"53788bd8","kind":"kitchen-living","scenario":"radiator","areaM2":22.8,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":14370,"layout":"c05959bb","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":14370,"layout":"c05959bb","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"c05959bb","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-3800x6000-two-windows","input":"bf58d5ae","kind":"kitchen-living","scenario":"two-windows","areaM2":22.8,"requested":5,"strict":{"status":"success","variants":1,"distinctVariants":1,"nodes":13079,"layout":"08a49349","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":13079,"layout":"08a49349","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"08a49349","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-kitchen-living-3800x6000-l-shape","input":"7791be77","kind":"kitchen-living","scenario":"l-shape","areaM2":19.2,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":16000,"layout":"53880dc8","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":16000,"layout":"53880dc8","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"4755d069","valid":true},"findings":["weak-tv-axis"]},
+    {"id":"GEN-kitchen-living-4500x5500-facing","input":"3227d7f4","kind":"kitchen-living","scenario":"facing","areaM2":24.75,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":13223,"layout":"203dc05b","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":13223,"layout":"203dc05b","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"203dc05b","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4500x5500-side-door","input":"9f334656","kind":"kitchen-living","scenario":"side-door","areaM2":24.75,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":13684,"layout":"5ddbf0aa","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":13684,"layout":"5ddbf0aa","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"5ddbf0aa","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4500x5500-corner-door","input":"0ac682b6","kind":"kitchen-living","scenario":"corner-door","areaM2":24.75,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":13045,"layout":"feebceb5","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":13045,"layout":"feebceb5","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"feebceb5","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4500x5500-long-window","input":"71aded27","kind":"kitchen-living","scenario":"long-window","areaM2":24.75,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":11935,"layout":"4090c295","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":11935,"layout":"4090c295","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"4090c295","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4500x5500-radiator","input":"e956b432","kind":"kitchen-living","scenario":"radiator","areaM2":24.75,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":13613,"layout":"c3a66960","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":13613,"layout":"c3a66960","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"c3a66960","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4500x5500-two-windows","input":"1044c29d","kind":"kitchen-living","scenario":"two-windows","areaM2":24.75,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":13402,"layout":"3abfc8c3","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":13402,"layout":"3abfc8c3","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"3abfc8c3","valid":true},"findings":["weak-tv-axis"]},
+    {"id":"GEN-kitchen-living-4500x5500-l-shape","input":"9192b3c5","kind":"kitchen-living","scenario":"l-shape","areaM2":20.79,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":13363,"layout":"7a9cded7","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":13363,"layout":"7a9cded7","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"7a9cded7","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4000x7000-facing","input":"23ad2816","kind":"kitchen-living","scenario":"facing","areaM2":28,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":15471,"layout":"75f9f349","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":15471,"layout":"75f9f349","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"75f9f349","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4000x7000-side-door","input":"cee064c2","kind":"kitchen-living","scenario":"side-door","areaM2":28,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":14571,"layout":"5ee90d44","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":14571,"layout":"5ee90d44","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"5ee90d44","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4000x7000-corner-door","input":"0ccfc12c","kind":"kitchen-living","scenario":"corner-door","areaM2":28,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":14096,"layout":"699bdfec","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":14096,"layout":"699bdfec","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"699bdfec","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4000x7000-long-window","input":"daa5b565","kind":"kitchen-living","scenario":"long-window","areaM2":28,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":10944,"layout":"ee305785","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":10944,"layout":"ee305785","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"ee305785","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4000x7000-radiator","input":"c1a7d893","kind":"kitchen-living","scenario":"radiator","areaM2":28,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":16000,"layout":"1c4251fb","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":16000,"layout":"1c4251fb","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"1c4251fb","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4000x7000-two-windows","input":"d55cc361","kind":"kitchen-living","scenario":"two-windows","areaM2":28,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":15533,"layout":"2900e5ae","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":15533,"layout":"2900e5ae","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"2900e5ae","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-4000x7000-l-shape","input":"dea83ea3","kind":"kitchen-living","scenario":"l-shape","areaM2":23.52,"requested":5,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":13842,"layout":"5229ad7d","valid":true},"planner":{"status":"success","placed":5,"missing":[],"nodes":13842,"layout":"5229ad7d","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"5229ad7d","valid":true},"findings":["weak-tv-axis"]},
+    {"id":"GEN-kitchen-living-5000x6000-facing","input":"b89b7fdf","kind":"kitchen-living","scenario":"facing","areaM2":30,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":11868,"layout":"257f993d","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":11868,"layout":"257f993d","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"257f993d","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-5000x6000-side-door","input":"dd00082f","kind":"kitchen-living","scenario":"side-door","areaM2":30,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":14230,"layout":"ae561649","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":14230,"layout":"ae561649","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"ae561649","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-5000x6000-corner-door","input":"ce67b1cf","kind":"kitchen-living","scenario":"corner-door","areaM2":30,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":14032,"layout":"ae561649","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":14032,"layout":"ae561649","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"ae561649","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-5000x6000-long-window","input":"0bbb7903","kind":"kitchen-living","scenario":"long-window","areaM2":30,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":11646,"layout":"4539c4ac","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":11646,"layout":"4539c4ac","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"4539c4ac","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-5000x6000-radiator","input":"b149e9d3","kind":"kitchen-living","scenario":"radiator","areaM2":30,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":11862,"layout":"257f993d","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":11862,"layout":"257f993d","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"257f993d","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-5000x6000-two-windows","input":"d7fae5cc","kind":"kitchen-living","scenario":"two-windows","areaM2":30,"requested":6,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":15884,"layout":"4539c4ac","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":15884,"layout":"4539c4ac","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"4539c4ac","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-kitchen-living-5000x6000-l-shape","input":"d7f38670","kind":"kitchen-living","scenario":"l-shape","areaM2":25.2,"requested":6,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":16000,"layout":"150800e0","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":16000,"layout":"150800e0","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"150800e0","valid":true},"findings":["variants-too-similar"]},
+    {"id":"GEN-kitchen-living-6000x5000-facing","input":"01a752fd","kind":"kitchen-living","scenario":"facing","areaM2":30,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":12026,"layout":"bec4608c","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":12026,"layout":"bec4608c","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"bec4608c","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-6000x5000-side-door","input":"e94f151c","kind":"kitchen-living","scenario":"side-door","areaM2":30,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":10668,"layout":"2d609bb0","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":10668,"layout":"2d609bb0","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"2d609bb0","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-6000x5000-corner-door","input":"b8c21e5a","kind":"kitchen-living","scenario":"corner-door","areaM2":30,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":10808,"layout":"bec4608c","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":10808,"layout":"bec4608c","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"bec4608c","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-6000x5000-long-window","input":"5c103990","kind":"kitchen-living","scenario":"long-window","areaM2":30,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":14246,"layout":"30f3c85d","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":14246,"layout":"30f3c85d","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"30f3c85d","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-6000x5000-radiator","input":"b6ee0855","kind":"kitchen-living","scenario":"radiator","areaM2":30,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":11369,"layout":"bec4608c","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":11369,"layout":"bec4608c","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"bec4608c","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-6000x5000-two-windows","input":"abc587ad","kind":"kitchen-living","scenario":"two-windows","areaM2":30,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":15458,"layout":"c9905d3f","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":15458,"layout":"c9905d3f","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"c9905d3f","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-6000x5000-l-shape","input":"0a9cca6a","kind":"kitchen-living","scenario":"l-shape","areaM2":25.2,"requested":6,"strict":{"status":"success","variants":2,"distinctVariants":2,"nodes":15870,"layout":"a2a53a7f","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":15870,"layout":"a2a53a7f","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"a2a53a7f","valid":true},"findings":["variants-too-similar","weak-tv-axis"]},
+    {"id":"GEN-kitchen-living-5500x6500-facing","input":"57eb9557","kind":"kitchen-living","scenario":"facing","areaM2":35.75,"requested":7,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"05363f24","valid":true},"planner":{"status":"success","placed":5,"missing":["dining-square-four","tv"],"nodes":121324,"layout":"1937f419","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"6d80d50d","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-5500x6500-side-door","input":"bc39c698","kind":"kitchen-living","scenario":"side-door","areaM2":35.75,"requested":7,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"94a728ce","valid":true},"planner":{"status":"success","placed":5,"missing":["dining-square-four","tv"],"nodes":121324,"layout":"d0f145c9","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"581e0741","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-5500x6500-corner-door","input":"74091bfc","kind":"kitchen-living","scenario":"corner-door","areaM2":35.75,"requested":7,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"c0049082","valid":true},"planner":{"status":"success","placed":5,"missing":["dining-square-four","tv"],"nodes":121324,"layout":"db20b753","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"7db4ef12","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-5500x6500-long-window","input":"ddabb3cf","kind":"kitchen-living","scenario":"long-window","areaM2":35.75,"requested":7,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"539a2a62","valid":true},"planner":{"status":"success","placed":6,"missing":["dining-square-four"],"nodes":110000,"layout":"67a82604","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"53517a4e","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-5500x6500-radiator","input":"ff8c871c","kind":"kitchen-living","scenario":"radiator","areaM2":35.75,"requested":7,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"4a5e940e","valid":true},"planner":{"status":"success","placed":6,"missing":["tv"],"nodes":110000,"layout":"262a4547","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"7db4ef12","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-5500x6500-two-windows","input":"79af11d8","kind":"kitchen-living","scenario":"two-windows","areaM2":35.75,"requested":7,"strict":{"status":"search-exhausted","variants":0,"distinctVariants":0,"nodes":90000,"layout":"05363f24","valid":true},"planner":{"status":"success","placed":5,"missing":["dining-square-four","tv"],"nodes":121324,"layout":"be0c84e5","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"6dddf0c2","valid":true},"findings":[]},
+    {"id":"GEN-kitchen-living-5500x6500-l-shape","input":"2579a714","kind":"kitchen-living","scenario":"l-shape","areaM2":30.03,"requested":6,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":15804,"layout":"d7ae805b","valid":true},"planner":{"status":"success","placed":6,"missing":[],"nodes":15804,"layout":"d7ae805b","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"d7ae805b","valid":true},"findings":[]},
     {"id":"GEN-children-2700x3300-facing","input":"2e04efc8","kind":"children","scenario":"facing","areaM2":8.91,"requested":3,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":11983,"layout":"bf791663","valid":true},"planner":{"status":"success","placed":3,"missing":[],"nodes":11983,"layout":"bf791663","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"bf791663","valid":true},"findings":[]},
     {"id":"GEN-children-2700x3300-side-door","input":"dd87c1b9","kind":"children","scenario":"side-door","areaM2":8.91,"requested":3,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":14150,"layout":"4d640316","valid":true},"planner":{"status":"success","placed":3,"missing":[],"nodes":14150,"layout":"4d640316","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"4d640316","valid":true},"findings":[]},
     {"id":"GEN-children-2700x3300-corner-door","input":"624f4421","kind":"children","scenario":"corner-door","areaM2":8.91,"requested":3,"strict":{"status":"success","variants":3,"distinctVariants":3,"nodes":12596,"layout":"0372cab4","valid":true},"planner":{"status":"success","placed":3,"missing":[],"nodes":12596,"layout":"0372cab4","valid":true,"tvApart":false},"selection":{"status":"furnished","rung":0,"changes":[],"layout":"0372cab4","valid":true},"findings":[]},

@@ -59,7 +59,7 @@ const unplaced = (base = record()): RoomBenchmarkRecord => ({
 describe("generated rooms", () => {
     it("cover every kind and opening layout under unique ids", () => {
         const ids = ROOM_LAB_GENERATED_CASES.map((roomCase) => roomCase.id);
-        expect(ids).toHaveLength(196);
+        expect(ids).toHaveLength(245);
         expect(new Set(ids).size).toBe(ids.length);
         for (const kind of ROOM_BENCHMARK_KINDS)
             for (const scenario of ROOM_BENCHMARK_SCENARIOS)
@@ -81,6 +81,12 @@ describe("generated rooms", () => {
                 expect(item.offset % 50, id).toBe(0);
                 expect(item.width % 50, id).toBe(0);
             }
+    });
+
+    it("hold a kitchen in every kitchen-living room", () => {
+        for (const { id, room, tags } of ROOM_LAB_GENERATED_CASES)
+            if (tags[0] === "kitchen-living")
+                expect(room.fixedFurniture?.bodies, id).toHaveLength(1);
     });
 
     it("never ask for kitchen units, which stay switched off", () => {

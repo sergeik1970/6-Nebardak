@@ -16,6 +16,7 @@ interface RegionCell {
 export const ROOM_KINDS: readonly { kind: RoomKind; label: string }[] = [
     { kind: "bedroom", label: "Спальня" },
     { kind: "living", label: "Гостиная" },
+    { kind: "kitchen-living", label: "Кухня-гостиная" },
     { kind: "kitchen", label: "Кухня" },
     { kind: "children", label: "Детская" },
     { kind: "office", label: "Кабинет" },

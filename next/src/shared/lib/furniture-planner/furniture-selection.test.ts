@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+    KITCHEN_RUN_MIN_MM,
     fullFurnitureSet,
     furnishRoom,
+    kitchenZoneCandidates,
     selectionInstances,
     selectionLadder,
 } from "./furniture-selection";
-import { validateLayout } from "./geometry";
+import {
+    getDoorFurnitureObstacles,
+    getRadiatorBody,
+    getWindowCurtainObstacle,
+    rectsIntersect,
+    validateLayout,
+} from "./geometry";
+import { createDefaultRoom } from "./room";
+import type { Room } from "./types";
 import { ROOM_LAB_GENERATED_CASES } from "./room-lab";
 
 const generatedRoom = (id: string) => {
@@ -92,5 +102,66 @@ describe("furniture selection", () => {
 
         expect(result).toMatchObject({ status: "furnished", rung: 0 });
         expect(result.step.changes).toEqual([]);
+    });
+
+    describe("kitchen-living room", () => {
+        const room: Room = {
+            ...createDefaultRoom(5000, 6000),
+            radiators: [
+                {
+                    id: "radiator",
+                    wall: "top",
+                    offset: 2000,
+                    width: 1000,
+                    depth: 100,
+                    clearanceDepth: 300,
+                },
+            ],
+        };
+
+        it("reserves a kitchen run clear of the door, window and radiator", () => {
+            const zones = kitchenZoneCandidates(room);
+
+            expect(zones.length).toBeGreaterThan(0);
+            for (const zone of zones) {
+                const obstacles = [
+                    ...room.doors.flatMap((door) => getDoorFurnitureObstacles(door, room)),
+                    ...room.windows.map((window) => getWindowCurtainObstacle(window, room)),
+                    ...room.radiators!.map((radiator) => getRadiatorBody(radiator, room)),
+                ];
+                for (const obstacle of obstacles) {
+                    expect(rectsIntersect(obstacle, zone.run)).toBe(false);
+                    expect(rectsIntersect(obstacle, zone.passage)).toBe(false);
+                }
+                expect(Math.max(zone.run.width, zone.run.depth)).toBeGreaterThanOrEqual(
+                    KITCHEN_RUN_MIN_MM,
+                );
+            }
+        });
+
+        it("furnishes the living part around the kitchen", () => {
+            const result = furnishRoom(room, "kitchen-living");
+
+            expect(result.status).toBe("furnished");
+            const zone = result.kitchenZone;
+            if (!zone) throw new Error("No kitchen zone");
+            expect(result.placements.map((placement) => placement.definitionId)).toContain(
+                "sofa-three",
+            );
+            const reserved = {
+                ...room,
+                fixedFurniture: { bodies: [zone.run], passages: [zone.passage] },
+            };
+            expect(
+                validateLayout(reserved, result.placements, { tvTargetCategory: "living" }).valid,
+            ).toBe(true);
+        });
+
+        it("says so when no wall can take a kitchen", () => {
+            const narrow = createDefaultRoom(1700, 1700);
+
+            expect(kitchenZoneCandidates(narrow)).toEqual([]);
+            expect(furnishRoom(narrow, "kitchen-living").kitchenZone).toBeNull();
+        });
     });
 });
