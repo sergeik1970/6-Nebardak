@@ -21,7 +21,9 @@ import {
     scoreFunctionalBlockCohesion,
     scoreLayoutForProfile,
     scoreLivingComposition,
+    solveRoomFromMainPiece,
 } from "./solver";
+import { ROOM_LAB_GENERATED_CASES } from "./room-lab";
 import {
     FurnitureInstance,
     FurniturePriority,
@@ -992,6 +994,23 @@ describe("solver trust guarantees", () => {
             expect(validateLayout(ROOM, variant.placements).valid).toBe(true);
         }
         expect(result.variants[0]?.profile.id).toBe("perimeter");
+    });
+
+    it("never claims a set cannot fit after trying only some main piece positions", () => {
+        // Here one position is exhausted while others are only cut off by the budget.
+        const roomCase = ROOM_LAB_GENERATED_CASES.find(
+            (candidate) => candidate.id === "GEN-living-3300x4800-l-shape",
+        );
+        if (!roomCase) throw new Error("Generated room missing");
+        const result = solveRoomFromMainPiece(
+            roomCase.room,
+            roomCase.instances,
+            roomCase.preferences,
+            1,
+        );
+
+        expect(result.status).toBe("failure");
+        if (result.status === "failure") expect(result.reason).toBe("search-exhausted");
     });
 
     it("names each variant after where its main piece stands", () => {

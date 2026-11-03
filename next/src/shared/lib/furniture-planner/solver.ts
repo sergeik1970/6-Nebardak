@@ -2363,8 +2363,10 @@ export const solveRoomVariants = (
 
 /** How far to look for the main piece's positions, and how many to try in full. */
 const MAX_MAIN_PIECE_CANDIDATES = 4_000;
-const MAX_MAIN_PIECE_POSITIONS = 8;
-const MAIN_PIECE_SEARCH_NODES = 12_000;
+// Chosen on the benchmark: 16 positions and 16 000 nodes give two different
+// plans in 81% of rooms from 12 m² with the slowest room under 3 s.
+const MAX_MAIN_PIECE_POSITIONS = 16;
+const MAIN_PIECE_SEARCH_NODES = 16_000;
 const MAIN_PIECE_NODES_AFTER_SOLUTION = 300;
 
 /**
@@ -2503,12 +2505,15 @@ export const solveRoomFromMainPiece = (
         });
 
     if (variants.length > 0) return { status: "success", variants, exploredNodes, notes: [] };
+    // Only some positions of the main piece were tried, so a failure here proves
+    // nothing about the room: report the limit, and keep request or room errors.
     const result =
-        firstFailure ??
-        failure(
-            "search-exhausted",
-            "Поиск вариантов завершён без результата; это не доказывает, что мебель не помещается.",
-        );
+        firstFailure && firstFailure.reason !== "proven-impossible"
+            ? firstFailure
+            : failure(
+                  "search-exhausted",
+                  "Поиск вариантов завершён без результата; это не доказывает, что мебель не помещается.",
+              );
     return { ...result, exploredNodes, variants: [] };
 };
 
