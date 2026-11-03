@@ -1154,16 +1154,34 @@ export const relationTargetsDefinition = (
     (relationTemplate.targetDefinitionIds === undefined ||
         relationTemplate.targetDefinitionIds.includes(targetDefinition.id));
 
+/** A 16:9 screen is this much narrower than its diagonal. */
+export const TV_WIDTH_PER_DIAGONAL = 0.8716;
+/**
+ * Our draft until the designer confirms it: sit at least 1.2 diagonals away.
+ * A small TV keeps the catalogue's floor of 1400 mm.
+ */
+export const TV_VIEWING_DIAGONALS = 1.2;
+
+/** The diagonal of a 16:9 screen this wide, mm. */
+export const tvDiagonal = (width: number) => width / TV_WIDTH_PER_DIAGONAL;
+
 export const getViewingDistanceRange = (
     definition: FurnitureDefinition,
     targetCategory: "sleep" | "living",
+    /** The screen's width when it is not the catalogue's; a larger screen sits farther. */
+    tvWidth?: number,
 ): { minimum: number; maximum: number } => {
     const relation = definition.relations.find(
         (candidate) => candidate.kind === "faces" && candidate.targetCategory === targetCategory,
     );
+    const floor = relation?.minGap ?? 0;
+    const byDiagonal =
+        tvWidth === undefined
+            ? 0
+            : Math.ceil((TV_VIEWING_DIAGONALS * tvDiagonal(tvWidth)) / 50) * 50;
 
     return {
-        minimum: relation?.minGap ?? 0,
+        minimum: Math.max(floor, byDiagonal),
         maximum: relation?.maxGap ?? Number.POSITIVE_INFINITY,
     };
 };

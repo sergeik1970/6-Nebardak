@@ -666,14 +666,17 @@ const livingTargetCandidatesForTv = (
     instance: FurnitureInstance,
     room: Room,
     profileId: LayoutVariantProfileId,
+    /** The TV of this set, which may be larger than the catalogue's. */
+    tvInstance?: FurnitureInstance,
 ): Placement[] => {
     const definition = getFurniture(instance.definitionId);
     if (!isTvTargetDefinition(definition, "living")) return [];
 
     const television = getFurniture("tv");
+    const tvSize = tvInstance ? instanceSize(tvInstance) : {};
     const candidates: Placement[] = [];
 
-    const viewingDistance = getViewingDistanceRange(television, "living");
+    const viewingDistance = getViewingDistanceRange(television, "living", tvSize.width);
     const viewingDistances = [
         viewingDistance.minimum,
         Math.round((viewingDistance.minimum + viewingDistance.maximum) / 2),
@@ -693,7 +696,7 @@ const livingTargetCandidatesForTv = (
         const targetRotation = oppositeRotation(tvRotation);
         if (!definition.rotations.includes(targetRotation)) return;
 
-        const tvGeometry = getRotatedGeometry(television, tvRotation);
+        const tvGeometry = getRotatedGeometry(television, tvRotation, tvSize);
         const targetGeometry = getRotatedGeometry(definition, targetRotation, instance);
         const horizontalFacing = tvRotation === 90 || tvRotation === 270;
         const alongMaximum = horizontalFacing
@@ -1393,7 +1396,14 @@ const generateCandidates = (
     );
     const tvAwareCandidates =
         televisionSelected && targetCategory === "living"
-            ? livingTargetCandidatesForTv(instance, room, profileId)
+            ? livingTargetCandidatesForTv(
+                  instance,
+                  room,
+                  profileId,
+                  allInstances.find(
+                      (candidate) => getFurniture(candidate.definitionId).category === "media",
+                  ),
+              )
             : [];
     const supportCandidates = functionalSupportCandidates(
         instance,
@@ -2093,6 +2103,7 @@ const solveRoomInternal = (
             const viewingDistance = getViewingDistanceRange(
                 getFurniture(televisions[0].definitionId),
                 targetCategory,
+                televisions[0].width,
             );
             notes.push(
                 targetCategory === "living"
