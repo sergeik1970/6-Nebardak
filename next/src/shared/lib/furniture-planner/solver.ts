@@ -919,6 +919,10 @@ function* relationCandidateSource(
                     const ranges = horizontalFacing ? horizontalRanges : verticalRanges;
                     for (const [start, end] of ranges) {
                         for (const along of prioritizedIntegerValues(start, end, [
+                            // Centred on the sofa first: a table at one end reads as left over.
+                            horizontalFacing
+                                ? targetBounds.y + (targetBounds.depth - geometry.depth) / 2
+                                : targetBounds.x + (targetBounds.width - geometry.width) / 2,
                             horizontalFacing ? targetBounds.y : targetBounds.x,
                             horizontalFacing
                                 ? targetBounds.y + targetBounds.depth - geometry.depth
@@ -1073,38 +1077,52 @@ const armchairCandidates = (
 ): Placement[] => {
     const definition = getFurniture(instance.definitionId);
     const tableBox = getBounds(getWorldBodyRects(table));
+    const sofaBox = getBounds(getWorldBodyRects(sofa));
     const sofaFront = frontDirection(sofa.rotation);
     const candidates: Placement[] = [];
+    // Two places in the group: beside the table, or past the sofa's end.
+    const sides = [
+        { box: tableBox, gaps: [300, 500, 700] },
+        { box: sofaBox, gaps: [100, 300] },
+    ];
     for (const rotation of canonicalRotations(definition)) {
         const front = frontDirection(rotation);
         if (front.x * sofaFront.x + front.y * sofaFront.y !== 0) continue;
         const { width, depth } = getRotatedGeometry(definition, rotation, instance);
-        for (const gap of [300, 500, 700]) {
-            for (const towardSofa of [0, 250, 500, -250]) {
-                // The armchair sits on the side its front looks away from.
-                const x =
-                    front.x > 0
-                        ? tableBox.x - gap - width
-                        : front.x < 0
-                          ? tableBox.x + tableBox.width + gap
-                          : tableBox.x + tableBox.width / 2 - width / 2 - sofaFront.x * towardSofa;
-                const y =
-                    front.y > 0
-                        ? tableBox.y - gap - depth
-                        : front.y < 0
-                          ? tableBox.y + tableBox.depth + gap
-                          : tableBox.y + tableBox.depth / 2 - depth / 2 - sofaFront.y * towardSofa;
-                if (x < 0 || y < 0 || x + width > room.width || y + depth > room.depth) continue;
-                candidates.push({
-                    instanceId: instance.instanceId,
-                    definitionId: instance.definitionId,
-                    ...instanceSize(instance),
-                    x: snapToGrid(x),
-                    y: snapToGrid(y),
-                    rotation,
-                });
+        for (const { box, gaps } of sides)
+            for (const gap of gaps) {
+                for (const towardSofa of [0, 250, 500, -250]) {
+                    // The armchair sits on the side its front looks away from, level with the table.
+                    const x =
+                        front.x > 0
+                            ? box.x - gap - width
+                            : front.x < 0
+                              ? box.x + box.width + gap
+                              : tableBox.x +
+                                tableBox.width / 2 -
+                                width / 2 -
+                                sofaFront.x * towardSofa;
+                    const y =
+                        front.y > 0
+                            ? box.y - gap - depth
+                            : front.y < 0
+                              ? box.y + box.depth + gap
+                              : tableBox.y +
+                                tableBox.depth / 2 -
+                                depth / 2 -
+                                sofaFront.y * towardSofa;
+                    if (x < 0 || y < 0 || x + width > room.width || y + depth > room.depth)
+                        continue;
+                    candidates.push({
+                        instanceId: instance.instanceId,
+                        definitionId: instance.definitionId,
+                        ...instanceSize(instance),
+                        x: snapToGrid(x),
+                        y: snapToGrid(y),
+                        rotation,
+                    });
+                }
             }
-        }
     }
     return candidates;
 };
