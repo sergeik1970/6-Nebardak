@@ -1133,6 +1133,8 @@ export const breaksSearchRules = (
 
 /** How far an armchair may stand from the coffee table it faces, mm. */
 export const ARMCHAIR_TABLE_GAP_MAX = 700;
+/** Or from the end of the sofa, the other place it belongs, mm. */
+export const ARMCHAIR_SOFA_GAP_MAX = 400;
 
 const centre = (rect: Rect) => ({ x: rect.x + rect.width / 2, y: rect.y + rect.depth / 2 });
 
@@ -1169,6 +1171,7 @@ export const isArmchairAwayFromSofaGroup = (placements: Placement[]): boolean =>
     if (!table || !sofa) return false;
     const tableBox = getBounds(getWorldBodyRects(table));
     const tableCentre = centre(tableBox);
+    const sofaBox = getBounds(getWorldBodyRects(sofa));
     const sofaFront = frontDirection(sofa.rotation);
     return placements
         .filter((placement) => placement.definitionId === "armchair")
@@ -1180,7 +1183,10 @@ export const isArmchairAwayFromSofaGroup = (placements: Placement[]): boolean =>
             const facesTable = front.x * toTable.x + front.y * toTable.y > 0;
             // Across the sofa's axis: it looks along neither the sofa's front nor its back.
             const across = front.x * sofaFront.x + front.y * sofaFront.y === 0;
-            return !(facesTable && across && rectGap(box, tableBox) <= ARMCHAIR_TABLE_GAP_MAX);
+            const near =
+                rectGap(box, tableBox) <= ARMCHAIR_TABLE_GAP_MAX ||
+                rectGap(box, sofaBox) <= ARMCHAIR_SOFA_GAP_MAX;
+            return !(facesTable && across && near);
         });
 };
 

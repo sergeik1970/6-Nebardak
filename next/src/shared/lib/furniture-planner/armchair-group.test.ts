@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { furnishRoom } from "./furniture-selection";
-import { isArmchairAwayFromSofaGroup, validateLayout } from "./geometry";
+import {
+    frontDirection,
+    getBounds,
+    getWorldBodyRects,
+    isArmchairAwayFromSofaGroup,
+    validateLayout,
+} from "./geometry";
 import { createDefaultRoom } from "./room";
 import type { Placement } from "./types";
 
@@ -35,6 +41,13 @@ describe("armchair in the sofa group", () => {
         ).toBe(false);
     });
 
+    it("accepts one past the sofa's end, turned to the table", () => {
+        // The sofa spans x 1000–3200; the armchair stands 100 mm past its left end.
+        expect(
+            isArmchairAwayFromSofaGroup([sofa, table, armchair(1000 - 100 - 900, 1150, 270)]),
+        ).toBe(false);
+    });
+
     it("rejects one far away, turned away, or blocking the TV", () => {
         expect(isArmchairAwayFromSofaGroup([sofa, table, armchair(0, 3500, 270)])).toBe(true);
         expect(
@@ -61,5 +74,20 @@ describe("armchair in the sofa group", () => {
             const placed = result.placements.filter((item) => item.definitionId === "armchair");
             expect(placed.length).toBe(wanted?.count ?? 0);
         }
+    });
+
+    it("centres the coffee table on the sofa where it can", () => {
+        const room = createDefaultRoom(4500, 5500);
+        const result = furnishRoom(room, "living");
+        const sofaPlaced = result.placements.find((item) => item.definitionId.startsWith("sofa-"))!;
+        const tablePlaced = result.placements.find((item) => item.definitionId === "coffee-table")!;
+        const sofaBox = getBounds(getWorldBodyRects(sofaPlaced));
+        const tableBox = getBounds(getWorldBodyRects(tablePlaced));
+        const along = frontDirection(sofaPlaced.rotation).x === 0;
+        const offset = along
+            ? tableBox.x + tableBox.width / 2 - (sofaBox.x + sofaBox.width / 2)
+            : tableBox.y + tableBox.depth / 2 - (sofaBox.y + sofaBox.depth / 2);
+
+        expect(Math.abs(offset)).toBeLessThanOrEqual(50);
     });
 });
