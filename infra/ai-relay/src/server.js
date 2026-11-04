@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
-import { askProvider } from "./providers.js";
+import { askProvider, priceOf } from "./providers.js";
+import { UsageBook } from "./usage.js";
 
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
@@ -54,12 +55,12 @@ export const createRelay = ({
     concurrency = 2,
     bodyLimit = 12 * 1024 * 1024,
     timeoutMs = 120_000,
+    prices = null,
+    usage = new UsageBook(),
     fetchImpl = fetch,
     now = () => new Date(),
     log = (line) => console.log(line),
 }) => {
-    let day = "";
-    let used = 0;
     let running = 0;
 
     return createServer(async (request, response) => {
@@ -72,20 +73,23 @@ export const createRelay = ({
             });
             return;
         }
-        if (url.pathname !== "/v1/vision") return send(response, 404, { error: "not found" });
-        if (request.method !== "POST") return send(response, 405, { error: "POST only" });
+        if (url.pathname !== "/v1/vision" && url.pathname !== "/v1/usage")
+            return send(response, 404, { error: "not found" });
 
         const header = request.headers.authorization ?? "";
         const given = header.startsWith("Bearer ") ? header.slice(7) : "";
         if (!token || !given || !sameToken(given, token))
             return send(response, 401, { error: "unauthorized" });
-        if (!provider) return send(response, 503, { error: "AI_API_KEY or AI_MODEL is not set" });
 
         const today = now().toISOString().slice(0, 10);
-        if (today !== day) {
-            day = today;
-            used = 0;
+        if (url.pathname === "/v1/usage") {
+            if (request.method !== "GET") return send(response, 405, { error: "GET only" });
+            return send(response, 200, usage.summary(today.slice(0, 7)));
         }
+        if (request.method !== "POST") return send(response, 405, { error: "POST only" });
+        if (!provider) return send(response, 503, { error: "AI_API_KEY or AI_MODEL is not set" });
+
+        const used = usage.days[today]?.requests ?? 0;
         if (used >= dailyLimit)
             return send(response, 429, { error: `daily limit of ${dailyLimit} requests reached` });
         if (running >= concurrency) return send(response, 429, { error: "busy, retry shortly" });
@@ -101,22 +105,30 @@ export const createRelay = ({
         const problem = invalidRequest(body);
         if (problem) return send(response, 400, { error: problem });
 
-        used += 1;
         running += 1;
         const started = Date.now();
         try {
-            const text = await askProvider(
+            const answer = await askProvider(
                 provider,
                 { prompt: body.prompt, image: body.image, json: body.json === true },
                 { fetchImpl, timeoutMs },
             );
             const ms = Date.now() - started;
+            const cost = priceOf(answer.usage, prices);
+            usage.record(today, answer.usage, cost);
             log(
-                `vision ok ${provider.model} image=${body.image.base64.length}B ${ms}ms ${used}/${dailyLimit}`,
+                `vision ok ${provider.model} image=${body.image.base64.length}B ${ms}ms in=${answer.usage.inputTokens} out=${answer.usage.outputTokens} cost=${cost ?? "?"} ${used + 1}/${dailyLimit}`,
             );
-            send(response, 200, { text, provider: provider.kind, model: provider.model, ms });
+            send(response, 200, {
+                text: answer.text,
+                provider: provider.kind,
+                model: provider.model,
+                ms,
+                usage: { ...answer.usage, cost },
+            });
         } catch (error) {
             const ms = Date.now() - started;
+            usage.record(today, null, null);
             log(`vision failed ${provider.model} ${ms}ms: ${error.message}`);
             send(response, 502, { error: error.message });
         } finally {

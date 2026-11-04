@@ -65,9 +65,19 @@ export const askProvider = async (provider, request, { fetchImpl = fetch, timeou
         );
         const body = await response.json().catch(() => null);
         if (!response.ok) throw failure(response.status, body);
-        return (body?.candidates?.[0]?.content?.parts ?? [])
-            .map((part) => part.text ?? "")
-            .join("");
+        const usage = body?.usageMetadata ?? {};
+        return {
+            text: (body?.candidates?.[0]?.content?.parts ?? [])
+                .map((part) => part.text ?? "")
+                .join(""),
+            usage: {
+                inputTokens: usage.promptTokenCount ?? 0,
+                // Gemini bills thinking as output.
+                outputTokens: (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0),
+                reasoningTokens: usage.thoughtsTokenCount ?? 0,
+                cost: null,
+            },
+        };
     }
     const response = await fetchImpl(`${provider.apiUrl}/chat/completions`, {
         method: "POST",
@@ -76,6 +86,8 @@ export const askProvider = async (provider, request, { fetchImpl = fetch, timeou
         body: JSON.stringify({
             model: provider.model,
             ...(request.json ? { response_format: { type: "json_object" } } : {}),
+            // OpenRouter then reports the request's price in usage.cost.
+            ...(provider.apiUrl.includes("openrouter.ai") ? { usage: { include: true } } : {}),
             messages: [
                 {
                     role: "user",
@@ -94,5 +106,24 @@ export const askProvider = async (provider, request, { fetchImpl = fetch, timeou
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) throw failure(response.status, body);
-    return body?.choices?.[0]?.message?.content ?? "";
+    const usage = body?.usage ?? {};
+    return {
+        text: body?.choices?.[0]?.message?.content ?? "",
+        usage: {
+            inputTokens: usage.prompt_tokens ?? 0,
+            outputTokens: usage.completion_tokens ?? 0,
+            reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? 0,
+            cost: typeof usage.cost === "number" ? usage.cost : null,
+        },
+    };
+};
+
+/**
+ * The price of one request in US dollars: the provider's own figure when it
+ * gives one (OpenRouter), otherwise from AI_PRICE_*_PER_M if set, else null.
+ */
+export const priceOf = (usage, prices) => {
+    if (usage.cost !== null) return usage.cost;
+    if (!prices) return null;
+    return (usage.inputTokens * prices.input + usage.outputTokens * prices.output) / 1_000_000;
 };

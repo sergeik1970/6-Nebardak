@@ -76,8 +76,19 @@ export const relayStatus = async (
     }
 };
 
-/** Asks the model about one PNG image; returns its raw text answer. */
-export const askModel = async (settings: ModelSettings, pngBase64: string): Promise<string> => {
+/** Tokens and US dollars for one request; cost is null when the provider gives no price. */
+export interface ModelUsage {
+    inputTokens: number;
+    outputTokens: number;
+    reasoningTokens: number;
+    cost: number | null;
+}
+
+/** Asks the model about one PNG image; returns its raw text answer and what it cost. */
+export const askModel = async (
+    settings: ModelSettings,
+    pngBase64: string,
+): Promise<{ text: string; usage: ModelUsage | null }> => {
     const response = await fetch(`${settings.relayUrl}/v1/vision`, {
         method: "POST",
         headers: {
@@ -91,7 +102,30 @@ export const askModel = async (settings: ModelSettings, pngBase64: string): Prom
         }),
         signal: AbortSignal.timeout(180_000),
     });
-    const body = (await response.json().catch(() => ({}))) as { text?: string; error?: string };
+    const body = (await response.json().catch(() => ({}))) as {
+        text?: string;
+        error?: string;
+        usage?: ModelUsage;
+    };
     if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
-    return body.text ?? "";
+    return { text: body.text ?? "", usage: body.usage ?? null };
+};
+
+/** The relay's running totals: requests, tokens and dollars this month and overall. */
+export const relayUsage = async (settings: ModelSettings) => {
+    const response = await fetch(`${settings.relayUrl}/v1/usage`, {
+        headers: { authorization: `Bearer ${settings.relayToken}` },
+        signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as Record<
+        "month" | "total",
+        {
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cost: number;
+            unpriced: number;
+        }
+    >;
 };

@@ -6,12 +6,17 @@ services:
         image: stylefinder-ai-relay:local
         restart: unless-stopped
         env_file: .env
+        environment:
+            RELAY_USAGE_FILE: /data/usage.json
         # Reachable only from the server itself: callers come through an SSH tunnel.
         ports:
             - "127.0.0.1:8790:8790"
         read_only: true
         tmpfs:
             - /tmp
+        volumes:
+            # Requests, tokens and dollars per day (owner 1000).
+            - ./data:/data
         cap_drop:
             - ALL
         security_opt:

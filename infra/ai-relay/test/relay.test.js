@@ -142,3 +142,83 @@ test("answers 503 until the key is set", async () => {
         await relay.close();
     }
 });
+
+test("counts OpenRouter tokens and dollars per day and keeps them in a file", async () => {
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { UsageBook } = await import("../src/usage.js");
+    const file = join(mkdtempSync(join(tmpdir(), "relay-")), "usage.json");
+    const date = new Date("2026-11-04T10:00:00Z");
+    const relay = await start({
+        provider: providerFrom({
+            AI_API_KEY: "k",
+            AI_MODEL: "google/gemini-3.8-flash",
+            AI_PROVIDER: "openai",
+            AI_API_URL: "https://openrouter.ai/api/v1",
+        }),
+        usage: new UsageBook(file),
+        now: () => date,
+        reply: () =>
+            new Response(
+                JSON.stringify({
+                    choices: [{ message: { content: "{}" } }],
+                    usage: {
+                        prompt_tokens: 1200,
+                        completion_tokens: 300,
+                        completion_tokens_details: { reasoning_tokens: 100 },
+                        cost: 0.0022,
+                    },
+                }),
+            ),
+    });
+    try {
+        const body = await (await relay.ask({ prompt: "x", image: IMAGE })).json();
+        assert.deepEqual(body.usage, {
+            inputTokens: 1200,
+            outputTokens: 300,
+            reasoningTokens: 100,
+            cost: 0.0022,
+        });
+        assert.deepEqual(relay.calls[0].body.usage, { include: true });
+        await relay.ask({ prompt: "x", image: IMAGE });
+
+        const summary = await (
+            await fetch(`${relay.base}/v1/usage`, { headers: { authorization: `Bearer ${TOKEN}` } })
+        ).json();
+        assert.equal(summary.days["2026-11-04"].requests, 2);
+        assert.equal(summary.month.inputTokens, 2400);
+        assert.equal(summary.total.cost, 0.0044);
+        assert.equal((await fetch(`${relay.base}/v1/usage`)).status, 401);
+
+        // A restart reads the same numbers back.
+        assert.equal(new UsageBook(file).summary("2026-11").total.requests, 2);
+    } finally {
+        await relay.close();
+    }
+});
+
+test("prices Gemini tokens from the configured rates, thinking included", async () => {
+    const relay = await start({
+        provider: gemini,
+        prices: { input: 1, output: 4 },
+        reply: () =>
+            new Response(
+                JSON.stringify({
+                    candidates: [{ content: { parts: [{ text: "{}" }] } }],
+                    usageMetadata: {
+                        promptTokenCount: 1_000_000,
+                        candidatesTokenCount: 250_000,
+                        thoughtsTokenCount: 250_000,
+                    },
+                }),
+            ),
+    });
+    try {
+        const body = await (await relay.ask({ prompt: "x", image: IMAGE })).json();
+        assert.equal(body.usage.outputTokens, 500_000);
+        assert.equal(body.usage.cost, 3);
+    } finally {
+        await relay.close();
+    }
+});

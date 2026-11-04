@@ -4,7 +4,15 @@ import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { ROOM_LAB_GENERATED_CASES } from "@/shared/lib/furniture-planner/room-lab";
-import { answerJson, askModel, modelSettingsFrom, parseEnvFile, relayStatus } from "./model";
+import {
+    answerJson,
+    askModel,
+    modelSettingsFrom,
+    parseEnvFile,
+    relayStatus,
+    relayUsage,
+    type ModelUsage,
+} from "./model";
 import { modelAnswerForRoom, readingFromModel, readingFromRoom, type PlanReading } from "./reading";
 import { renderMeasuredPlan } from "./render";
 import { scoreReading, type ReadingScore } from "./score";
@@ -84,6 +92,10 @@ const realCases = async (): Promise<PlanCase[]> => {
 };
 
 const percent = (value: number) => `${Math.round(value * 100)}%`;
+const tokens = (usage?: ModelUsage | null) =>
+    usage ? `${usage.inputTokens} / ${usage.outputTokens}` : "";
+const dollars = (value?: number | null) =>
+    value === null || value === undefined ? "" : value.toFixed(4);
 
 describe.runIf(mode === "oracle" || mode === "live")("plan recognition measurement run", () => {
     it("reads every plan and reports", { timeout: 3_600_000 }, async () => {
@@ -111,16 +123,21 @@ describe.runIf(mode === "oracle" || mode === "live")("plan recognition measureme
             error?: string;
             ms: number;
             answer?: string;
+            usage?: ModelUsage | null;
         }[] = [];
 
         for (const planCase of cases) {
             fs.writeFileSync(path.join(OUTPUT, "images", `${planCase.id}.png`), planCase.png);
             const started = performance.now();
             let answer = "";
+            let usage: ModelUsage | null = null;
             try {
-                answer = settings
-                    ? await askModel(settings, planCase.png.toString("base64"))
-                    : JSON.stringify(planCase.oracle);
+                if (settings) {
+                    ({ text: answer, usage } = await askModel(
+                        settings,
+                        planCase.png.toString("base64"),
+                    ));
+                } else answer = JSON.stringify(planCase.oracle);
                 const parsed = readingFromModel(answerJson(answer));
                 results.push(
                     "error" in parsed
@@ -149,17 +166,18 @@ describe.runIf(mode === "oracle" || mode === "live")("plan recognition measureme
                 });
             }
             results[results.length - 1].ms = Math.round(performance.now() - started);
+            results[results.length - 1].usage = usage;
         }
 
         const lines = [
             `# Распознавание плана: ${relay && !("error" in relay) ? `${relay.provider} ${relay.model}` : "проверка замера (идеальные ответы)"}`,
             "",
-            "| План | Стены | Ошибка длины, медиана / макс, мм | Площадь | Проёмы найдены | Лишние | Сдвиг проёма, мм | Ширина, мм | Время |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| План | Стены | Ошибка длины, медиана / макс, мм | Площадь | Проёмы найдены | Лишние | Сдвиг проёма, мм | Ширина, мм | Время | Токены вход / выход | Цена, $ |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ...results.map((result) =>
                 result.score
-                    ? `| ${result.id} | ${result.score.wallsMatched}/${result.score.walls} | ${result.score.wallErrorMedian} / ${result.score.wallErrorMax} | ${percent(result.score.areaError)} | ${result.score.openingsFound}/${result.score.openings} | ${result.score.openingsExtra} | ${result.score.openingCentreErrorMedian} | ${result.score.openingWidthErrorMedian} | ${result.ms} мс |`
-                    : `| ${result.id} | ошибка: ${result.error} | | | | | | | ${result.ms} мс |`,
+                    ? `| ${result.id} | ${result.score.wallsMatched}/${result.score.walls} | ${result.score.wallErrorMedian} / ${result.score.wallErrorMax} | ${percent(result.score.areaError)} | ${result.score.openingsFound}/${result.score.openings} | ${result.score.openingsExtra} | ${result.score.openingCentreErrorMedian} | ${result.score.openingWidthErrorMedian} | ${result.ms} мс | ${tokens(result.usage)} | ${dollars(result.usage?.cost)} |`
+                    : `| ${result.id} | ошибка: ${result.error} | | | | | | | ${result.ms} мс | ${tokens(result.usage)} | ${dollars(result.usage?.cost)} |`,
             ),
             "",
         ];
@@ -178,6 +196,21 @@ describe.runIf(mode === "oracle" || mode === "live")("plan recognition measureme
                 `**${source === "synthetic" ? "Синтетические" : "Настоящие"} планы:** ответ разобран в ${scored.length} из ${all.length}; все стены точнее 5 см в ${exactWalls}; проёмов найдено ${sum((score) => score.openingsFound)} из ${sum((score) => score.openings)}, лишних ${sum((score) => score.openingsExtra)}.`,
                 "",
             );
+        }
+        if (settings) {
+            const spent = results.flatMap((result) => (result.usage ? [result.usage] : []));
+            const priced = spent.filter((item) => item.cost !== null);
+            const cost = priced.reduce((total, item) => total + item.cost!, 0);
+            lines.push(
+                `**Расход этого прогона:** ${results.length} запросов, токенов на входе ${spent.reduce((total, item) => total + item.inputTokens, 0)}, на выходе ${spent.reduce((total, item) => total + item.outputTokens, 0)} (из них на размышления ${spent.reduce((total, item) => total + item.reasoningTokens, 0)}); ${dollars(cost)} $${priced.length < spent.length ? `, у ${spent.length - priced.length} запросов цены нет` : ""}.`,
+                "",
+            );
+            const book = await relayUsage(settings);
+            if (book)
+                lines.push(
+                    `**Всего через посредника:** в этом месяце ${book.month.requests} запросов, ${dollars(book.month.cost)} $; за всё время ${book.total.requests} запросов, ${dollars(book.total.cost)} $.`,
+                    "",
+                );
         }
         fs.writeFileSync(path.join(OUTPUT, "report.md"), `${lines.join("\n")}\n`);
         fs.writeFileSync(

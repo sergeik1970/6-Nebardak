@@ -8,7 +8,7 @@ SERVER="${AI_RELAY_SERVER:-root@89.208.107.138}"
 REMOTE=/root/stylefinder-ai-relay
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-rsync -a --delete --exclude .env --exclude node_modules "$HERE/" "$SERVER:$REMOTE/"
+rsync -a --delete --exclude .env --exclude data --exclude node_modules "$HERE/" "$SERVER:$REMOTE/"
 
 ssh "$SERVER" bash -s <<EOF
 set -euo pipefail
@@ -19,7 +19,8 @@ if [ ! -f .env ]; then
     echo "Created .env with a new RELAY_TOKEN. Put AI_API_KEY and AI_MODEL into $REMOTE/.env"
 fi
 chmod 600 .env
-docker compose up -d --build
+install -d -o 1000 -g 1000 -m 700 data
+docker compose up -d --build --force-recreate
 sleep 3
 docker compose ps
 curl -fsS http://127.0.0.1:8790/health && echo
