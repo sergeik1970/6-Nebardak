@@ -1,0 +1,30 @@
+name: stylefinder-ai-relay
+
+services:
+    relay:
+        build: .
+        image: stylefinder-ai-relay:local
+        restart: unless-stopped
+        env_file: .env
+        environment:
+            RELAY_USAGE_FILE: /data/usage.json
+        # Reachable only from the server itself: callers come through an SSH tunnel.
+        ports:
+            - "127.0.0.1:8790:8790"
+        read_only: true
+        tmpfs:
+            - /tmp
+        volumes:
+            # Requests, tokens and dollars per day (owner 1000).
+            - ./data:/data
+        cap_drop:
+            - ALL
+        security_opt:
+            - no-new-privileges:true
+        mem_limit: 128m
+        pids_limit: 64
+        logging:
+            driver: json-file
+            options:
+                max-size: 5m
+                max-file: "3"
