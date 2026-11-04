@@ -222,3 +222,26 @@ test("prices Gemini tokens from the configured rates, thinking included", async 
         await relay.close();
     }
 });
+
+test("treats an answer cut off mid-body as a failure, not an empty answer", async () => {
+    const relay = await start({
+        provider: gemini,
+        reply: () =>
+            new Response(
+                new ReadableStream({
+                    start(controller) {
+                        controller.enqueue(new TextEncoder().encode('{"candidates": ['));
+                        controller.error(new Error("aborted"));
+                    },
+                }),
+                { status: 200 },
+            ),
+    });
+    try {
+        const response = await relay.ask({ prompt: "x", image: IMAGE });
+        assert.equal(response.status, 502);
+        assert.match(await response.text(), /unreadable/);
+    } finally {
+        await relay.close();
+    }
+});

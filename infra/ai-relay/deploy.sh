@@ -19,6 +19,8 @@ if [ ! -f .env ]; then
     echo "Created .env with a new RELAY_TOKEN. Put AI_API_KEY and AI_MODEL into $REMOTE/.env"
 fi
 chmod 600 .env
+# 120 s was too short for whole-apartment plans.
+sed -i 's/^RELAY_TIMEOUT_SECONDS=120$/RELAY_TIMEOUT_SECONDS=300/' .env
 install -d -o 1000 -g 1000 -m 700 data
 docker compose up -d --build --force-recreate
 sleep 3

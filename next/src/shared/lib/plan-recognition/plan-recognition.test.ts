@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ROOM_LAB_GENERATED_CASES } from "@/shared/lib/furniture-planner/room-lab";
+import { apartmentFromModel, contourArea, scoreApartment, type ApartmentTruth } from "./apartment";
 import { answerJson, modelSettingsFrom, parseEnvFile } from "./model";
 import { modelAnswerForRoom, readingFromModel, readingFromRoom } from "./reading";
 import { renderMeasuredPlan } from "./render";
@@ -97,5 +98,72 @@ describe("plan recognition measurement", () => {
         ).toEqual({ relayUrl: "http://localhost:9000", relayToken: "k" });
         expect(modelSettingsFrom({})).toBeNull();
         expect(answerJson('```json\n{"a":1}\n```')).toEqual({ a: 1 });
+    });
+});
+
+describe("apartment plan reading", () => {
+    const rectangle = (width: number, depth: number) => [
+        { x: 0, y: 0 },
+        { x: width, y: 0 },
+        { x: width, y: depth },
+        { x: 0, y: depth },
+    ];
+    const truth: ApartmentTruth = {
+        entrance: true,
+        rooms: [
+            { name: "Спальня", area: 12, walls: [4000, 3000], windows: 1 },
+            { name: "Санузел", area: 3, walls: [2000, 1500], windows: 0 },
+        ],
+    };
+
+    it("matches rooms by size, scores walls and windows, and counts extras", () => {
+        const parsed = apartmentFromModel({
+            rooms: [
+                {
+                    name: "Санузел",
+                    contour: rectangle(2000, 1520),
+                    openings: [{ kind: "entrance", wall: 0, offset: 100, width: 900 }],
+                },
+                {
+                    name: "Room 1",
+                    contour: rectangle(4000, 3000),
+                    openings: [{ kind: "window", wall: 1, offset: 500, width: 1500 }],
+                },
+                { name: "Кладовая", contour: rectangle(1000, 1000), openings: [] },
+            ],
+        });
+        if ("error" in parsed) throw new Error(parsed.error);
+
+        expect(scoreApartment(truth, parsed.rooms)).toMatchObject({
+            rooms: 2,
+            roomsFound: 2,
+            roomsExtra: 1,
+            walls: 4,
+            wallsExact: 4,
+            windowsChecked: 2,
+            windowsRight: 2,
+            entranceRight: true,
+        });
+        expect(contourArea(rectangle(4000, 3000))).toBe(12);
+    });
+
+    it("does not match a room whose size is far off", () => {
+        const parsed = apartmentFromModel({
+            rooms: [{ name: "Room", contour: rectangle(6000, 5000), openings: [] }],
+        });
+        if ("error" in parsed) throw new Error(parsed.error);
+
+        expect(scoreApartment(truth, parsed.rooms)).toMatchObject({
+            roomsFound: 0,
+            roomsExtra: 1,
+            entranceRight: false,
+        });
+    });
+
+    it("turns a malformed room into an error", () => {
+        expect(apartmentFromModel({ rooms: [] })).toEqual({ error: "В ответе нет комнат." });
+        expect(apartmentFromModel({ rooms: [{ name: "x", contour: [] }] })).toMatchObject({
+            error: expect.stringContaining("Комната 1"),
+        });
     });
 });

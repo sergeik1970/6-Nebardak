@@ -28,7 +28,7 @@ createRelay({
     token: env.RELAY_TOKEN,
     provider,
     dailyLimit: number(env.RELAY_DAILY_LIMIT, 300),
-    timeoutMs: number(env.RELAY_TIMEOUT_SECONDS, 120) * 1000,
+    timeoutMs: number(env.RELAY_TIMEOUT_SECONDS, 300) * 1000,
     prices,
     usage: new UsageBook(env.RELAY_USAGE_FILE || null),
 }).listen(port, "0.0.0.0", () => {

@@ -84,10 +84,11 @@ export interface ModelUsage {
     cost: number | null;
 }
 
-/** Asks the model about one PNG image; returns its raw text answer and what it cost. */
+/** Asks the model about one PNG image (a room by default); returns its raw text answer and what it cost. */
 export const askModel = async (
     settings: ModelSettings,
     pngBase64: string,
+    prompt = PLAN_READING_PROMPT,
 ): Promise<{ text: string; usage: ModelUsage | null }> => {
     const response = await fetch(`${settings.relayUrl}/v1/vision`, {
         method: "POST",
@@ -96,11 +97,11 @@ export const askModel = async (
             authorization: `Bearer ${settings.relayToken}`,
         },
         body: JSON.stringify({
-            prompt: PLAN_READING_PROMPT,
+            prompt,
             image: { mimeType: "image/png", base64: pngBase64 },
             json: true,
         }),
-        signal: AbortSignal.timeout(180_000),
+        signal: AbortSignal.timeout(330_000),
     });
     const body = (await response.json().catch(() => ({}))) as {
         text?: string;
