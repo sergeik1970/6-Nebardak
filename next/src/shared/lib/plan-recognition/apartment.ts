@@ -43,6 +43,8 @@ export interface ApartmentTruthRoom {
 export interface ApartmentTruth {
     rooms: ApartmentTruthRoom[];
     entrance: boolean;
+    /** False when the sheet names no rooms and the truth's names are made up: match by size only. */
+    namesOnSheet?: boolean;
     note?: string;
 }
 
@@ -186,7 +188,7 @@ export const scoreApartment = (
         unused.delete(best);
         matched.set(index, best);
     };
-    for (const { room, index } of order) pick(room, index, true);
+    if (truth.namesOnSheet !== false) for (const { room, index } of order) pick(room, index, true);
     for (const { room, index } of order) if (!matched.has(index)) pick(room, index, false);
 
     const areaErrors: number[] = [];
