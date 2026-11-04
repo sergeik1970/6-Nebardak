@@ -88,9 +88,13 @@ describe("plan recognition measurement", () => {
     });
 
     it("reads settings and fenced answers", () => {
+        expect(modelSettingsFrom(parseEnvFile("AI_RELAY_TOKEN='k'\n# note\n"))).toEqual({
+            relayUrl: "http://127.0.0.1:8790",
+            relayToken: "k",
+        });
         expect(
-            modelSettingsFrom(parseEnvFile("AI_API_KEY='k'\n# note\nAI_MODEL=gemini-2.5-pro\n")),
-        ).toEqual({ provider: "gemini", apiKey: "k", model: "gemini-2.5-pro" });
+            modelSettingsFrom({ AI_RELAY_TOKEN: "k", AI_RELAY_URL: "http://localhost:9000/" }),
+        ).toEqual({ relayUrl: "http://localhost:9000", relayToken: "k" });
         expect(modelSettingsFrom({})).toBeNull();
         expect(answerJson('```json\n{"a":1}\n```')).toEqual({ a: 1 });
     });

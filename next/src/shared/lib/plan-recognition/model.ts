@@ -1,8 +1,8 @@
 /**
- * What the model is asked, and how it is asked. Two request shapes cover the
- * candidates: Gemini's generateContent and the OpenAI-compatible chat API
- * (which Yandex AI Studio and others also speak). The key never leaves the
- * machine running the measurement; the product does not call this.
+ * What the model is asked, and how it is asked. Requests go through the AI
+ * relay (`infra/ai-relay`) on the server outside Russia, which holds the
+ * provider key; this side only knows the relay's address and token. The
+ * product does not call this.
  */
 export const PLAN_READING_PROMPT = `You read a measured floor plan of ONE room and return its geometry as JSON.
 
@@ -22,11 +22,9 @@ Rules:
 - List every door and every window. No other keys, no comments.`;
 
 export interface ModelSettings {
-    provider: "gemini" | "openai";
-    apiKey: string;
-    model: string;
-    /** For OpenAI-compatible services other than OpenAI itself. */
-    apiUrl?: string;
+    /** The relay, usually through an SSH tunnel: http://127.0.0.1:8790. */
+    relayUrl: string;
+    relayToken: string;
 }
 
 /** Reads `KEY=value` lines from a file's text, e.g. ~/.stylefinder-ai.env. */
@@ -48,20 +46,13 @@ export const parseEnvFile = (text: string): Record<string, string> =>
             }),
     );
 
-export const modelSettingsFrom = (
-    env: Record<string, string | undefined>,
-): ModelSettings | null => {
-    const apiKey = env.AI_API_KEY;
-    const model = env.AI_MODEL;
-    if (!apiKey || !model) return null;
-    const provider =
-        env.AI_PROVIDER === "gemini" || env.AI_PROVIDER === "openai"
-            ? env.AI_PROVIDER
-            : model.startsWith("gemini")
-              ? "gemini"
-              : "openai";
-    return { provider, apiKey, model, ...(env.AI_API_URL ? { apiUrl: env.AI_API_URL } : {}) };
-};
+export const modelSettingsFrom = (env: Record<string, string | undefined>): ModelSettings | null =>
+    env.AI_RELAY_TOKEN
+        ? {
+              relayUrl: (env.AI_RELAY_URL || "http://127.0.0.1:8790").replace(/\/$/, ""),
+              relayToken: env.AI_RELAY_TOKEN,
+          }
+        : null;
 
 /** Strips a ```json fence some models wrap their answer in. */
 export const answerJson = (text: string): unknown => {
@@ -69,60 +60,38 @@ export const answerJson = (text: string): unknown => {
     return JSON.parse((fenced ? fenced[1] : text).trim());
 };
 
+/** The relay's provider and model, or why it cannot be reached. */
+export const relayStatus = async (
+    settings: ModelSettings,
+): Promise<{ provider: string | null; model: string | null } | { error: string }> => {
+    try {
+        const response = await fetch(`${settings.relayUrl}/health`, {
+            signal: AbortSignal.timeout(5_000),
+        });
+        return (await response.json()) as { provider: string | null; model: string | null };
+    } catch {
+        return {
+            error: `Посредник ${settings.relayUrl} не отвечает. Откройте туннель: ssh -fN -L 8790:127.0.0.1:8790 root@89.208.107.138`,
+        };
+    }
+};
+
 /** Asks the model about one PNG image; returns its raw text answer. */
 export const askModel = async (settings: ModelSettings, pngBase64: string): Promise<string> => {
-    if (settings.provider === "gemini") {
-        const url = `${settings.apiUrl ?? "https://generativelanguage.googleapis.com/v1beta"}/models/${settings.model}:generateContent`;
-        const response = await fetch(url, {
-            method: "POST",
-            headers: { "content-type": "application/json", "x-goog-api-key": settings.apiKey },
-            body: JSON.stringify({
-                contents: [
-                    {
-                        parts: [
-                            { text: PLAN_READING_PROMPT },
-                            { inline_data: { mime_type: "image/png", data: pngBase64 } },
-                        ],
-                    },
-                ],
-                generationConfig: { responseMimeType: "application/json", temperature: 0 },
-            }),
-        });
-        const body = (await response.json()) as {
-            candidates?: { content?: { parts?: { text?: string }[] } }[];
-            error?: { message?: string };
-        };
-        if (!response.ok) throw new Error(body.error?.message ?? `HTTP ${response.status}`);
-        return body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
-    }
-    const url = `${settings.apiUrl ?? "https://api.openai.com/v1"}/chat/completions`;
-    const response = await fetch(url, {
+    const response = await fetch(`${settings.relayUrl}/v1/vision`, {
         method: "POST",
         headers: {
             "content-type": "application/json",
-            authorization: `Bearer ${settings.apiKey}`,
+            authorization: `Bearer ${settings.relayToken}`,
         },
         body: JSON.stringify({
-            model: settings.model,
-            response_format: { type: "json_object" },
-            messages: [
-                {
-                    role: "user",
-                    content: [
-                        { type: "text", text: PLAN_READING_PROMPT },
-                        {
-                            type: "image_url",
-                            image_url: { url: `data:image/png;base64,${pngBase64}` },
-                        },
-                    ],
-                },
-            ],
+            prompt: PLAN_READING_PROMPT,
+            image: { mimeType: "image/png", base64: pngBase64 },
+            json: true,
         }),
+        signal: AbortSignal.timeout(180_000),
     });
-    const body = (await response.json()) as {
-        choices?: { message?: { content?: string } }[];
-        error?: { message?: string };
-    };
-    if (!response.ok) throw new Error(body.error?.message ?? `HTTP ${response.status}`);
-    return body.choices?.[0]?.message?.content ?? "";
+    const body = (await response.json().catch(() => ({}))) as { text?: string; error?: string };
+    if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
+    return body.text ?? "";
 };

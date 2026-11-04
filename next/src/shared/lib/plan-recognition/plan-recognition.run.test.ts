@@ -4,16 +4,16 @@ import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { ROOM_LAB_GENERATED_CASES } from "@/shared/lib/furniture-planner/room-lab";
-import { answerJson, askModel, modelSettingsFrom, parseEnvFile } from "./model";
+import { answerJson, askModel, modelSettingsFrom, parseEnvFile, relayStatus } from "./model";
 import { modelAnswerForRoom, readingFromModel, readingFromRoom, type PlanReading } from "./reading";
 import { renderMeasuredPlan } from "./render";
 import { scoreReading, type ReadingScore } from "./score";
 
 /**
  * The plan recognition measurement. `PLAN_RECOGNITION=oracle` checks the
- * harness with perfect answers; `PLAN_RECOGNITION=live` asks the model set
- * in ~/.stylefinder-ai.env (AI_API_KEY, AI_MODEL, optional AI_PROVIDER and
- * AI_API_URL). Real plans go in ~/stylefinder-plans as `name.png` or
+ * harness with perfect answers; `PLAN_RECOGNITION=live` asks the model
+ * through the AI relay (`infra/ai-relay`): ~/.stylefinder-ai.env holds
+ * AI_RELAY_TOKEN and optionally AI_RELAY_URL. Real plans go in ~/stylefinder-plans as `name.png` or
  * `name.jpg` with `name.truth.json` in the model's own answer format.
  */
 const mode = process.env.PLAN_RECOGNITION;
@@ -96,7 +96,11 @@ describe.runIf(mode === "oracle" || mode === "live")("plan recognition measureme
                   )
                 : null;
         if (mode === "live")
-            expect(settings, "Нет AI_API_KEY или AI_MODEL в ~/.stylefinder-ai.env").not.toBeNull();
+            expect(settings, "Нет AI_RELAY_TOKEN в ~/.stylefinder-ai.env").not.toBeNull();
+        const relay = settings ? await relayStatus(settings) : null;
+        if (relay && "error" in relay) throw new Error(relay.error);
+        if (relay && !relay.model)
+            throw new Error("На посреднике не задан AI_API_KEY или AI_MODEL.");
 
         const cases = [...(await syntheticCases()), ...(await realCases())];
         fs.mkdirSync(path.join(OUTPUT, "images"), { recursive: true });
@@ -148,7 +152,7 @@ describe.runIf(mode === "oracle" || mode === "live")("plan recognition measureme
         }
 
         const lines = [
-            `# Распознавание плана: ${settings ? `${settings.provider} ${settings.model}` : "проверка замера (идеальные ответы)"}`,
+            `# Распознавание плана: ${relay && !("error" in relay) ? `${relay.provider} ${relay.model}` : "проверка замера (идеальные ответы)"}`,
             "",
             "| План | Стены | Ошибка длины, медиана / макс, мм | Площадь | Проёмы найдены | Лишние | Сдвиг проёма, мм | Ширина, мм | Время |",
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
