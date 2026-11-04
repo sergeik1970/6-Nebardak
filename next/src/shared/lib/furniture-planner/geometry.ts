@@ -539,16 +539,22 @@ const sameWallObstaclesOverlap = (first: WallObstacle[], second: WallObstacle[] 
 const getRadiatorEnvelope = (radiator: RadiatorObstacle, room: Room): Rect =>
     getBounds([getRadiatorBody(radiator, room), getRadiatorServiceObstacle(radiator, room)]);
 
+/**
+ * The narrowest room the planner takes: a 1.3 m hallway still fits a 600 mm
+ * wardrobe and its 700 mm passage. It was 2.4 m, which shut out hallways.
+ */
+export const MIN_ROOM_SIDE_MM = 1000;
+
 export const validateRoomGeometry = (room: Room): string | null => {
     if (
         !Number.isFinite(room.width) ||
         !Number.isFinite(room.depth) ||
-        room.width < 2400 ||
-        room.depth < 2400 ||
+        room.width < MIN_ROOM_SIDE_MM ||
+        room.depth < MIN_ROOM_SIDE_MM ||
         room.width > MAX_DRAWN_CONTOUR_MM ||
         room.depth > MAX_DRAWN_CONTOUR_MM
     ) {
-        return "Проверьте размеры комнаты: допустимый диапазон — от 2400 до 30 000 мм.";
+        return "Проверьте размеры комнаты: допустимый диапазон — от 1000 до 30 000 мм.";
     }
 
     const contourError = validateOrthogonalRoomGeometry(room);
