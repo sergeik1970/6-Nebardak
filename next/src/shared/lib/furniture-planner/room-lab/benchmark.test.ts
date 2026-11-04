@@ -60,7 +60,7 @@ const unplaced = (base = record()): RoomBenchmarkRecord => ({
 describe("generated rooms", () => {
     it("cover every kind and opening layout under unique ids", () => {
         const ids = ROOM_LAB_GENERATED_CASES.map((roomCase) => roomCase.id);
-        expect(ids).toHaveLength(245);
+        expect(ids).toHaveLength(294);
         expect(new Set(ids).size).toBe(ids.length);
         for (const kind of ROOM_BENCHMARK_KINDS)
             for (const scenario of ROOM_BENCHMARK_SCENARIOS)

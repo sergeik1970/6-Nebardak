@@ -93,25 +93,27 @@ describe("auto layout in one room of the drawing", () => {
         );
     });
 
-    it("declines a room below the solver's 2,4 m minimum", () => {
-        const narrow: Room = {
-            ...building,
-            partitions: [
-                {
-                    id: "partition",
-                    start: { x: 2000, y: 0 },
-                    end: { x: 2000, y: 4000 },
-                    thickness: 100,
-                },
-            ],
-            doors: [],
-            windows: [],
-            radiators: [],
-        };
+    // A partition 2 m in leaves a 1.95 m strip: a hallway, which the solver now takes.
+    const withStrip = (x: number): Room => ({
+        ...building,
+        partitions: [{ id: "partition", start: { x, y: 0 }, end: { x, y: 4000 }, thickness: 100 }],
+        doors: [],
+        windows: [],
+        radiators: [],
+    });
+
+    it("takes a narrow hallway-sized room", () => {
+        const narrow = withStrip(2000);
         const [small] = getDrawRoomRegions(narrow);
-        const result = buildRegionSolverRoom(narrow, small);
+        expect(buildRegionSolverRoom(narrow, small).status).toBe("ready");
+    });
+
+    it("declines a room below the solver's 1 m minimum", () => {
+        const sliver = withStrip(900);
+        const [small] = getDrawRoomRegions(sliver);
+        const result = buildRegionSolverRoom(sliver, small);
         expect(result.status).toBe("unsupported");
-        if (result.status === "unsupported") expect(result.message).toContain("2,4 × 2,4 м");
+        if (result.status === "unsupported") expect(result.message).toContain("от 1 м");
     });
 
     it("makes the first piece of a room set required and the rest optional", () => {

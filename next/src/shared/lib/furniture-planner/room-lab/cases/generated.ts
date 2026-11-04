@@ -18,6 +18,7 @@ export const ROOM_BENCHMARK_KINDS = [
     "kitchen-living",
     "children",
     "office",
+    "hallway",
 ] as const;
 export type RoomBenchmarkKind = (typeof ROOM_BENCHMARK_KINDS)[number];
 
@@ -69,6 +70,15 @@ const SIZES: Record<RoomBenchmarkKind, [width: number, depth: number][]> = {
         [3600, 4800],
         [4000, 5000],
     ],
+    hallway: [
+        [1300, 5000],
+        [1400, 3000],
+        [1500, 4000],
+        [1600, 2500],
+        [1800, 3000],
+        [2000, 2400],
+        [2200, 2800],
+    ],
     office: [
         [2400, 3000],
         [2600, 3400],
@@ -109,6 +119,8 @@ const furnitureSet = (kind: RoomBenchmarkKind, areaM2: number): Record<string, n
             return areaM2 < 11
                 ? { "single-bed": 1, desk: 1, "wardrobe-small": 1 }
                 : { "single-bed": 1, desk: 1, "wardrobe-medium": 1, bookcase: 1 };
+        case "hallway":
+            return { "wardrobe-medium": 1 };
         case "office":
             return areaM2 < 12
                 ? { desk: 1, bookcase: 1 }
@@ -244,7 +256,9 @@ const createCase = (
     scenario: RoomBenchmarkScenario,
 ): RoomLabCase => {
     const id = `GEN-${kind}-${width}x${depth}-${scenario}`;
-    const emptyRoom = buildRoom(width, depth, scenario, randomFrom(hashText(id)));
+    const built = buildRoom(width, depth, scenario, randomFrom(hashText(id)));
+    // A hallway has no window or radiator; its layouts differ by door.
+    const emptyRoom = kind === "hallway" ? { ...built, windows: [], radiators: [] } : built;
     // A kitchen-living room is measured with its kitchen held in place, as the
     // planner's own search would see it; automatic selection gets the empty room.
     const kitchen = kind === "kitchen-living" ? kitchenZoneCandidates(emptyRoom)[0] : undefined;

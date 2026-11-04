@@ -23,6 +23,7 @@ import {
     type Room,
     type RoomBoundarySegment,
     type WindowOpening,
+    MIN_ROOM_SIDE_MM,
 } from "@/shared/lib/furniture-planner";
 import { placedDefinition, type DrawFurniture } from "./furniture";
 
@@ -323,8 +324,8 @@ export const buildRegionSolverRoom = (
         return {
             status: "unsupported",
             message:
-                shell.width < 2400 || shell.depth < 2400
-                    ? "Подбор работает для комнат от 2,4 × 2,4 м. Эту комнату обставьте вручную."
+                shell.width < MIN_ROOM_SIDE_MM || shell.depth < MIN_ROOM_SIDE_MM
+                    ? "Подбор работает для комнат шириной от 1 м. Эту комнату обставьте вручную."
                     : "Подбор пока работает для прямоугольных и простых Г-образных комнат.",
         };
     const segments = getRoomBoundarySegments(shell);
