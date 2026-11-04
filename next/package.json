@@ -21,6 +21,8 @@
         "planner:benchmark": "PLANNER_BENCHMARK=check vitest run src/shared/lib/furniture-planner/room-lab-benchmark.test.ts",
         "planner:benchmark:update": "PLANNER_BENCHMARK=update vitest run src/shared/lib/furniture-planner/room-lab-benchmark.test.ts",
         "planner:benchmark:render": "PLANNER_BENCHMARK=check PLANNER_LAB_RENDER=1 vitest run src/shared/lib/furniture-planner/room-lab-benchmark.test.ts",
+        "plan-recognition:oracle": "PLAN_RECOGNITION=oracle vitest run src/shared/lib/plan-recognition/plan-recognition.run.test.ts",
+        "plan-recognition:live": "PLAN_RECOGNITION=live vitest run src/shared/lib/plan-recognition/plan-recognition.run.test.ts",
         "typecheck": "next typegen && tsc --noEmit --incremental false",
         "test": "vitest run",
         "test:watch": "vitest",
