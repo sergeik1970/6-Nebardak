@@ -245,3 +245,31 @@ test("treats an answer cut off mid-body as a failure, not an empty answer", asyn
         await relay.close();
     }
 });
+
+test("lets a request choose only an allowed model", async () => {
+    const relay = await start({
+        provider: providerFrom({
+            AI_API_KEY: "k",
+            AI_MODEL: "google/gemini-3.8-flash",
+            AI_PROVIDER: "openai",
+        }),
+        models: ["openai/gpt-6.1-sol"],
+        reply: () => new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] })),
+    });
+    try {
+        const chosen = await relay.ask({ prompt: "x", image: IMAGE, model: "openai/gpt-6.1-sol" });
+        assert.equal(chosen.status, 200);
+        assert.equal((await chosen.json()).model, "openai/gpt-6.1-sol");
+        assert.equal(relay.calls[0].body.model, "openai/gpt-6.1-sol");
+
+        const refused = await relay.ask({ prompt: "x", image: IMAGE, model: "openai/gpt-6-astra" });
+        assert.equal(refused.status, 400);
+        assert.match(await refused.text(), /not allowed/);
+        assert.equal(relay.calls.length, 1);
+
+        const health = await (await fetch(`${relay.base}/health`)).json();
+        assert.deepEqual(health.models, ["openai/gpt-6.1-sol"]);
+    } finally {
+        await relay.close();
+    }
+});

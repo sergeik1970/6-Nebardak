@@ -89,6 +89,8 @@ export const askModel = async (
     settings: ModelSettings,
     pngBase64: string,
     prompt = PLAN_READING_PROMPT,
+    /** One of the relay's allowed models; its default when left out. */
+    model?: string,
 ): Promise<{ text: string; usage: ModelUsage | null }> => {
     const response = await fetch(`${settings.relayUrl}/v1/vision`, {
         method: "POST",
@@ -98,6 +100,7 @@ export const askModel = async (
         },
         body: JSON.stringify({
             prompt,
+            ...(model ? { model } : {}),
             image: { mimeType: "image/png", base64: pngBase64 },
             json: true,
         }),

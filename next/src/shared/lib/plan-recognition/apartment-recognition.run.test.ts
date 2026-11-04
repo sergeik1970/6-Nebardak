@@ -25,10 +25,19 @@ import {
  * the AI relay about every `name.png|jpg` in ~/stylefinder-plans/apartments
  * that has a `name.truth.json` (an ApartmentTruth). Optional PLAN_ONLY=name
  * runs one plan; PLAN_REUSE=1 rescores the last answers and asks only for
- * plans that have none.
+ * plans that have none; PLAN_MODEL=<model> asks one of the relay's other
+ * allowed models.
  */
 const DIRECTORY = path.join(os.homedir(), "stylefinder-plans", "apartments");
-const OUTPUT = path.join(process.cwd(), "test-results", "plan-recognition", "apartments");
+/** PLAN_MODEL picks one of the relay's allowed models; each model gets its own report. */
+const MODEL = process.env.PLAN_MODEL || undefined;
+const OUTPUT = path.join(
+    process.cwd(),
+    "test-results",
+    "plan-recognition",
+    "apartments",
+    ...(MODEL ? [MODEL.replace(/[^a-z0-9.-]+/gi, "_")] : []),
+);
 /** Sheets are A3 with small dimension numbers: send more pixels than for one room. */
 const MAX_SIDE = 2800;
 
@@ -87,6 +96,7 @@ describe.runIf(process.env.PLAN_RECOGNITION === "apartments")("apartment plan re
                         settings!,
                         png.toString("base64"),
                         APARTMENT_READING_PROMPT,
+                        MODEL,
                     ));
                 const parsed = apartmentFromModel(answerJson(answer));
                 results.push({
@@ -110,7 +120,7 @@ describe.runIf(process.env.PLAN_RECOGNITION === "apartments")("apartment plan re
         }
 
         const lines = [
-            `# Распознавание квартир: ${relay.provider} ${relay.model}`,
+            `# Распознавание квартир: ${relay.provider} ${MODEL ?? relay.model}`,
             "",
             "| План | Комнаты найдены | Лишние | Площадь, медиана ошибки | Стены точнее 5 см | Ошибка стены, медиана, мм | Окна верно | Вход | Время | Цена, $ |",
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: | ---: | ---: |",

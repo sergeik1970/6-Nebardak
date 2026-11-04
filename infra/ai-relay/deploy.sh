@@ -21,6 +21,8 @@ fi
 chmod 600 .env
 # 120 s was too short for whole-apartment plans.
 sed -i 's/^RELAY_TIMEOUT_SECONDS=120$/RELAY_TIMEOUT_SECONDS=300/' .env
+# Models a request may choose, for comparing them; edit the line in .env to change.
+grep -q '^AI_MODELS=' .env || echo 'AI_MODELS=google/gemini-4-argon,openai/gpt-6.1-sol,openai/gpt-6.1-terra,qwen/qwen3.8-flash' >> .env
 install -d -o 1000 -g 1000 -m 700 data
 docker compose up -d --build --force-recreate
 sleep 3

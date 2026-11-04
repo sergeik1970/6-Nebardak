@@ -27,6 +27,10 @@ const port = number(env.PORT, 8790);
 createRelay({
     token: env.RELAY_TOKEN,
     provider,
+    models: (env.AI_MODELS ?? "")
+        .split(",")
+        .map((model) => model.trim())
+        .filter(Boolean),
     dailyLimit: number(env.RELAY_DAILY_LIMIT, 300),
     timeoutMs: number(env.RELAY_TIMEOUT_SECONDS, 300) * 1000,
     prices,
