@@ -24,7 +24,7 @@ import {
  * Whole-apartment plans: `PLAN_RECOGNITION=apartments` asks the model through
  * the AI relay about every `name.png|jpg` in ~/stylefinder-plans/apartments
  * that has a `name.truth.json` (an ApartmentTruth). Optional PLAN_ONLY=name
- * runs one plan; PLAN_REUSE=1 rescores the last answers and asks only for
+ * (comma-separated) runs only those; PLAN_REUSE=1 rescores the last answers and asks only for
  * plans that have none; PLAN_MODEL=<model> asks one of the relay's other
  * allowed models; PLAN_TAG=<name> stores a repeated run separately.
  */
@@ -54,13 +54,13 @@ describe.runIf(process.env.PLAN_RECOGNITION === "apartments")("apartment plan re
         const relay = await relayStatus(settings!);
         if ("error" in relay) throw new Error(relay.error);
 
-        const only = process.env.PLAN_ONLY;
+        const only = process.env.PLAN_ONLY?.split(",").map((name) => name.trim());
         const plans = fs
             .readdirSync(DIRECTORY)
             .filter((file) => /\.(png|jpe?g)$/i.test(file))
             .map((file) => ({ file, name: file.replace(/\.(png|jpe?g)$/i, "") }))
             .filter(({ name }) => fs.existsSync(path.join(DIRECTORY, `${name}.truth.json`)))
-            .filter(({ name }) => !only || name === only);
+            .filter(({ name }) => !only || only.includes(name));
         expect(plans.length, `Нет планов с правильными ответами в ${DIRECTORY}`).toBeGreaterThan(0);
 
         fs.mkdirSync(OUTPUT, { recursive: true });
@@ -137,7 +137,7 @@ describe.runIf(process.env.PLAN_RECOGNITION === "apartments")("apartment plan re
         const sum = (pick: (score: ApartmentScore) => number) =>
             scored.reduce((total, score) => total + pick(score), 0);
         lines.push(
-            `**Итого:** ответ разобран в ${scored.length} из ${results.length}; комнат найдено ${sum((score) => score.roomsFound)} из ${sum((score) => score.rooms)}, лишних ${sum((score) => score.roomsExtra)}; стен точнее 5 см ${sum((score) => score.wallsExact)} из ${sum((score) => score.walls)}; окна верно в ${sum((score) => score.windowsRight)} комнатах из ${sum((score) => score.windowsChecked)}.`,
+            `**Итого:** ответ разобран в ${scored.length} из ${results.length}; комнат найдено ${sum((score) => score.roomsFound)} из ${sum((score) => score.rooms)} (без размеров ${sum((score) => score.roomsUnmeasured)}), лишних ${sum((score) => score.roomsExtra)}; стен точнее 5 см ${sum((score) => score.wallsExact)} из ${sum((score) => score.walls)}; окна верно в ${sum((score) => score.windowsRight)} комнатах из ${sum((score) => score.windowsChecked)}.`,
             "",
             `**Расход прогона:** ${results.reduce((total, result) => total + (result.usage?.cost ?? 0), 0).toFixed(4)} $, токенов на выходе ${results.reduce((total, result) => total + (result.usage?.outputTokens ?? 0), 0)}.`,
             "",

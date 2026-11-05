@@ -52,9 +52,22 @@ export interface ApartmentRoomReading {
     name: string;
     reading: PlanReading;
     entrances: number;
+    /** Windows the model saw but could not place (BTI plans give no offsets). */
+    unplacedWindows: number;
+    /** False when the model named the room but gave no usable contour. */
+    measured: boolean;
 }
 
-/** A model's apartment answer, checked; malformed rooms make the answer an error. */
+const placed = (opening: unknown) => {
+    const { wall, offset, width } = (opening ?? {}) as Record<string, unknown>;
+    return typeof wall === "number" && typeof offset === "number" && typeof width === "number";
+};
+
+/**
+ * A model's apartment answer, checked. A room without a usable contour is
+ * kept unmeasured and an opening without a position only as a count, since
+ * many plans (BTI) dimension neither small rooms nor openings.
+ */
 export const apartmentFromModel = (
     raw: unknown,
 ): { rooms: ApartmentRoomReading[] } | { error: string } => {
@@ -65,23 +78,28 @@ export const apartmentFromModel = (
     for (let index = 0; index < rooms.length; index += 1) {
         const room: unknown = rooms[index];
         const source = (room ?? {}) as { name?: unknown; contour?: unknown; openings?: unknown };
-        const openings = Array.isArray(source.openings) ? source.openings : [];
-        const entrances = openings.filter(
-            (opening) => (opening as { kind?: unknown })?.kind === "entrance",
-        ).length;
+        const openings = (Array.isArray(source.openings) ? source.openings : []).filter((opening) =>
+            ["window", "door", "entrance"].includes(
+                (opening as { kind?: unknown })?.kind as string,
+            ),
+        ) as { kind: string }[];
         const result = readingFromModel({
             contour: source.contour,
-            openings: openings.map((opening) =>
-                (opening as { kind?: unknown })?.kind === "entrance"
-                    ? { ...(opening as object), kind: "door" }
-                    : opening,
-            ),
+            openings: openings
+                .filter(placed)
+                .map((opening) =>
+                    opening.kind === "entrance" ? { ...opening, kind: "door" } : opening,
+                ),
         });
-        if ("error" in result) return { error: `Комната ${index + 1}: ${result.error}` };
         parsed.push({
             name: typeof source.name === "string" ? source.name : `#${index + 1}`,
-            reading: result.reading,
-            entrances,
+            // A room the sheet gives no sizes for (a BTI toilet) is still a room found.
+            reading: "error" in result ? { contour: [], openings: [] } : result.reading,
+            measured: !("error" in result),
+            entrances: openings.filter((opening) => opening.kind === "entrance").length,
+            unplacedWindows: openings.filter(
+                (opening) => opening.kind === "window" && !placed(opening),
+            ).length,
         });
     }
     return { rooms: parsed };
@@ -108,7 +126,15 @@ const median = (values: number[]) => {
 };
 
 const simplified = (name: string) => name.toLowerCase().replace(/[^a-zа-яё]/g, "");
+/** A BTI room number at the start of a name: "2", "2а", "2а (балкон)". */
+const roomNumber = (name: string) =>
+    name
+        .trim()
+        .toLowerCase()
+        .match(/^(\d+[а-яa-z]?)(?![\dа-яa-z])/)?.[1];
 const sameName = (first: string, second: string) => {
+    const numbers = [roomNumber(first), roomNumber(second)];
+    if (numbers[0] && numbers[1]) return numbers[0] === numbers[1];
     const a = simplified(first);
     const b = simplified(second);
     return a.length > 2 && b.length > 2 && (a.includes(b) || b.includes(a));
@@ -116,13 +142,17 @@ const sameName = (first: string, second: string) => {
 
 /** Truth wall → the nearest wall length the model gave for that room. */
 const wallErrors = (truth: number[], read: number[]) =>
-    truth.map((length) => Math.min(...read.map((candidate) => Math.abs(candidate - length))));
+    read.length
+        ? truth.map((length) => Math.min(...read.map((candidate) => Math.abs(candidate - length))))
+        : truth.map(() => Number.POSITIVE_INFINITY);
 
 export interface ApartmentScore {
     rooms: number;
     roomsFound: number;
     /** Model rooms that match no truth room. */
     roomsExtra: number;
+    /** Rooms found that the model left without sizes (the sheet gives none). */
+    roomsUnmeasured: number;
     /** Median |area − truth| / truth over matched rooms with a known area. */
     areaErrorMedian: number;
     walls: number;
@@ -146,8 +176,10 @@ export const scoreApartment = (
     const read = rooms.map((room) => ({
         room,
         area: contourArea(room.reading.contour),
-        walls: wallLengths(room.reading.contour),
-        windows: room.reading.openings.filter((opening) => opening.kind === "window").length,
+        walls: room.reading.contour.length ? wallLengths(room.reading.contour) : [],
+        windows:
+            room.reading.openings.filter((opening) => opening.kind === "window").length +
+            room.unplacedWindows,
     }));
     const unused = new Set(read.map((_, index) => index));
     const order = truth.rooms
@@ -179,7 +211,8 @@ export const scoreApartment = (
                 if (room.area && areaDiff > AREA_LIMIT) return;
                 if (room.walls?.length && wallFit > WALL_FIT_LIMIT) return;
             }
-            if (cost < bestCost) {
+            // An unmeasured room has no cost to compare, but its name still identifies it.
+            if (best === -1 || cost < bestCost) {
                 best = candidateIndex;
                 bestCost = cost;
             }
@@ -201,9 +234,14 @@ export const scoreApartment = (
         const readIndex = matched.get(index);
         if (readIndex === undefined) return { truth: room.name, read: null, areaError: null };
         const candidate = read[readIndex];
-        const areaError = room.area ? Math.abs(candidate.area - room.area) / room.area : null;
+        const areaError =
+            room.area && candidate.room.measured
+                ? Math.abs(candidate.area - room.area) / room.area
+                : null;
         if (areaError !== null) areaErrors.push(areaError);
-        if (room.walls?.length) allWallErrors.push(...wallErrors(room.walls, candidate.walls));
+        // Walls of a room left without sizes count as missed, not as an infinite error.
+        if (room.walls?.length && candidate.room.measured)
+            allWallErrors.push(...wallErrors(room.walls, candidate.walls));
         if (room.windows !== null && room.windows !== undefined) {
             windowsChecked += 1;
             if (candidate.windows === room.windows) windowsRight += 1;
@@ -215,6 +253,8 @@ export const scoreApartment = (
         rooms: truth.rooms.length,
         roomsFound: matched.size,
         roomsExtra: unused.size,
+        roomsUnmeasured: Array.from(matched.values()).filter((index) => !read[index].room.measured)
+            .length,
         areaErrorMedian: median(areaErrors),
         walls,
         wallsExact: allWallErrors.filter((error) => error <= 50).length,

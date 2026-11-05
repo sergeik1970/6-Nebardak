@@ -160,10 +160,44 @@ describe("apartment plan reading", () => {
         });
     });
 
-    it("turns a malformed room into an error", () => {
+    it("matches BTI room numbers and counts windows without a position", () => {
+        const parsed = apartmentFromModel({
+            rooms: [
+                {
+                    name: "2",
+                    contour: rectangle(4000, 3000),
+                    openings: [{ kind: "window", wall: null, offset: null, width: 1500 }],
+                },
+                { name: "12", contour: rectangle(2000, 1500), openings: [] },
+            ],
+        });
+        if ("error" in parsed) throw new Error(parsed.error);
+
+        expect(
+            scoreApartment(
+                {
+                    entrance: false,
+                    rooms: [
+                        { name: "12", walls: [2000], windows: 0 },
+                        { name: "2", walls: [4000], windows: 1 },
+                    ],
+                },
+                parsed.rooms,
+            ),
+        ).toMatchObject({
+            roomsFound: 2,
+            windowsRight: 2,
+            matches: [
+                { truth: "12", read: "12" },
+                { truth: "2", read: "2" },
+            ],
+        });
+    });
+
+    it("turns a malformed answer into an error and keeps an unmeasured room", () => {
         expect(apartmentFromModel({ rooms: [] })).toEqual({ error: "В ответе нет комнат." });
         expect(apartmentFromModel({ rooms: [{ name: "x", contour: [] }] })).toMatchObject({
-            error: expect.stringContaining("Комната 1"),
+            rooms: [{ name: "x", measured: false }],
         });
     });
 });
