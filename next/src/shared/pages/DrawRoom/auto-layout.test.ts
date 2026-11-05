@@ -338,3 +338,34 @@ describe("auto layout in one room of the drawing", () => {
         expect(chaise({ ...corner, mirrored: true }).x).toBe(2200 - 730);
     });
 });
+
+describe("a room where two partitions meet at a corner", () => {
+    // A 6 × 5 m flat: a partition down from the top ends on one across the
+    // middle. Their centre lines meet, leaving a bare 100 × 100 mm square that
+    // the regions count as floor and the furniture check counts as wall.
+    const flat: Room = {
+        width: 6000,
+        depth: 5000,
+        partitions: [
+            { id: "down", start: { x: 3000, y: 0 }, end: { x: 3000, y: 2500 }, thickness: 200 },
+            {
+                id: "across",
+                start: { x: 3000, y: 2500 },
+                end: { x: 6000, y: 2500 },
+                thickness: 200,
+            },
+        ],
+        doors: [],
+        windows: [],
+        radiators: [],
+    };
+
+    it("is cut out for the solver without that square", () => {
+        const regions = getDrawRoomRegions(flat);
+        expect(regions).toHaveLength(2);
+        for (const region of regions) {
+            const result = buildRegionSolverRoom(flat, region);
+            expect(result.status, region.name).toBe("ready");
+        }
+    });
+});

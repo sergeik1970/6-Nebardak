@@ -53,6 +53,14 @@ describe("furniture on the wall drawing", () => {
         expect(furnitureError({ ...item, y: 50 }, [], walls, 100)).toBeNull();
         expect(furnitureError({ ...item, y: 40 }, [], walls, 100)).toContain("стену");
     });
+    it("measures a partition by its own thickness, not the drawing's", () => {
+        const partition = [
+            { id: "partition", start: { x: 0, y: 0 }, end: { x: 5000, y: 0 }, thickness: 50 },
+        ];
+        // Against a 50 mm partition the face is 25 mm from its centre line.
+        expect(furnitureError({ ...item, y: 25 }, [], partition, 100)).toBeNull();
+        expect(furnitureError({ ...item, y: 15 }, [], partition, 100)).toContain("стену");
+    });
     it("ignores the moved item itself and rejects overlap with another item", () => {
         expect(furnitureError(item, [item], [], 100)).toBeNull();
         expect(furnitureError({ ...item, id: "other", x: 1100 }, [item], [], 100)).toContain(

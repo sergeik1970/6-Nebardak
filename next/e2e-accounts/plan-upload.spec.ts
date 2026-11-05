@@ -173,6 +173,26 @@ test("a real BTI plan is read through the relay and the whole flat opens", async
     await page.locator("[data-draw-room-step='rooms']").click();
     expect(await page.locator("[data-draw-room-region-item]").count()).toBeGreaterThanOrEqual(8);
     await page.getByRole("button", { name: "Вместить" }).click();
+    await page.screenshot({ path: "test-results/plan-upload/live-flat.png" });
+
+    // The point of it all: the rebuilt flat is furnished in one step.
+    await page.locator("[data-draw-room-step='furniture']").click();
+    await page.locator("[data-furniture-auto-layout]").click();
+    const apartment = page.locator("[data-apartment-furnish='true']");
+    await apartment.getByRole("button", { name: "Обставить квартиру" }).click();
+    const brief = page.getByRole("dialog", { name: "Расскажите о семье" });
+    await brief.getByRole("button", { name: "Обычная семья — подберите сами" }).click();
+    await expect(
+        apartment.locator("[data-apartment-furnish-outcome='furnished']").first(),
+    ).toBeVisible({
+        timeout: 180_000,
+    });
+    await expect(apartment.getByRole("status").first()).toContainText("Обставлено комнат", {
+        timeout: 180_000,
+    });
+    const summary = await apartment.getByRole("status").first().textContent();
+    console.log(`furnish summary: ${summary}`);
+    await page.keyboard.press("Escape");
     fs.mkdirSync("test-results/plan-upload", { recursive: true });
     await page.screenshot({ path: "test-results/plan-upload/live-room.png" });
 });

@@ -15,8 +15,11 @@ export const ASSEMBLY_OUTER_WALL_MM = 100;
 const BOARD_ORIGIN_MM = 1000;
 const PAD_CELLS = 4;
 const OUTSIDE = -1;
-/** Steps in a wall up to this many cells (200 mm) are the model's noise, not the building. */
-const STRAIGHTEN_CELLS = 4;
+/**
+ * Steps in a room's side up to this many cells (450 mm) are lined up: the
+ * planner's walls are at least 500 mm, so a shorter step cannot be kept.
+ */
+const STRAIGHTEN_CELLS = 9;
 
 export interface AssembledRoom {
     /** Index into the model's rooms. */
@@ -137,43 +140,156 @@ const growLabels = (grid: Grid, area: Uint8Array) => {
 };
 
 /**
- * Pulls each boundary between two labels onto one line where the model drew
- * neighbouring faces up to 200 mm apart: such a step in a wall is noise.
+ * Splits each wall gap straight down its middle: a gap cell goes to the room
+ * it reaches first looking left, right, up or down. Growing by distance
+ * instead cuts gap corners on a diagonal, a staircase the editor cannot
+ * keep. Cells no straight look reaches stay for the distance growth.
+ */
+const assignByRays = (grid: Grid, area: Uint8Array, reach: number) => {
+    const { width, height } = grid;
+    const source = Int16Array.from(grid.cells);
+    for (let row = 0; row < height; row += 1) {
+        for (let column = 0; column < width; column += 1) {
+            const index = row * width + column;
+            if (!area[index] || source[index] !== OUTSIDE) continue;
+            let best = OUTSIDE;
+            let bestDistance = reach + 1;
+            for (const [dc, dr] of [
+                [-1, 0],
+                [1, 0],
+                [0, -1],
+                [0, 1],
+            ]) {
+                for (let step = 1; step < bestDistance; step += 1) {
+                    const c = column + dc * step;
+                    const r = row + dr * step;
+                    if (c < 0 || r < 0 || c >= width || r >= height || !area[r * width + c]) break;
+                    const label = source[r * width + c];
+                    if (label === OUTSIDE) continue;
+                    best = label;
+                    bestDistance = step;
+                    break;
+                }
+            }
+            if (best !== OUTSIDE) grid.cells[index] = best;
+        }
+    }
+};
+
+/**
+ * Lines up each side of every room: where the model drew one wall of a room
+ * up to 450 mm off along different neighbours, the side takes its most
+ * common line and the neighbours give or take the difference. Real steps
+ * in a room are larger and stay; the outer face is left as simplified.
  */
 const straightenBoundaries = (grid: Grid) => {
-    for (const vertical of [true, false]) {
-        const lines = vertical ? grid.height : grid.width;
-        const across = vertical ? grid.width : grid.height;
-        const at = (line: number, position: number) =>
-            vertical ? grid.get(position, line) : grid.get(line, position);
-        const put = (line: number, position: number, value: number) =>
-            vertical ? grid.set(position, line, value) : grid.set(line, position, value);
-        // Boundaries by (before, after) label pair: where along each line they fall.
-        const pairs = new Map<string, { line: number; position: number }[]>();
-        for (let line = 0; line < lines; line += 1) {
-            for (let position = 1; position < across; position += 1) {
-                const before = at(line, position - 1);
-                const after = at(line, position);
-                if (before === after) continue;
-                const key = `${before}|${after}`;
-                pairs.set(key, [...(pairs.get(key) ?? []), { line, position }]);
+    const { width, height } = grid;
+    const labels = new Set<number>();
+    grid.cells.forEach((label) => {
+        if (label !== OUTSIDE) labels.add(label);
+    });
+    // [dc, dr]: where the neighbour across this side lies.
+    const sides: [number, number][] = [
+        [0, -1],
+        [0, 1],
+        [-1, 0],
+        [1, 0],
+    ];
+    labels.forEach((label) => {
+        for (const [dc, dr] of sides) {
+            const vertical = dc !== 0;
+            // Each line across the side (a column for top/bottom, a row for left/right)
+            // and where along it the room's face is.
+            const faces: { line: number; at: number }[] = [];
+            const lines = vertical ? height : width;
+            const span = vertical ? width : height;
+            for (let line = 0; line < lines; line += 1) {
+                for (let at = 0; at < span; at += 1) {
+                    const column = vertical ? at : line;
+                    const row = vertical ? line : at;
+                    if (grid.get(column, row) !== label) continue;
+                    const across = grid.get(column + dc, row + dr);
+                    if (across === label || across === OUTSIDE) continue;
+                    faces.push({ line, at });
+                }
+            }
+            if (!faces.length) continue;
+            const counts = new Map<number, number>();
+            faces.forEach((face) => counts.set(face.at, (counts.get(face.at) ?? 0) + 1));
+            const main = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0];
+            const direction = vertical ? dc : dr;
+            for (const face of faces) {
+                const offset = (face.at - main) * direction;
+                if (offset === 0 || Math.abs(offset) > STRAIGHTEN_CELLS) continue;
+                const cell = (at: number) =>
+                    vertical ? ([at, face.line] as const) : ([face.line, at] as const);
+                if (offset < 0) {
+                    // The face stops short of the line: take the neighbour's cells up to it.
+                    for (let step = 1; step <= -offset; step += 1) {
+                        const [c, r] = cell(face.at + direction * step);
+                        if (grid.get(c, r) !== OUTSIDE) grid.set(c, r, label);
+                    }
+                } else {
+                    // The face sticks out past the line: give those cells to the neighbour.
+                    const [nc, nr] = cell(face.at + direction);
+                    const neighbour = grid.get(nc, nr);
+                    for (let step = 0; step < offset; step += 1) {
+                        const [c, r] = cell(face.at - direction * step);
+                        if (grid.get(c, r) === label) grid.set(c, r, neighbour);
+                    }
+                }
             }
         }
-        pairs.forEach((points, key) => {
-            const [before, after] = key.split("|").map(Number);
-            const positions = points.map((point) => point.position).sort((a, b) => a - b);
-            const median = positions[Math.floor(positions.length / 2)];
-            for (const { line, position } of points) {
-                if (position === median || Math.abs(position - median) > STRAIGHTEN_CELLS) continue;
-                if (position < median) {
-                    for (let p = position; p < median; p += 1)
-                        if (at(line, p) === after) put(line, p, before);
-                } else {
-                    for (let p = median; p < position; p += 1)
-                        if (at(line, p) === before) put(line, p, after);
+    });
+};
+
+/** No room is narrower than this: anything thinner is grid noise from a wide wall gap. */
+const SLIVER_CELLS = 3;
+
+/**
+ * Hands each room's strips narrower than 350 mm to the neighbour they touch
+ * most. Where three rooms meet across a wide gap the nearest-room split
+ * leaves such strips, and a room with a tail is not a rectangle the planner
+ * can furnish.
+ */
+const removeSlivers = (grid: Grid) => {
+    const { width, height } = grid;
+    const labels = new Set<number>();
+    grid.cells.forEach((label) => {
+        if (label !== OUTSIDE) labels.add(label);
+    });
+    for (let pass = 0; pass < 3; pass += 1) {
+        let changed = false;
+        labels.forEach((label) => {
+            const mask = Uint8Array.from(grid.cells, (value) => (value === label ? 1 : 0));
+            const opened = filterMask(
+                filterMask(mask, width, height, SLIVER_CELLS, false),
+                width,
+                height,
+                SLIVER_CELLS,
+                true,
+            );
+            // A room smaller than the opening's square is kept whole.
+            if (!opened.some(Boolean)) return;
+            for (let index = 0; index < mask.length; index += 1) {
+                if (!mask[index] || opened[index]) continue;
+                const column = index % width;
+                const row = Math.floor(index / width);
+                const counts = new Map<number, number>();
+                for (let dr = -SLIVER_CELLS; dr <= SLIVER_CELLS; dr += 1)
+                    for (let dc = -SLIVER_CELLS; dc <= SLIVER_CELLS; dc += 1) {
+                        const other = grid.get(column + dc, row + dr);
+                        if (other !== label && other !== OUTSIDE)
+                            counts.set(other, (counts.get(other) ?? 0) + 1);
+                    }
+                const best = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
+                if (best) {
+                    grid.cells[index] = best[0];
+                    changed = true;
                 }
             }
         });
+        if (!changed) break;
     }
 };
 
@@ -436,7 +552,10 @@ export const assembleApartment = (rooms: ApartmentRoomReading[]): AssembledApart
     });
 
     // 3. Walls between rooms split down the middle, then straightened.
+    assignByRays(grid, outline, CLOSING_CELLS * 2);
     growLabels(grid, outline);
+    straightenBoundaries(grid);
+    removeSlivers(grid);
     straightenBoundaries(grid);
     straightenBoundaries(grid);
     removeSpecks(grid);
@@ -520,22 +639,67 @@ export const assembleApartment = (rooms: ApartmentRoomReading[]): AssembledApart
         };
         const column = Math.round((middle.x - BOARD_ORIGIN_MM) / ASSEMBLY_CELL_MM) + pad;
         const row = Math.round((middle.y - BOARD_ORIGIN_MM) / ASSEMBLY_CELL_MM) + pad;
-        let gap = 0;
-        for (let step = -CLOSING_CELLS * 2; step <= CLOSING_CELLS * 2; step += 1) {
-            const c = vertical ? column + step : column;
-            const r = vertical ? row : row + step;
-            if (c < 0 || r < 0 || c >= width || r >= height) continue;
-            if (drawn[r * width + c] === OUTSIDE) gap += 1;
-        }
-        const value = Math.min(400, Math.max(50, gap * ASSEMBLY_CELL_MM));
+        // The gap straight across the wall: from one room's face to the other's.
+        const drawnAt = (c: number, r: number) =>
+            c < 0 || r < 0 || c >= width || r >= height ? OUTSIDE : drawn[r * width + c];
+        const reachOut = (direction: number) => {
+            for (let step = 0; step <= CLOSING_CELLS * 2; step += 1) {
+                const c = vertical ? column + direction * step - (direction < 0 ? 1 : 0) : column;
+                const r = vertical ? row : row + direction * step - (direction < 0 ? 1 : 0);
+                if (drawnAt(c, r) !== OUTSIDE) return step;
+            }
+            return null;
+        };
+        const before = reachOut(-1);
+        const after = reachOut(1);
+        const gap = before === null || after === null ? 2 : before + after;
+        const value = Math.min(300, Math.max(50, gap * ASSEMBLY_CELL_MM));
         gapOf.set(key, value);
         return value;
     };
+    // One straight wall line has one thickness, or the rooms along it get steps
+    // the planner cannot furnish: the median of its pieces' gaps.
+    const gaps = pieces.map((piece) =>
+        piece.pair[0] === OUTSIDE ? 0 : thickness(piece.pair, piece),
+    );
+    const lineOf = pieces.map((_, index) => index);
+    const root = (index: number): number =>
+        lineOf[index] === index ? index : (lineOf[index] = root(lineOf[index]));
+    pieces.forEach((piece, index) => {
+        if (!gaps[index]) return;
+        pieces.forEach((other, otherIndex) => {
+            if (otherIndex <= index || !gaps[otherIndex]) return;
+            const vertical = piece.start.x === piece.end.x;
+            const sameLine = vertical
+                ? other.start.x === other.end.x && other.start.x === piece.start.x
+                : other.start.y === other.end.y && other.start.y === piece.start.y;
+            const touching = [piece.start, piece.end].some((point) =>
+                [other.start, other.end].some((end) => end.x === point.x && end.y === point.y),
+            );
+            if (sameLine && touching) lineOf[root(otherIndex)] = root(index);
+        });
+    });
+    const lineThickness = new Map<number, number>();
+    pieces.forEach((_, index) => {
+        if (!gaps[index]) return;
+        const line = root(index);
+        if (lineThickness.has(line)) return;
+        const members = pieces
+            .map((__, other) => other)
+            .filter((other) => gaps[other] && root(other) === line)
+            .map((other) => gaps[other])
+            .sort((first, second) => first - second);
+        lineThickness.set(line, Math.round(members[Math.floor(members.length / 2)] / 50) * 50);
+    });
+    const thicknessOf = (index: number) =>
+        gaps[index] ? Math.max(50, lineThickness.get(root(index)) ?? 100) : 0;
+    // Partitions keep their centre-line ends so the wall graph stays connected;
+    // the corner squares they leave bare are cut off when a room is furnished.
     const segments: DrawWallSegment[] = pieces.map((piece, index) => ({
         id: `wall-${index + 1}`,
         start: piece.start,
         end: piece.end,
-        ...(piece.pair[0] === OUTSIDE ? {} : { thickness: thickness(piece.pair, piece) }),
+        ...(gaps[index] ? { thickness: thicknessOf(index) } : {}),
     }));
 
     // 8. Each room keeps its name, kind and a point inside it to find its region again.

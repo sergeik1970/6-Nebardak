@@ -213,6 +213,128 @@ const regionOutline = (region: Pick<DrawRoomRegion, "clearEdges">): Point[] | nu
     });
 };
 
+type Box = { left: number; top: number; right: number; bottom: number };
+
+/**
+ * The outline of a set of clear rectangles, clockwise, each face pulled
+ * inward onto the 50 mm lattice; the largest piece if they fall apart.
+ */
+const outlineOfRects = (rects: Box[]): Point[] | null => {
+    if (!rects.length) return null;
+    const xs = Array.from(new Set(rects.flatMap((rect) => [rect.left, rect.right]))).sort(
+        (a, b) => a - b,
+    );
+    const ys = Array.from(new Set(rects.flatMap((rect) => [rect.top, rect.bottom]))).sort(
+        (a, b) => a - b,
+    );
+    const filled = (column: number, row: number) =>
+        column >= 0 &&
+        row >= 0 &&
+        column < xs.length - 1 &&
+        row < ys.length - 1 &&
+        rects.some(
+            (rect) =>
+                rect.left <= xs[column] &&
+                rect.right >= xs[column + 1] &&
+                rect.top <= ys[row] &&
+                rect.bottom >= ys[row + 1],
+        );
+    // Directed boundary edges with the filled side on the right (screen axes).
+    const next = new Map<string, { column: number; row: number }[]>();
+    const add = (from: [number, number], to: [number, number]) => {
+        const key = `${from[0]},${from[1]}`;
+        next.set(key, [...(next.get(key) ?? []), { column: to[0], row: to[1] }]);
+    };
+    for (let row = 0; row <= ys.length - 1; row += 1) {
+        for (let column = 0; column <= xs.length - 1; column += 1) {
+            const here = filled(column, row);
+            if (here !== filled(column, row - 1)) {
+                if (here) add([column, row], [column + 1, row]);
+                else add([column + 1, row], [column, row]);
+            }
+            if (here !== filled(column - 1, row)) {
+                if (here) add([column, row + 1], [column, row]);
+                else add([column, row], [column, row + 1]);
+            }
+        }
+    }
+    const loops: Point[][] = [];
+    const used = new Set<string>();
+    next.forEach((targets, key) =>
+        targets.forEach((first) => {
+            const [sc, sr] = key.split(",").map(Number);
+            if (used.has(`${sc},${sr}>${first.column},${first.row}`)) return;
+            const loop: Point[] = [];
+            let from = { column: sc, row: sr };
+            let to = first;
+            for (let guard = 0; guard < 10_000; guard += 1) {
+                used.add(`${from.column},${from.row}>${to.column},${to.row}`);
+                loop.push({ x: xs[from.column], y: ys[from.row] });
+                if (to.column === sc && to.row === sr) break;
+                const options = (next.get(`${to.column},${to.row}`) ?? []).filter(
+                    (option) => !used.has(`${to.column},${to.row}>${option.column},${option.row}`),
+                );
+                if (!options.length) break;
+                from = to;
+                to = options[0];
+            }
+            loops.push(loop);
+        }),
+    );
+    const area = (points: Point[]) =>
+        points.reduce((sum, point, index) => {
+            const following = points[(index + 1) % points.length];
+            return sum + point.x * following.y - following.x * point.y;
+        }, 0) / 2;
+    const simple = (points: Point[]) =>
+        points.filter((point, index) => {
+            const previous = points[(index - 1 + points.length) % points.length];
+            const following = points[(index + 1) % points.length];
+            return !(
+                (previous.x === point.x && point.x === following.x) ||
+                (previous.y === point.y && point.y === following.y)
+            );
+        });
+    const outline = loops
+        .map(simple)
+        .filter((loop) => loop.length >= 4 && area(loop) > 0)
+        .sort((a, b) => area(b) - area(a))[0];
+    if (!outline) return null;
+    const lines = outline.map((start, index) => {
+        const end = outline[(index + 1) % outline.length];
+        const direction = { x: Math.sign(end.x - start.x), y: Math.sign(end.y - start.y) };
+        const inward = { x: -direction.y, y: direction.x };
+        return start.y === end.y
+            ? { horizontal: true, value: roundInward(start.y, inward.y) }
+            : { horizontal: false, value: roundInward(start.x, inward.x) };
+    });
+    // Each corner sits where the edge ending there meets the next one.
+    return outline.map((_, index) => {
+        const previous = lines[(index - 1 + lines.length) % lines.length];
+        const current = lines[index];
+        return current.horizontal
+            ? { x: previous.value, y: current.value }
+            : { x: current.value, y: previous.value };
+    });
+};
+
+/**
+ * A partition's material as the furniture check sees it: its line widened
+ * by half its thickness, ends included. Where two partitions meet at a corner
+ * the region keeps a small square that is wall to the check; cutting it off
+ * here keeps the solver and the check in agreement.
+ */
+const partitionMaterial = (building: Room): Box[] =>
+    (building.partitions ?? []).map((partition) => {
+        const half = partition.thickness / 2;
+        return {
+            left: Math.min(partition.start.x, partition.end.x) - half,
+            right: Math.max(partition.start.x, partition.end.x) + half,
+            top: Math.min(partition.start.y, partition.end.y) - half,
+            bottom: Math.max(partition.start.y, partition.end.y) + half,
+        };
+    });
+
 interface WallItem {
     wall: Room["doors"][number]["wall"];
     segmentId?: string;
@@ -292,7 +414,19 @@ export const buildRegionSolverRoom = (
     building: Room,
     region: Pick<DrawRoomRegion, "clearEdges" | "clearRects">,
 ): RegionSolverRoom => {
-    const outline = regionOutline(region);
+    const material = partitionMaterial(building);
+    const clear = region.clearRects.filter(
+        (rect) =>
+            !material.some(
+                (wall) =>
+                    rect.left >= wall.left &&
+                    rect.right <= wall.right &&
+                    rect.top >= wall.top &&
+                    rect.bottom <= wall.bottom,
+            ),
+    );
+    const outline =
+        clear.length === region.clearRects.length ? regionOutline(region) : outlineOfRects(clear);
     if (!outline)
         return {
             status: "unsupported",

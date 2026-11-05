@@ -136,15 +136,17 @@ export const apartmentToDrawingScene = (assembled: AssembledApartment): Apartmen
     const regions = getDrawRoomRegions(room);
     const items = assembled.rooms.flatMap((source) => {
         const point = toLocal(source.inside);
-        const region = regions.find((candidate) =>
-            candidate.clearRects.some(
-                (rect) =>
-                    point.x >= rect.left &&
-                    point.x <= rect.right &&
-                    point.y >= rect.top &&
-                    point.y <= rect.bottom,
-            ),
-        );
+        // The region around the room's inner point, or the nearest one when the
+        // point fell into a wall that moved during assembly.
+        const distanceTo = (candidate: (typeof regions)[number]) =>
+            Math.min(
+                ...candidate.clearRects.map(
+                    (rect) =>
+                        Math.max(rect.left - point.x, 0, point.x - rect.right) +
+                        Math.max(rect.top - point.y, 0, point.y - rect.bottom),
+                ),
+            );
+        const region = [...regions].sort((a, b) => distanceTo(a) - distanceTo(b))[0];
         return region
             ? [
                   toRoomRegionMetadata({

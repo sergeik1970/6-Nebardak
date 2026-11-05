@@ -144,12 +144,16 @@ export const furnitureBelongsToRoom = (item: DrawFurniture, room: FurnitureRoom)
     );
 };
 
-const wallRect = (wall: DrawWallSegment, thickness: number): Rect => ({
-    x: Math.min(wall.start.x, wall.end.x) - thickness / 2,
-    y: Math.min(wall.start.y, wall.end.y) - thickness / 2,
-    width: Math.abs(wall.end.x - wall.start.x) + thickness,
-    depth: Math.abs(wall.end.y - wall.start.y) + thickness,
-});
+/** A partition carries its own thickness; outer walls share the drawing's. */
+const wallRect = (wall: DrawWallSegment, drawingThickness: number): Rect => {
+    const thickness = wall.thickness ?? drawingThickness;
+    return {
+        x: Math.min(wall.start.x, wall.end.x) - thickness / 2,
+        y: Math.min(wall.start.y, wall.end.y) - thickness / 2,
+        width: Math.abs(wall.end.x - wall.start.x) + thickness,
+        depth: Math.abs(wall.end.y - wall.start.y) + thickness,
+    };
+};
 
 export function furnitureConflicts(
     item: DrawFurniture,
