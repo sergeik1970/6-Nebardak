@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateRoomGeometry } from "@/shared/lib/furniture-planner/geometry";
 import { getRoomArea } from "@/shared/lib/furniture-planner/room-geometry";
 import { apartmentFromModel } from "./apartment";
-import { importPlanRoom } from "./to-room";
+import { importPlanRoom, planRoomLabel, roomKindFromName } from "./to-room";
 
 const read = (room: Record<string, unknown>) => {
     const parsed = apartmentFromModel({ rooms: [{ name: "Комната", ...room }] });
@@ -99,5 +99,29 @@ describe("a room read from a plan becomes a planner room", () => {
 
         expect(imported.room).toBeNull();
         expect(imported.problem).toMatch(/нет размеров/);
+    });
+});
+
+describe("what a room is called and used for", () => {
+    it.each([
+        ["Кухня-гостиная", "kitchen-living"],
+        ["Спальня 2", "bedroom"],
+        ["Детская", "children"],
+        ["Гостиная", "living"],
+        ["Зал", "living"],
+        ["Кухня", "kitchen"],
+        ["Ванная комната", "bathroom"],
+        ["С/у", "bathroom"],
+        ["Прихожая-коридор", "hallway"],
+        ["room at the top right", undefined],
+        ["Залив", undefined],
+        ["2", undefined],
+    ])("%s → %s", (name, kind) => {
+        expect(roomKindFromName(name)).toBe(kind);
+    });
+
+    it("turns a bare BTI number into a readable name", () => {
+        expect(planRoomLabel("2а")).toBe("Комната 2а");
+        expect(planRoomLabel("Спальня")).toBe("Спальня");
     });
 });

@@ -61,6 +61,7 @@ test("a signed-in person opens one room of an uploaded plan in the editor", asyn
     expect(sent.mimeType).toBe("image/jpeg");
     expect(sent.image?.length).toBeGreaterThan(100);
     await expect(dialog.getByText("12 м²")).toBeVisible();
+    await expect(dialog.getByText("· Спальня")).toBeVisible();
     await expect(dialog.getByRole("radio", { name: /Туалет/ })).toBeDisabled();
     await expect(dialog.getByText("На плане нет размеров этой комнаты.")).toBeVisible();
 
@@ -70,7 +71,11 @@ test("a signed-in person opens one room of an uploaded plan in the editor", asyn
     await expect(page.getByText("Комната «Спальня» открыта с плана.")).toBeVisible();
 
     await page.locator("[data-draw-room-step='rooms']").click();
-    await expect(page.locator("[data-draw-room-region-item]")).toHaveCount(1);
+    const region = page.locator("[data-draw-room-region-item]");
+    await expect(region).toHaveCount(1);
+    // The sheet's name and the kind it implies come along.
+    await expect(region.locator("input")).toHaveValue("Спальня");
+    await expect(region.locator("select")).toHaveValue("bedroom");
 });
 
 test("the server refuses plan reading to guests and while it is switched off", async ({ page }) => {

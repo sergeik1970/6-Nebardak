@@ -7,6 +7,7 @@ import {
 import type {
     DoorOpening,
     Room,
+    RoomKind,
     RoomBoundarySegment,
     RoomVertex,
     WindowOpening,
@@ -17,7 +18,12 @@ type Point = { x: number; y: number };
 
 /** A room read from a plan, ready to open in the editor or explained why not. */
 export interface ImportedPlanRoom {
+    /** As the model copied it from the sheet. */
     name: string;
+    /** The name to give the room in the editor: a bare BTI number becomes "Комната 2". */
+    label: string;
+    /** What the sheet's name says the room is for; none when the name does not tell. */
+    kind?: RoomKind;
     /** m², of the contour as the model read it (before simplification). */
     area: number | null;
     /** Some sizes were measured on the drawing, not read: worth checking. */
@@ -32,6 +38,27 @@ export interface ImportedPlanRoom {
 }
 
 const MAX_VERTICES = 16;
+
+/** Sheet names in Russian (and the model's English descriptions) → room kinds; first match wins. */
+const KIND_BY_NAME: [RegExp, RoomKind][] = [
+    [/кухн\S*[\s-]*(гостин|столов)|kitchen[\s-]*living|студи|studio/i, "kitchen-living"],
+    [/спальн|bedroom/i, "bedroom"],
+    [/детск|child|nursery|kids/i, "children"],
+    [/кабинет|office|study/i, "office"],
+    [/гостин|зал(?![а-яё])|living/i, "living"],
+    [/кухн|kitchen/i, "kitchen"],
+    [/с\/у|санузел|сан\. ?узел|ванн|туалет|уборн|душ|bath|toilet|\bwc\b|shower/i, "bathroom"],
+    [/прихож|коридор|холл|тамбур|hall|corridor|entrance/i, "hallway"],
+];
+
+export const roomKindFromName = (name: string): RoomKind | undefined =>
+    KIND_BY_NAME.find(([pattern]) => pattern.test(name))?.[1];
+
+/** A name for the editor; a sheet that only numbers its rooms gets "Комната N". */
+export const planRoomLabel = (name: string) => {
+    const trimmed = name.trim().slice(0, 60);
+    return /^\d+[а-яa-z]?$/i.test(trimmed) ? `Комната ${trimmed}` : trimmed || "Комната";
+};
 /** Coordinates closer than this become one wall line; grows until the contour is valid. */
 const MERGE_STEPS = [20, 60, 150, 300, MIN_ORTHOGONAL_SEGMENT_MM - 1];
 const MIN_OPENING_MM = 300;
@@ -183,8 +210,11 @@ const projection = (segment: RoomBoundarySegment, point: Point) => {
  * guessed; a room the model could not size comes back without a room.
  */
 export const importPlanRoom = (reading: ApartmentRoomReading): ImportedPlanRoom => {
+    const kind = roomKindFromName(reading.name);
     const base = {
         name: reading.name,
+        label: planRoomLabel(reading.name),
+        ...(kind ? { kind } : {}),
         estimated: reading.estimated,
         area: null,
         simplified: false,

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Dialog from "@/shared/components/Dialog";
 import { useAuth } from "@/contexts/AuthContext";
+import { roomKindLabel } from "@/shared/lib/furniture-planner/room-regions";
 import { apartmentFromModel } from "@/shared/lib/plan-recognition/apartment";
 import { importPlanRoom, type ImportedPlanRoom } from "@/shared/lib/plan-recognition/to-room";
 import { PlanImageError, preparePlanImage } from "@/shared/lib/plan-recognition/prepare-image";
@@ -8,7 +9,7 @@ import { readPlan } from "@/services/planRecognitionService";
 import { ApiError } from "@/services/apiClient";
 import { trackGoal } from "@/shared/lib/analytics";
 import type { DrawingProjectScene } from "./project-file";
-import { roomToDrawingScene } from "./room-template";
+import { nameDrawingRoom, roomToDrawingScene } from "./room-template";
 import styles from "./PlanUploadDialog.module.scss";
 
 type Step =
@@ -108,7 +109,8 @@ export default function PlanUploadDialog({
     const openSelected = () => {
         if (step.kind !== "rooms" || selected === null) return;
         const chosen = step.rooms[selected];
-        const scene = chosen?.room ? roomToDrawingScene(chosen.room) : null;
+        const converted = chosen?.room ? roomToDrawingScene(chosen.room) : null;
+        const scene = converted ? nameDrawingRoom(converted, chosen.label, chosen.kind) : null;
         if (!scene) {
             setStep({
                 ...step,
@@ -116,7 +118,7 @@ export default function PlanUploadDialog({
             });
             return;
         }
-        onOpenRoom(scene, chosen.name);
+        onOpenRoom(scene, chosen.label);
         trackGoal("plan_upload_room_opened");
         onClose();
     };
@@ -242,7 +244,7 @@ export default function PlanUploadDialog({
                                 const notes = notesFor(room);
                                 return (
                                     <label
-                                        key={`${room.name}-${index}`}
+                                        key={`${room.label}-${index}`}
                                         className={styles.room}
                                         data-disabled={!room.room || undefined}
                                     >
@@ -254,7 +256,15 @@ export default function PlanUploadDialog({
                                             onChange={() => setSelected(index)}
                                         />
                                         <span>
-                                            <b>{room.name}</b>
+                                            <b>
+                                                {room.label}
+                                                {room.kind && (
+                                                    <span className={styles.kind}>
+                                                        {" "}
+                                                        · {roomKindLabel(room.kind)}
+                                                    </span>
+                                                )}
+                                            </b>
                                             {room.area !== null && (
                                                 <span className={styles.area}>
                                                     {room.area.toLocaleString("ru-RU")} м²

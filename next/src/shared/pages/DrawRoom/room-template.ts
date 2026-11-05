@@ -3,8 +3,13 @@ import type {
     Placement,
     RadiatorObstacle,
     Room,
+    RoomKind,
     WindowOpening,
 } from "@/shared/lib/furniture-planner";
+import {
+    getDrawRoomRegions,
+    toRoomRegionMetadata,
+} from "@/shared/lib/furniture-planner/room-regions";
 import { createDefaultRoom } from "@/shared/lib/furniture-planner/room";
 import { DRAW_ROOM_WALL_LANE_MM } from "@/shared/lib/furniture-planner/draw-room-grid";
 import {
@@ -136,3 +141,34 @@ export const createRectTemplateRoom = (
     ...createDefaultRoom(width, depth),
     ...(wallThickness ? { wallThickness } : {}),
 });
+
+/**
+ * Names the one room of a converted drawing, the way the editor's "Помещения"
+ * step would: under the signature the editor derives from the same walls,
+ * so the name and kind survive the drawing's own re-derivation. A drawing
+ * that is not exactly one room comes back unchanged.
+ */
+export const nameDrawingRoom = (
+    scene: DrawingProjectScene,
+    name: string,
+    kind?: RoomKind,
+): DrawingProjectScene => {
+    const derived = deriveDrawWallGraphRoom(
+        scene.segments,
+        scene.wallThickness ?? DRAW_ROOM_WALL_LANE_MM,
+    );
+    if (!derived) return scene;
+    const regions = getDrawRoomRegions({
+        ...derived.room,
+        doors: scene.doors,
+        windows: scene.windows,
+    });
+    if (regions.length !== 1) return scene;
+    return {
+        ...scene,
+        regions: {
+            version: 1,
+            items: [toRoomRegionMetadata({ signature: regions[0].signature, name, kind })],
+        },
+    };
+};
