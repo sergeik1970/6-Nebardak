@@ -104,6 +104,28 @@ const along = (segment: RoomBoundarySegment, point: Point) => {
     return { t: clamped, distance: across + Math.abs(t - clamped) };
 };
 
+/**
+ * The flat as the editor derives it from a drawing's walls: its clear room
+ * with partitions, and where that room's origin lies on the board.
+ */
+export const drawingRoomOf = (
+    segments: DrawWallSegment[],
+    wallThickness: number = ASSEMBLY_OUTER_WALL_MM,
+): { room: Room; origin: Point } | null => {
+    const derived = deriveDrawWallGraphRoom(segments, wallThickness);
+    if (!derived) return null;
+    return {
+        room: {
+            ...derived.room,
+            partitions: partitionsOf(segments, derived, wallThickness),
+            doors: [],
+            windows: [],
+            radiators: [],
+        },
+        origin: derived.origin,
+    };
+};
+
 export interface ApartmentImport {
     scene: DrawingProjectScene;
     /** The flat as the editor derives it from `scene`: partitions, doors and windows included. */
