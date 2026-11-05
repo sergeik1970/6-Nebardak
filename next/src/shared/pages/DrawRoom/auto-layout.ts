@@ -10,6 +10,7 @@ import {
     isKitchenRunUnit,
     kitchenFixedFurniture,
     validateRoomGeometry,
+    MIN_ORTHOGONAL_SEGMENT_MM,
     type DoorOpening,
     type DrawRoomRegion,
     type FurnitureInstance,
@@ -335,6 +336,91 @@ const partitionMaterial = (building: Room): Box[] =>
         };
     });
 
+const polygonArea = (points: Point[]) =>
+    points.reduce((sum, point, index) => {
+        const following = points[(index + 1) % points.length];
+        return sum + point.x * following.y - following.x * point.y;
+    }, 0) / 2;
+
+const withoutRepeats = (points: Point[]) => {
+    let result = points.filter((point, index) => {
+        const following = points[(index + 1) % points.length];
+        return point.x !== following.x || point.y !== following.y;
+    });
+    for (let changed = true; changed && result.length > 2; ) {
+        changed = false;
+        for (let index = 0; index < result.length; index += 1) {
+            const previous = result[(index - 1 + result.length) % result.length];
+            const point = result[index];
+            const following = result[(index + 1) % result.length];
+            if (
+                (previous.x === point.x && point.x === following.x) ||
+                (previous.y === point.y && point.y === following.y)
+            ) {
+                result = result.filter((_, other) => other !== index);
+                changed = true;
+                break;
+            }
+        }
+    }
+    return result;
+};
+
+/**
+ * Removes steps shorter than the planner's 500 mm wall from a room outline by
+ * moving one of the walls beside the step onto the other's line, always the
+ * way that makes the room smaller: a piece may lose a sliver of floor but can
+ * never be placed in wall material. Used only for a room the planner would
+ * otherwise refuse.
+ */
+const withoutShortSteps = (outline: Point[], minimum: number): Point[] | null => {
+    let points = withoutRepeats(outline);
+    for (let guard = 0; guard < 40; guard += 1) {
+        const lengths = points.map((point, index) => {
+            const following = points[(index + 1) % points.length];
+            return Math.abs(following.x - point.x) + Math.abs(following.y - point.y);
+        });
+        const shortest = lengths.indexOf(Math.min(...lengths));
+        if (lengths[shortest] >= minimum) return points;
+        const n = points.length;
+        const area = polygonArea(points);
+        // An edge lies on a line; moving the line moves both of its corners.
+        const moved = (edge: number, value: number) => {
+            const start = edge % n;
+            const end = (edge + 1) % n;
+            const horizontal = points[start].y === points[end].y;
+            return points.map((point, index) =>
+                index === start || index === end
+                    ? horizontal
+                        ? { x: point.x, y: value }
+                        : { x: value, y: point.y }
+                    : point,
+            );
+        };
+        const lineOf = (edge: number) => {
+            const start = points[edge % n];
+            const end = points[(edge + 1) % n];
+            return start.y === end.y ? start.y : start.x;
+        };
+        const before = (shortest - 1 + n) % n;
+        const after = (shortest + 1) % n;
+        const depth = Math.min(lengths[before], lengths[after]);
+        const candidates = [
+            moved(before, lineOf(after)),
+            moved(after, lineOf(before)),
+            moved(shortest, lineOf(shortest) + depth),
+            moved(shortest, lineOf(shortest) - depth),
+        ]
+            .map(withoutRepeats)
+            .filter((candidate) => candidate.length >= 4)
+            .map((candidate) => ({ candidate, area: polygonArea(candidate) }))
+            .filter((option) => option.area > 0 && option.area <= area);
+        if (!candidates.length) return null;
+        points = candidates.sort((a, b) => b.area - a.area)[0].candidate;
+    }
+    return null;
+};
+
 interface WallItem {
     wall: Room["doors"][number]["wall"];
     segmentId?: string;
@@ -453,7 +539,45 @@ export const buildRegionSolverRoom = (
         partitions: [],
         ...(building.wallThickness ? { wallThickness: building.wallThickness } : {}),
     };
-    const shapeError = validateRoomGeometry(shell);
+    let shapeError = validateRoomGeometry(shell);
+    if (shapeError) {
+        // A step under 500 mm, often a wall drawn a few centimetres off its
+        // neighbour: give up that sliver of floor rather than the whole room.
+        const stepped = withoutShortSteps(
+            vertices.map((vertex) => ({ x: vertex.x, y: vertex.y })),
+            MIN_ORTHOGONAL_SEGMENT_MM,
+        );
+        if (stepped) {
+            const left = Math.min(...stepped.map((point) => point.x));
+            const top = Math.min(...stepped.map((point) => point.y));
+            const fixed = stepped.map((point, index) => ({
+                id: `v${index + 1}`,
+                x: point.x - left,
+                y: point.y - top,
+            }));
+            const candidate: Room = {
+                ...shell,
+                width: Math.max(...fixed.map((vertex) => vertex.x)),
+                depth: Math.max(...fixed.map((vertex) => vertex.y)),
+                ...(fixed.length === 4
+                    ? { geometry: undefined }
+                    : {
+                          geometry: {
+                              version: 1 as const,
+                              kind: "orthogonal" as const,
+                              vertices: fixed,
+                          },
+                      }),
+            };
+            if (!validateRoomGeometry(candidate)) {
+                origin.x += left;
+                origin.y += top;
+                Object.assign(shell, candidate);
+                vertices.splice(0, vertices.length, ...fixed);
+                shapeError = null;
+            }
+        }
+    }
     if (shapeError)
         return {
             status: "unsupported",

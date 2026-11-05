@@ -1,6 +1,8 @@
 import {
     FURNITURE_CATALOG,
+    TV_STAND_ID,
     getRotatedGeometry,
+    isTvOverStand,
     type ClearanceZone,
     type DrawWallSegment,
     type FurnitureDefinition,
@@ -144,6 +146,32 @@ export const furnitureBelongsToRoom = (item: DrawFurniture, room: FurnitureRoom)
     );
 };
 
+const asPlacement = (piece: DrawFurniture) => ({
+    instanceId: piece.id,
+    definitionId: piece.definitionId,
+    x: piece.x,
+    y: piece.y,
+    rotation: piece.rotation,
+    width: piece.width,
+    depth: piece.depth,
+});
+
+const isScreen = (piece: DrawFurniture) =>
+    piece.definitionId !== TV_STAND_ID &&
+    furnitureDefinition(piece.definitionId)?.category === "media";
+
+/**
+ * A TV hangs on the wall over its stand and shares its footprint on the plan,
+ * as the planner lays it out; the overlap is not a collision.
+ */
+const tvHangsOverStand = (first: DrawFurniture, second: DrawFurniture) =>
+    (first.definitionId === TV_STAND_ID &&
+        isScreen(second) &&
+        isTvOverStand(asPlacement(second), asPlacement(first))) ||
+    (second.definitionId === TV_STAND_ID &&
+        isScreen(first) &&
+        isTvOverStand(asPlacement(first), asPlacement(second)));
+
 /** A partition carries its own thickness; outer walls share the drawing's. */
 const wallRect = (wall: DrawWallSegment, drawingThickness: number): Rect => {
     const thickness = wall.thickness ?? drawingThickness;
@@ -204,7 +232,8 @@ export function furnitureConflicts(
             .filter(
                 (other) =>
                     other.id !== item.id &&
-                    furnitureDefinition(other.definitionId)?.mounting === mounting,
+                    furnitureDefinition(other.definitionId)?.mounting === mounting &&
+                    !tvHangsOverStand(item, other),
             )
             .flatMap((other) =>
                 furnitureGeometry(other).bodyRects.map((body) => ({
