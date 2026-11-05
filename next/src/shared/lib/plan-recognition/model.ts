@@ -84,10 +84,13 @@ export interface ModelUsage {
     cost: number | null;
 }
 
-/** Asks the model about one PNG image; returns its raw text answer and what it cost. */
+/** Asks the model about one PNG image (a room by default); returns its raw text answer and what it cost. */
 export const askModel = async (
     settings: ModelSettings,
     pngBase64: string,
+    prompt = PLAN_READING_PROMPT,
+    /** One of the relay's allowed models; its default when left out. */
+    model?: string,
 ): Promise<{ text: string; usage: ModelUsage | null }> => {
     const response = await fetch(`${settings.relayUrl}/v1/vision`, {
         method: "POST",
@@ -96,11 +99,12 @@ export const askModel = async (
             authorization: `Bearer ${settings.relayToken}`,
         },
         body: JSON.stringify({
-            prompt: PLAN_READING_PROMPT,
+            prompt,
+            ...(model ? { model } : {}),
             image: { mimeType: "image/png", base64: pngBase64 },
             json: true,
         }),
-        signal: AbortSignal.timeout(180_000),
+        signal: AbortSignal.timeout(330_000),
     });
     const body = (await response.json().catch(() => ({}))) as {
         text?: string;
@@ -113,11 +117,12 @@ export const askModel = async (
 
 /** The relay's running totals: requests, tokens and dollars this month and overall. */
 export const relayUsage = async (settings: ModelSettings) => {
+    // The totals are a footnote: a relay that just restarted must not lose the run's report.
     const response = await fetch(`${settings.relayUrl}/v1/usage`, {
         headers: { authorization: `Bearer ${settings.relayToken}` },
         signal: AbortSignal.timeout(5_000),
-    });
-    if (!response.ok) return null;
+    }).catch(() => null);
+    if (!response?.ok) return null;
     return (await response.json()) as Record<
         "month" | "total",
         {
