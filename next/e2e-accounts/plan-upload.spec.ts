@@ -78,6 +78,65 @@ test("a signed-in person opens one room of an uploaded plan in the editor", asyn
     await expect(region.locator("select")).toHaveValue("bedroom");
 });
 
+test("a signed-in person opens the whole apartment of an uploaded plan", async ({ page }) => {
+    await registerByApi(page);
+    await page.route("**/api/plan-recognition", (route) =>
+        route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+                model: "stub",
+                ms: 10,
+                answer: {
+                    rooms: [
+                        {
+                            name: "Спальня",
+                            contour: [
+                                { x: 0, y: 0 },
+                                { x: 4000, y: 0 },
+                                { x: 4000, y: 3000 },
+                                { x: 0, y: 3000 },
+                            ],
+                            openings: [
+                                { kind: "window", wall: 0, offset: 1200, width: 1500 },
+                                { kind: "door", wall: 1, offset: 1000, width: 800 },
+                            ],
+                        },
+                        {
+                            name: "Гостиная",
+                            contour: [
+                                { x: 4150, y: 0 },
+                                { x: 9150, y: 0 },
+                                { x: 9150, y: 3000 },
+                                { x: 4150, y: 3000 },
+                            ],
+                            openings: [{ kind: "window", wall: 0, offset: 1500, width: 1800 }],
+                        },
+                    ],
+                },
+            }),
+        }),
+    );
+    await page.goto("/planner", { waitUntil: "networkidle" });
+    await page.getByText("Проект", { exact: true }).click();
+    await page.getByRole("button", { name: "Загрузить план квартиры" }).click();
+    const dialog = page.getByRole("dialog", { name: "Загрузить план" });
+    await dialog.getByRole("checkbox").check();
+    await dialog
+        .getByLabel("Файл плана")
+        .setInputFiles({ name: "plan.png", mimeType: "image/png", buffer: await planPicture() });
+
+    await expect(dialog.getByRole("radio", { name: /Вся квартира/ })).toBeChecked();
+    await dialog.getByRole("button", { name: "Открыть в редакторе" }).click();
+    await expect(dialog).toBeHidden();
+
+    await page.locator("[data-draw-room-step='rooms']").click();
+    const regions = page.locator("[data-draw-room-region-item]");
+    await expect(regions).toHaveCount(2);
+    await expect(regions.locator("input").nth(0)).toHaveValue(/Спальня|Гостиная/);
+    await expect(regions.locator("input").nth(1)).toHaveValue(/Спальня|Гостиная/);
+});
+
 test("the server refuses plan reading to guests and while it is switched off", async ({ page }) => {
     const body = { mimeType: "image/png", image: "A".repeat(200) };
     const headers = { "X-Requested-With": "stylefinder" };
@@ -93,7 +152,7 @@ test("the server refuses plan reading to guests and while it is switched off", a
 
 const LIVE_PLAN = path.join(os.homedir(), "stylefinder-plans", "apartments", "bti-resog-4k.jpg");
 
-test("a real BTI plan is read through the relay and a room opens", async ({ page }) => {
+test("a real BTI plan is read through the relay and the whole flat opens", async ({ page }) => {
     test.skip(!process.env.PLAN_UPLOAD_LIVE, "PLAN_UPLOAD_LIVE=1 asks the real model");
     test.setTimeout(400_000);
     await registerByApi(page);
@@ -104,15 +163,16 @@ test("a real BTI plan is read through the relay and a room opens", async ({ page
     await dialog.getByRole("checkbox").check();
     await dialog.getByLabel("Файл плана").setInputFiles(LIVE_PLAN);
 
-    const rooms = dialog.getByRole("radio");
-    await expect(rooms.first()).toBeVisible({ timeout: 360_000 });
-    expect(await rooms.count()).toBeGreaterThanOrEqual(8);
-    const largest = dialog.getByRole("radio", { name: /3[56],\d+ м²|3[67] м²/ });
-    await largest.check();
+    const whole = dialog.getByRole("radio", { name: /Вся квартира/ });
+    await expect(whole).toBeChecked({ timeout: 360_000 });
+    expect(await dialog.getByRole("radio").count()).toBeGreaterThanOrEqual(9);
+    fs.mkdirSync("test-results/plan-upload", { recursive: true });
+    await dialog.screenshot({ path: "test-results/plan-upload/live-list.png" });
     await dialog.getByRole("button", { name: "Открыть в редакторе" }).click();
     await expect(dialog).toBeHidden();
     await page.locator("[data-draw-room-step='rooms']").click();
-    await expect(page.locator("[data-draw-room-region-item]")).toHaveCount(1);
+    expect(await page.locator("[data-draw-room-region-item]").count()).toBeGreaterThanOrEqual(8);
+    await page.getByRole("button", { name: "Вместить" }).click();
     fs.mkdirSync("test-results/plan-upload", { recursive: true });
     await page.screenshot({ path: "test-results/plan-upload/live-room.png" });
 });

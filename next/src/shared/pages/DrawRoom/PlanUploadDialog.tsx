@@ -10,12 +10,23 @@ import { ApiError } from "@/services/apiClient";
 import { trackGoal } from "@/shared/lib/analytics";
 import type { DrawingProjectScene } from "./project-file";
 import { nameDrawingRoom, roomToDrawingScene } from "./room-template";
+import { apartmentToDrawingScene, type ApartmentImport } from "./apartment-from-plan";
+import { assembleApartment } from "@/shared/lib/plan-recognition/assemble";
 import styles from "./PlanUploadDialog.module.scss";
 
 type Step =
     | { kind: "intro"; error?: string }
     | { kind: "reading" }
-    | { kind: "rooms"; rooms: ImportedPlanRoom[]; error?: string };
+    | {
+          kind: "rooms";
+          rooms: ImportedPlanRoom[];
+          /** The whole flat rebuilt as one drawing, when the plan has two or more rooms. */
+          apartment: ApartmentImport | null;
+          error?: string;
+      };
+
+/** `selected` value for the whole apartment rather than one room. */
+const WHOLE = -1;
 
 const plural = (count: number, one: string, few: string, many: string) => {
     const tens = count % 100;
@@ -37,6 +48,20 @@ const notesFor = (room: ImportedPlanRoom): string[] => [
     ...(room.droppedOpenings
         ? [
               `${room.droppedOpenings} ${plural(room.droppedOpenings, "проём не поставлен", "проёма не поставлены", "проёмов не поставлены")} — добавьте ${room.droppedOpenings === 1 ? "его" : "их"} в редакторе.`,
+          ]
+        : []),
+];
+
+const apartmentNotes = (apartment: ApartmentImport): string[] => [
+    "Размеры комнат собраны по плану и выровнены по стенам — проверьте их перед расстановкой.",
+    ...(apartment.openingsDropped
+        ? [
+              `${apartment.openingsDropped} ${plural(apartment.openingsDropped, "дверь или окно не поставлены", "двери или окна не поставлены", "дверей и окон не поставлены")} — добавьте их в редакторе.`,
+          ]
+        : []),
+    ...(apartment.windowsOnPartitions
+        ? [
+              `${apartment.windowsOnPartitions} ${plural(apartment.windowsOnPartitions, "окно выходит", "окна выходят", "окон выходят")} на лоджию — такие окна редактор пока не ставит.`,
           ]
         : []),
 ];
@@ -88,8 +113,12 @@ export default function PlanUploadDialog({
                 return;
             }
             const rooms = parsed.rooms.map(importPlanRoom);
-            setSelected(rooms.findIndex((room) => room.room !== null));
-            setStep({ kind: "rooms", rooms });
+            const assembled = parsed.rooms.length > 1 ? assembleApartment(parsed.rooms) : null;
+            // A flat of one sized room is that room: offer it only as a room.
+            const apartment =
+                assembled && assembled.rooms.length > 1 ? apartmentToDrawingScene(assembled) : null;
+            setSelected(apartment ? WHOLE : rooms.findIndex((room) => room.room !== null));
+            setStep({ kind: "rooms", rooms, apartment });
             trackGoal("plan_upload_read");
         } catch (error) {
             if (controller.signal.aborted && !(error instanceof ApiError)) {
@@ -108,6 +137,13 @@ export default function PlanUploadDialog({
 
     const openSelected = () => {
         if (step.kind !== "rooms" || selected === null) return;
+        if (selected === WHOLE) {
+            if (!step.apartment) return;
+            onOpenRoom(step.apartment.scene, "Квартира");
+            trackGoal("plan_upload_room_opened", { whole: true });
+            onClose();
+            return;
+        }
         const chosen = step.rooms[selected];
         const converted = chosen?.room ? roomToDrawingScene(chosen.room) : null;
         const scene = converted ? nameDrawingRoom(converted, chosen.label, chosen.kind) : null;
@@ -118,7 +154,7 @@ export default function PlanUploadDialog({
             });
             return;
         }
-        onOpenRoom(scene, chosen.label);
+        onOpenRoom(scene, `Комната «${chosen.label}»`);
         trackGoal("plan_upload_room_opened");
         onClose();
     };
@@ -141,7 +177,10 @@ export default function PlanUploadDialog({
                 <button
                     type="button"
                     data-variant="primary"
-                    disabled={selected === null || !step.rooms[selected]?.room}
+                    disabled={
+                        selected === null ||
+                        (selected === WHOLE ? !step.apartment : !step.rooms[selected]?.room)
+                    }
                     onClick={openSelected}
                 >
                     Открыть в редакторе
@@ -235,11 +274,39 @@ export default function PlanUploadDialog({
                     <>
                         <p>
                             {step.rooms.length
-                                ? "Выберите комнату. Она заменит текущий чертёж — вернуть его можно кнопкой «Отменить». Остальные комнаты останутся в списке: их можно открыть позже без повторной загрузки."
+                                ? "Откройте всю квартиру или одну комнату. Выбранное заменит текущий чертёж — вернуть его можно кнопкой «Отменить». Список останется: другой вариант можно открыть позже без повторной загрузки."
                                 : "Комнат на плане не нашлось."}
                         </p>
                         <fieldset className={styles.rooms}>
                             <legend>Комнаты на плане</legend>
+                            {step.apartment && (
+                                <label className={styles.room}>
+                                    <input
+                                        type="radio"
+                                        name="plan-room"
+                                        checked={selected === WHOLE}
+                                        onChange={() => setSelected(WHOLE)}
+                                    />
+                                    <span>
+                                        <b>Вся квартира</b>
+                                        <span className={styles.area}>
+                                            {step.apartment.rooms}{" "}
+                                            {plural(
+                                                step.apartment.rooms,
+                                                "помещение",
+                                                "помещения",
+                                                "помещений",
+                                            )}
+                                            : стены, перегородки, названия
+                                        </span>
+                                        {apartmentNotes(step.apartment).map((note) => (
+                                            <small key={note} className={styles.note}>
+                                                {note}
+                                            </small>
+                                        ))}
+                                    </span>
+                                </label>
+                            )}
                             {step.rooms.map((room, index) => {
                                 const notes = notesFor(room);
                                 return (

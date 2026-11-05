@@ -193,10 +193,10 @@ export default function ProjectTools({
                 <PlanUploadDialog
                     open={planOpen}
                     onClose={() => setPlanOpen(false)}
-                    onOpenRoom={(roomScene, name) => {
+                    onOpenRoom={(roomScene, what) => {
                         onLoad(roomScene);
                         setMessage(
-                            `Комната «${name}» открыта с плана. Предыдущий чертёж доступен через отмену действия.`,
+                            `${what} открыта с плана. Предыдущий чертёж доступен через отмену действия.`,
                         );
                     }}
                 />

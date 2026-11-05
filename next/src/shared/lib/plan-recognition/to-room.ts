@@ -204,6 +204,28 @@ const projection = (segment: RoomBoundarySegment, point: Point) => {
 };
 
 /**
+ * A room's contour in the plan's own frame, with slanted walls stepped inside
+ * and near-equal coordinates merged: right angles only, as the editor needs.
+ */
+export const straightenContour = (
+    reading: ApartmentRoomReading,
+): { points: Point[]; simplified: boolean } | null => {
+    if (!reading.measured || reading.reading.contour.length < 3) return null;
+    const { points: straight, slanted } = withoutSlants(reading.reading.contour);
+    const gap = MERGE_STEPS[0];
+    const mapX = clusters(
+        straight.map((point) => point.x),
+        gap,
+    );
+    const mapY = clusters(
+        straight.map((point) => point.y),
+        gap,
+    );
+    const points = cleaned(straight.map((point) => ({ x: mapX(point.x), y: mapY(point.y) })));
+    return points.length >= 4 ? { points, simplified: slanted } : null;
+};
+
+/**
  * Turns one room the model read into a planner room: walls straightened to
  * the planner's right angles, then doors and windows put back on the nearest
  * wall. Anything that cannot be represented is dropped and counted, never
