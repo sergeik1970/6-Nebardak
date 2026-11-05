@@ -85,6 +85,7 @@ services:
             - api_internal
             - database_internal
             - smtp_internal
+            - ai_internal
         # Migrations are a controlled deployment step; see DEPLOY.md.
         command: ["node", "dist/src/main"]
         healthcheck:
@@ -110,6 +111,34 @@ services:
             - smtp_internal
             - smtp_egress
         read_only: true
+        init: true
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        pids_limit: 64
+        restart: unless-stopped
+        logging: *default-logging
+
+    ai-tunnel:
+        build:
+            context: ./infra/ai-tunnel
+        image: stylefinder-ai-tunnel:alpine3.24
+        environment:
+            # e.g. ai-tunnel@89.208.107.138; blank keeps the tunnel idle.
+            AI_TUNNEL_TARGET: "${AI_TUNNEL_TARGET:-}"
+            HOME: /tmp
+        volumes:
+            # id_ed25519 (owner 10001, mode 600) and known_hosts; see infra/ai-tunnel/README.md.
+            - "${AI_TUNNEL_KEYS:-./infra/ai-tunnel/keys}:/keys:ro"
+        expose:
+            - "8790"
+        networks:
+            - ai_internal
+            - ai_egress
+        read_only: true
+        tmpfs:
+            - /tmp
         init: true
         security_opt:
             - no-new-privileges:true
@@ -235,4 +264,7 @@ networks:
         internal: true
     smtp_internal:
         internal: true
+    ai_internal:
+        internal: true
+    ai_egress:
     smtp_egress:
