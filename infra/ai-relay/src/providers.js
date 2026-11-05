@@ -26,6 +26,16 @@ export const providerFrom = (env) => {
 };
 
 /** The provider's error text, never the request (which carries the key in a header only). */
+/** The answer's JSON; a body cut off by the timeout is an error, not an empty answer. */
+const readJson = async (response) => {
+    try {
+        return await response.json();
+    } catch (error) {
+        if (!response.ok) return null;
+        throw new Error(`provider answer unreadable: ${error.message}`);
+    }
+};
+
 const failure = (status, body) =>
     new Error(`provider HTTP ${status}: ${body?.error?.message ?? "no message"}`.slice(0, 500));
 
@@ -63,7 +73,7 @@ export const askProvider = async (provider, request, { fetchImpl = fetch, timeou
                 }),
             },
         );
-        const body = await response.json().catch(() => null);
+        const body = await readJson(response);
         if (!response.ok) throw failure(response.status, body);
         const usage = body?.usageMetadata ?? {};
         return {
@@ -104,7 +114,7 @@ export const askProvider = async (provider, request, { fetchImpl = fetch, timeou
             ],
         }),
     });
-    const body = await response.json().catch(() => null);
+    const body = await readJson(response);
     if (!response.ok) throw failure(response.status, body);
     const usage = body?.usage ?? {};
     return {

@@ -28,7 +28,8 @@
         "test:watch": "vitest",
         "test:e2e": "playwright test",
         "test:e2e:headed": "playwright test --headed",
-        "test:e2e:accounts": "sh scripts/e2e-accounts.sh"
+        "test:e2e:accounts": "sh scripts/e2e-accounts.sh",
+        "plan-recognition:apartments": "PLAN_RECOGNITION=apartments vitest run src/shared/lib/plan-recognition/apartment-recognition.run.test.ts"
     },
     "dependencies": {
         "clsx": "^2.1.0",

@@ -5,6 +5,8 @@ import {
     type DrawingProjectScene,
 } from "./project-file";
 import { trackGoal } from "@/shared/lib/analytics";
+import { isPlanUploadEnabled } from "@/shared/config/runtime";
+import PlanUploadDialog from "./PlanUploadDialog";
 import styles from "./project-tools.module.scss";
 
 export type DrawingLayers = {
@@ -62,6 +64,7 @@ export default function ProjectTools({
     }, []);
 
     const [message, setMessage] = useState("");
+    const [planOpen, setPlanOpen] = useState(false);
     const [incoming, setIncoming] = useState<{ scene: DrawingProjectScene; name: string } | null>(
         null,
     );
@@ -96,6 +99,17 @@ export default function ProjectTools({
                     <button type="button" onClick={() => fileInput.current?.click()}>
                         Открыть файл чертежа
                     </button>
+                    {isPlanUploadEnabled && (
+                        <button
+                            type="button"
+                            onClick={(event) => {
+                                event.currentTarget.closest("details")?.removeAttribute("open");
+                                setPlanOpen(true);
+                            }}
+                        >
+                            Загрузить план квартиры
+                        </button>
+                    )}
                     <small>Файл содержит стены, проёмы, мебель и названия помещений.</small>
                     {message && <p role="status">{message}</p>}
                     {incoming && (
@@ -175,6 +189,18 @@ export default function ProjectTools({
                       ? "Не удалось сохранить — скачайте чертёж"
                       : "Загрузка чертежа…"}
             </span>
+            {isPlanUploadEnabled && (
+                <PlanUploadDialog
+                    open={planOpen}
+                    onClose={() => setPlanOpen(false)}
+                    onOpenRoom={(roomScene, what) => {
+                        onLoad(roomScene);
+                        setMessage(
+                            `${what} открыта с плана. Предыдущий чертёж доступен через отмену действия.`,
+                        );
+                    }}
+                />
+            )}
             <input
                 ref={fileInput}
                 type="file"

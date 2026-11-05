@@ -14,6 +14,8 @@ export type AnalyticsGoal =
     | "plan_png_export"
     | "plan_print"
     | "drawing_file_save"
+    | "plan_upload_read"
+    | "plan_upload_room_opened"
     | "signup"
     | "login"
     | "project_created";

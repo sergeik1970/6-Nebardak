@@ -27,6 +27,13 @@ export const isAuthRegistrationEnabled =
 
 export const authUiMode = resolveAuthUiMode(isAuthEnabled, isAuthRegistrationEnabled);
 
+/**
+ * "Загрузить план": reads a floor plan with an AI model abroad, so it needs a
+ * signed-in user and stays off until the consent text is settled.
+ */
+export const isPlanUploadEnabled =
+    isAuthEnabled && readPublicFlag(process.env.NEXT_PUBLIC_PLAN_UPLOAD_ENABLED, false);
+
 export const isBetaBadgeEnabled = readPublicFlag(process.env.NEXT_PUBLIC_BETA_BADGE_ENABLED, true);
 
 export const readCounterId = (value: string | undefined): number | null => {

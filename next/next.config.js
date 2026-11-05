@@ -41,6 +41,9 @@ const nextConfig = {
     // HttpOnly session cookie works exactly as behind Caddy in production.
     ...(process.env.NODE_ENV === "development" && !isStaticExport
         ? {
+              // Reading an uploaded plan takes the model up to a few minutes; the
+              // proxy's 30 s default would cut it off (Caddy has no such limit).
+              experimental: { proxyTimeout: 360_000 },
               async rewrites() {
                   const target = (process.env.API_PROXY_TARGET || "http://localhost:3001").replace(
                       /\/$/,

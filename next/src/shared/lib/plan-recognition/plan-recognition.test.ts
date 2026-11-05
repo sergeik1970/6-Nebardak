@@ -1,5 +1,14 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ROOM_LAB_GENERATED_CASES } from "@/shared/lib/furniture-planner/room-lab";
+import {
+    APARTMENT_READING_PROMPT,
+    apartmentFromModel,
+    contourArea,
+    scoreApartment,
+    type ApartmentTruth,
+} from "./apartment";
 import { answerJson, modelSettingsFrom, parseEnvFile } from "./model";
 import { modelAnswerForRoom, readingFromModel, readingFromRoom } from "./reading";
 import { renderMeasuredPlan } from "./render";
@@ -97,5 +106,138 @@ describe("plan recognition measurement", () => {
         ).toEqual({ relayUrl: "http://localhost:9000", relayToken: "k" });
         expect(modelSettingsFrom({})).toBeNull();
         expect(answerJson('```json\n{"a":1}\n```')).toEqual({ a: 1 });
+    });
+});
+
+describe("apartment plan reading", () => {
+    const rectangle = (width: number, depth: number) => [
+        { x: 0, y: 0 },
+        { x: width, y: 0 },
+        { x: width, y: depth },
+        { x: 0, y: depth },
+    ];
+    const truth: ApartmentTruth = {
+        entrance: true,
+        rooms: [
+            { name: "Спальня", area: 12, walls: [4000, 3000], windows: 1 },
+            { name: "Санузел", area: 3, walls: [2000, 1500], windows: 0 },
+        ],
+    };
+
+    it("matches rooms by size, scores walls and windows, and counts extras", () => {
+        const parsed = apartmentFromModel({
+            rooms: [
+                {
+                    name: "Санузел",
+                    contour: rectangle(2000, 1520),
+                    openings: [{ kind: "entrance", wall: 0, offset: 100, width: 900 }],
+                },
+                {
+                    name: "Room 1",
+                    contour: rectangle(4000, 3000),
+                    openings: [{ kind: "window", wall: 1, offset: 500, width: 1500 }],
+                },
+                { name: "Кладовая", contour: rectangle(1000, 1000), openings: [] },
+            ],
+        });
+        if ("error" in parsed) throw new Error(parsed.error);
+
+        expect(scoreApartment(truth, parsed.rooms)).toMatchObject({
+            rooms: 2,
+            roomsFound: 2,
+            roomsExtra: 1,
+            walls: 4,
+            wallsExact: 4,
+            windowsChecked: 2,
+            windowsRight: 2,
+            entranceRight: true,
+        });
+        expect(contourArea(rectangle(4000, 3000))).toBe(12);
+    });
+
+    it("does not match a room whose size is far off", () => {
+        const parsed = apartmentFromModel({
+            rooms: [{ name: "Room", contour: rectangle(6000, 5000), openings: [] }],
+        });
+        if ("error" in parsed) throw new Error(parsed.error);
+
+        expect(scoreApartment(truth, parsed.rooms)).toMatchObject({
+            roomsFound: 0,
+            roomsExtra: 1,
+            entranceRight: false,
+        });
+    });
+
+    it("matches BTI room numbers and counts windows without a position", () => {
+        const parsed = apartmentFromModel({
+            rooms: [
+                {
+                    name: "2",
+                    contour: rectangle(4000, 3000),
+                    openings: [{ kind: "window", wall: null, offset: null, width: 1500 }],
+                },
+                { name: "12", contour: rectangle(2000, 1500), openings: [] },
+            ],
+        });
+        if ("error" in parsed) throw new Error(parsed.error);
+
+        expect(
+            scoreApartment(
+                {
+                    entrance: false,
+                    rooms: [
+                        { name: "12", walls: [2000], windows: 0 },
+                        { name: "2", walls: [4000], windows: 1 },
+                    ],
+                },
+                parsed.rooms,
+            ),
+        ).toMatchObject({
+            roomsFound: 2,
+            windowsRight: 2,
+            matches: [
+                { truth: "12", read: "12" },
+                { truth: "2", read: "2" },
+            ],
+        });
+    });
+
+    it("checks a developer plan's total area and stated dimensions", () => {
+        const parsed = apartmentFromModel({
+            rooms: [
+                { name: "Кухня-гостиная", contour: rectangle(6000, 4000), openings: [] },
+                { name: "Санузел", contour: rectangle(2000, 1500), openings: [] },
+                { name: "Балкон", contour: rectangle(3000, 1000), openings: [] },
+            ],
+        });
+        if ("error" in parsed) throw new Error(parsed.error);
+
+        expect(
+            scoreApartment(
+                { entrance: false, totalArea: 27, walls: [6000, 1500, 3333], rooms: [] },
+                parsed.rooms,
+            ),
+        ).toMatchObject({ totalAreaError: 0, walls: 3, wallsExact: 2 });
+    });
+
+    it("turns a malformed answer into an error and keeps an unmeasured room", () => {
+        expect(apartmentFromModel({ rooms: [] })).toEqual({ error: "В ответе нет комнат." });
+        expect(apartmentFromModel({ rooms: [{ name: "x", contour: [] }] })).toMatchObject({
+            rooms: [{ name: "x", measured: false }],
+        });
+    });
+});
+
+describe("the plan reading prompt", () => {
+    it("is the same on the server as in the accuracy measurement", () => {
+        const server = fs.readFileSync(
+            path.join(
+                process.cwd(),
+                "../nest/src/services/PlanRecognitionService/plan-reading.prompt.ts",
+            ),
+            "utf8",
+        );
+        const text = server.match(/PLAN_READING_PROMPT = `([\s\S]*?)`;/)?.[1];
+        expect(text).toBe(APARTMENT_READING_PROMPT);
     });
 });

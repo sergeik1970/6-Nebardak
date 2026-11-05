@@ -6,7 +6,8 @@ import {
     getRoomBoundarySegments,
 } from "@/shared/lib/furniture-planner/room-geometry";
 import { parseDrawingProject, serializeDrawingProject } from "./project-file";
-import { createRectTemplateRoom, roomToDrawingScene } from "./room-template";
+import { getDrawRoomRegions } from "@/shared/lib/furniture-planner/room-regions";
+import { createRectTemplateRoom, nameDrawingRoom, roomToDrawingScene } from "./room-template";
 
 const door = {
     id: "door-main",
@@ -117,5 +118,25 @@ describe("an older project's room on the drawing", () => {
         // The piece keeps its place inside the room's clear corner.
         expect(scene!.furniture![0].x - derived!.origin.x).toBe(200);
         expect(scene!.furniture![0].y - derived!.origin.y).toBe(300);
+    });
+});
+
+describe("naming a converted room", () => {
+    it("keeps the name and kind when the editor derives the room again", () => {
+        const scene = nameDrawingRoom(
+            roomToDrawingScene(createRectTemplateRoom(4000, 3000, undefined))!,
+            "Спальня",
+            "bedroom",
+        );
+        const derived = deriveDrawWallGraphRoom(scene.segments, scene.wallThickness ?? 50)!;
+
+        expect(
+            getDrawRoomRegions({
+                ...derived.room,
+                doors: scene.doors,
+                windows: scene.windows,
+                regions: scene.regions,
+            }),
+        ).toEqual([expect.objectContaining({ name: "Спальня", kind: "bedroom" })]);
     });
 });

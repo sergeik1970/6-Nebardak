@@ -72,6 +72,10 @@ services:
             TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-1}"
             RATE_LIMIT_TTL_MS: "${RATE_LIMIT_TTL_MS:-60000}"
             RATE_LIMIT_REQUESTS: "${RATE_LIMIT_REQUESTS:-120}"
+            # Reading uploaded plans through the AI relay; off until consent is settled.
+            PLAN_RECOGNITION_ENABLED: "${PLAN_RECOGNITION_ENABLED:-false}"
+            AI_RELAY_URL: "${AI_RELAY_URL:-}"
+            AI_RELAY_TOKEN: "${AI_RELAY_TOKEN:-}"
         expose:
             - "3001"
         depends_on:
@@ -81,6 +85,7 @@ services:
             - api_internal
             - database_internal
             - smtp_internal
+            - ai_internal
         # Migrations are a controlled deployment step; see DEPLOY.md.
         command: ["node", "dist/src/main"]
         healthcheck:
@@ -115,6 +120,34 @@ services:
         restart: unless-stopped
         logging: *default-logging
 
+    ai-tunnel:
+        build:
+            context: ./infra/ai-tunnel
+        image: stylefinder-ai-tunnel:alpine3.24
+        environment:
+            # e.g. ai-tunnel@89.208.107.138; blank keeps the tunnel idle.
+            AI_TUNNEL_TARGET: "${AI_TUNNEL_TARGET:-}"
+            HOME: /tmp
+        volumes:
+            # id_ed25519 (owner 10001, mode 600) and known_hosts; see infra/ai-tunnel/README.md.
+            - "${AI_TUNNEL_KEYS:-./infra/ai-tunnel/keys}:/keys:ro"
+        expose:
+            - "8790"
+        networks:
+            - ai_internal
+            - ai_egress
+        read_only: true
+        tmpfs:
+            - /tmp
+        init: true
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        pids_limit: 64
+        restart: unless-stopped
+        logging: *default-logging
+
     next:
         <<: *node-security
         build:
@@ -124,6 +157,7 @@ services:
                 NEXT_PUBLIC_AUTH_ENABLED: "${NEXT_PUBLIC_AUTH_ENABLED:-false}"
                 NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED: "${NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED:-false}"
                 NEXT_PUBLIC_BETA_BADGE_ENABLED: "${NEXT_PUBLIC_BETA_BADGE_ENABLED:-true}"
+                NEXT_PUBLIC_PLAN_UPLOAD_ENABLED: "${NEXT_PUBLIC_PLAN_UPLOAD_ENABLED:-false}"
                 # stylefinder.online counter; set it empty to build without analytics.
                 NEXT_PUBLIC_YM_COUNTER_ID: "${NEXT_PUBLIC_YM_COUNTER_ID-113737739}"
         environment:
@@ -230,4 +264,7 @@ networks:
         internal: true
     smtp_internal:
         internal: true
+    ai_internal:
+        internal: true
+    ai_egress:
     smtp_egress:

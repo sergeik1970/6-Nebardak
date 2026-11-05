@@ -38,6 +38,8 @@ export const invalidRequest = (body) => {
     const image = body.image;
     if (!image || typeof image !== "object") return "image is required";
     if (!IMAGE_TYPES.has(image.mimeType)) return "image.mimeType must be png, jpeg or webp";
+    if (body.model !== undefined && (typeof body.model !== "string" || !body.model))
+        return "model must be a non-empty string";
     if (typeof image.base64 !== "string" || !/^[A-Za-z0-9+/]+=*$/.test(image.base64))
         return "image.base64 must be base64";
     return null;
@@ -51,6 +53,8 @@ export const invalidRequest = (body) => {
 export const createRelay = ({
     token,
     provider,
+    /** Models a request may ask for instead of the default, same provider and key. */
+    models = [],
     dailyLimit = 300,
     concurrency = 2,
     bodyLimit = 12 * 1024 * 1024,
@@ -70,6 +74,7 @@ export const createRelay = ({
                 ok: true,
                 provider: provider?.kind ?? null,
                 model: provider?.model ?? null,
+                ...(models.length ? { models } : {}),
             });
             return;
         }
@@ -104,12 +109,18 @@ export const createRelay = ({
         }
         const problem = invalidRequest(body);
         if (problem) return send(response, 400, { error: problem });
+        const model = body.model ?? provider.model;
+        if (model !== provider.model && !models.includes(model))
+            return send(response, 400, {
+                error: `model ${model} is not allowed; allowed: ${[provider.model, ...models].join(", ")}`,
+            });
+        const chosen = { ...provider, model };
 
         running += 1;
         const started = Date.now();
         try {
             const answer = await askProvider(
-                provider,
+                chosen,
                 { prompt: body.prompt, image: body.image, json: body.json === true },
                 { fetchImpl, timeoutMs },
             );
@@ -117,19 +128,19 @@ export const createRelay = ({
             const cost = priceOf(answer.usage, prices);
             usage.record(today, answer.usage, cost);
             log(
-                `vision ok ${provider.model} image=${body.image.base64.length}B ${ms}ms in=${answer.usage.inputTokens} out=${answer.usage.outputTokens} cost=${cost ?? "?"} ${used + 1}/${dailyLimit}`,
+                `vision ok ${chosen.model} image=${body.image.base64.length}B ${ms}ms in=${answer.usage.inputTokens} out=${answer.usage.outputTokens} cost=${cost ?? "?"} ${used + 1}/${dailyLimit}`,
             );
             send(response, 200, {
                 text: answer.text,
                 provider: provider.kind,
-                model: provider.model,
+                model: chosen.model,
                 ms,
                 usage: { ...answer.usage, cost },
             });
         } catch (error) {
             const ms = Date.now() - started;
             usage.record(today, null, null);
-            log(`vision failed ${provider.model} ${ms}ms: ${error.message}`);
+            log(`vision failed ${chosen.model} ${ms}ms: ${error.message}`);
             send(response, 502, { error: error.message });
         } finally {
             running -= 1;
