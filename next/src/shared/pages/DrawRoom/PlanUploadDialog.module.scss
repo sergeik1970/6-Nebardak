@@ -1,0 +1,97 @@
+.body {
+    display: grid;
+    gap: var(--sf-space-3);
+    max-width: 560px;
+
+    p {
+        margin: 0;
+    }
+
+    small {
+        color: var(--sf-color-muted);
+    }
+}
+
+.consent {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--sf-space-2);
+    align-items: start;
+    font-size: 14px;
+    line-height: 1.4;
+
+    input {
+        width: 18px;
+        height: 18px;
+        margin-top: 2px;
+    }
+}
+
+.notice {
+    font-weight: 600;
+}
+
+.error {
+    color: var(--sf-color-danger, #b3261e);
+}
+
+.rooms {
+    display: grid;
+    gap: var(--sf-space-2);
+    max-height: 50vh;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    border: 0;
+
+    legend {
+        margin-bottom: var(--sf-space-2);
+        padding: 0;
+        font-weight: 700;
+    }
+}
+
+.room {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--sf-space-2);
+    align-items: start;
+    padding: var(--sf-space-2) var(--sf-space-3);
+    border: 1px solid var(--sf-color-line-strong);
+    border-radius: var(--sf-radius-md);
+    cursor: pointer;
+
+    > span {
+        display: grid;
+        gap: 2px;
+    }
+
+    &[data-disabled] {
+        cursor: default;
+        opacity: 0.65;
+    }
+
+    &:has(input:checked) {
+        border-color: var(--sf-color-ink);
+    }
+
+    &:has(input:focus-visible) {
+        outline: 3px solid var(--sf-color-focus);
+        outline-offset: 1px;
+    }
+}
+
+.area {
+    color: var(--sf-color-muted);
+    font-size: 14px;
+}
+
+.note,
+.problem {
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.problem {
+    color: var(--sf-color-ink);
+}

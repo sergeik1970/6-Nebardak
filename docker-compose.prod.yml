@@ -72,6 +72,10 @@ services:
             TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-1}"
             RATE_LIMIT_TTL_MS: "${RATE_LIMIT_TTL_MS:-60000}"
             RATE_LIMIT_REQUESTS: "${RATE_LIMIT_REQUESTS:-120}"
+            # Reading uploaded plans through the AI relay; off until consent is settled.
+            PLAN_RECOGNITION_ENABLED: "${PLAN_RECOGNITION_ENABLED:-false}"
+            AI_RELAY_URL: "${AI_RELAY_URL:-}"
+            AI_RELAY_TOKEN: "${AI_RELAY_TOKEN:-}"
         expose:
             - "3001"
         depends_on:
@@ -124,6 +128,7 @@ services:
                 NEXT_PUBLIC_AUTH_ENABLED: "${NEXT_PUBLIC_AUTH_ENABLED:-false}"
                 NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED: "${NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED:-false}"
                 NEXT_PUBLIC_BETA_BADGE_ENABLED: "${NEXT_PUBLIC_BETA_BADGE_ENABLED:-true}"
+                NEXT_PUBLIC_PLAN_UPLOAD_ENABLED: "${NEXT_PUBLIC_PLAN_UPLOAD_ENABLED:-false}"
                 # stylefinder.online counter; set it empty to build without analytics.
                 NEXT_PUBLIC_YM_COUNTER_ID: "${NEXT_PUBLIC_YM_COUNTER_ID-113737739}"
         environment:

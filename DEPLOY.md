@@ -149,6 +149,7 @@ NEXT_PUBLIC_API_URL=/api
 NEXT_PUBLIC_AUTH_ENABLED=false
 NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED=false
 NEXT_PUBLIC_BETA_BADGE_ENABLED=true
+NEXT_PUBLIC_PLAN_UPLOAD_ENABLED=false
 NEXT_PUBLIC_YM_COUNTER_ID=113737739
 ```
 
@@ -161,6 +162,20 @@ NEXT_PUBLIC_YM_COUNTER_ID=113737739
 `NEXT_PUBLIC_AUTH_ENABLED`. Для login-only режима включите первый auth-флаг и
 оставьте registration-флаг выключенным. Серверные `AUTH_ENABLED` и
 `AUTH_REGISTRATION_ENABLED` должны соответствовать опубликованному UI.
+
+«Загрузить план квартиры» (`NEXT_PUBLIC_PLAN_UPLOAD_ENABLED`) работает только
+вместе с аккаунтами и серверными переменными API:
+
+```env
+PLAN_RECOGNITION_ENABLED=false
+AI_RELAY_URL=http://<адрес посредника>:8790
+AI_RELAY_TOKEN=<RELAY_TOKEN посредника, не короче 32 символов>
+```
+
+Изображение плана уходит модели ИИ за пределы России через посредника
+`infra/ai-relay`; включайте оба флага только после того, как согласие на эту
+передачу закреплено в политике конфиденциальности. Боевой сервер должен иметь
+доступ к посреднику (туннель или закрытый порт), иначе запрос вернёт 503.
 
 Не помещайте в переменные с префиксом `NEXT_PUBLIC_` секреты: браузер всё равно
 сможет их прочитать.

@@ -72,6 +72,14 @@ export default defineConfig({
                 // The dev server adds one forwarding hop; each test brings its
                 // own client address, so sign-up limits apply per test.
                 TRUST_PROXY_HOPS: "2",
+                // PLAN_UPLOAD_LIVE=1 reads a real plan through the AI relay (SSH tunnel open,
+                // AI_RELAY_TOKEN set); otherwise plan reading stays off as on a fresh server.
+                ...(process.env.PLAN_UPLOAD_LIVE
+                    ? {
+                          PLAN_RECOGNITION_ENABLED: "true",
+                          AI_RELAY_TOKEN: required("AI_RELAY_TOKEN"),
+                      }
+                    : {}),
             },
         },
         {
@@ -83,6 +91,8 @@ export default defineConfig({
                 NEXT_PUBLIC_API_URL: "/api",
                 NEXT_PUBLIC_AUTH_ENABLED: "true",
                 NEXT_PUBLIC_AUTH_REGISTRATION_ENABLED: "true",
+                // The plan upload screen; the model's answer is stubbed in the test.
+                NEXT_PUBLIC_PLAN_UPLOAD_ENABLED: "true",
                 API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}`,
             },
         },

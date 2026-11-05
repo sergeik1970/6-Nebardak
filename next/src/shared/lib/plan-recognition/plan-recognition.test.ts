@@ -1,6 +1,14 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ROOM_LAB_GENERATED_CASES } from "@/shared/lib/furniture-planner/room-lab";
-import { apartmentFromModel, contourArea, scoreApartment, type ApartmentTruth } from "./apartment";
+import {
+    APARTMENT_READING_PROMPT,
+    apartmentFromModel,
+    contourArea,
+    scoreApartment,
+    type ApartmentTruth,
+} from "./apartment";
 import { answerJson, modelSettingsFrom, parseEnvFile } from "./model";
 import { modelAnswerForRoom, readingFromModel, readingFromRoom } from "./reading";
 import { renderMeasuredPlan } from "./render";
@@ -217,5 +225,19 @@ describe("apartment plan reading", () => {
         expect(apartmentFromModel({ rooms: [{ name: "x", contour: [] }] })).toMatchObject({
             rooms: [{ name: "x", measured: false }],
         });
+    });
+});
+
+describe("the plan reading prompt", () => {
+    it("is the same on the server as in the accuracy measurement", () => {
+        const server = fs.readFileSync(
+            path.join(
+                process.cwd(),
+                "../nest/src/services/PlanRecognitionService/plan-reading.prompt.ts",
+            ),
+            "utf8",
+        );
+        const text = server.match(/PLAN_READING_PROMPT = `([\s\S]*?)`;/)?.[1];
+        expect(text).toBe(APARTMENT_READING_PROMPT);
     });
 });

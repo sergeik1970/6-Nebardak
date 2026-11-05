@@ -16,14 +16,18 @@ export function configureTrustedProxy(
 /** A project document may reach 1 MB; leave headroom for the JSON wrapper. */
 export const PROJECT_BODY_LIMIT = "1100kb";
 export const DEFAULT_BODY_LIMIT = "100kb";
+/** An uploaded plan image arrives as base64: up to 8 MB of image. */
+export const PLAN_IMAGE_BODY_LIMIT = "11mb";
 
 /**
- * Replaces Nest's single global body parser: only the project endpoints may
- * receive large documents, every other route keeps the small default.
+ * Replaces Nest's single global body parser: only the project endpoints and
+ * plan uploads may receive large bodies, every other route keeps the small
+ * default.
  * The app must be created with `bodyParser: false`.
  */
 export function configureBodyParsers(app: INestApplication): void {
     app.use("/api/projects", json({ limit: PROJECT_BODY_LIMIT }));
+    app.use("/api/plan-recognition", json({ limit: PLAN_IMAGE_BODY_LIMIT }));
     app.use(json({ limit: DEFAULT_BODY_LIMIT }));
     app.use(urlencoded({ extended: false, limit: DEFAULT_BODY_LIMIT }));
 }
