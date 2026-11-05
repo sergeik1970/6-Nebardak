@@ -26,7 +26,7 @@ import {
  * that has a `name.truth.json` (an ApartmentTruth). Optional PLAN_ONLY=name
  * runs one plan; PLAN_REUSE=1 rescores the last answers and asks only for
  * plans that have none; PLAN_MODEL=<model> asks one of the relay's other
- * allowed models.
+ * allowed models; PLAN_TAG=<name> stores a repeated run separately.
  */
 const DIRECTORY = path.join(os.homedir(), "stylefinder-plans", "apartments");
 /** PLAN_MODEL picks one of the relay's allowed models; each model gets its own report. */
@@ -37,6 +37,8 @@ const OUTPUT = path.join(
     "plan-recognition",
     "apartments",
     ...(MODEL ? [MODEL.replace(/[^a-z0-9.-]+/gi, "_")] : []),
+    // PLAN_TAG keeps a repeated run apart from the first, e.g. PLAN_TAG=run2.
+    ...(process.env.PLAN_TAG ? [process.env.PLAN_TAG.replace(/[^a-z0-9.-]+/gi, "_")] : []),
 );
 /** Sheets are A3 with small dimension numbers: send more pixels than for one room. */
 const MAX_SIDE = 2800;

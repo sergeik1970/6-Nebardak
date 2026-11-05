@@ -117,11 +117,12 @@ export const askModel = async (
 
 /** The relay's running totals: requests, tokens and dollars this month and overall. */
 export const relayUsage = async (settings: ModelSettings) => {
+    // The totals are a footnote: a relay that just restarted must not lose the run's report.
     const response = await fetch(`${settings.relayUrl}/v1/usage`, {
         headers: { authorization: `Bearer ${settings.relayToken}` },
         signal: AbortSignal.timeout(5_000),
-    });
-    if (!response.ok) return null;
+    }).catch(() => null);
+    if (!response?.ok) return null;
     return (await response.json()) as Record<
         "month" | "total",
         {
