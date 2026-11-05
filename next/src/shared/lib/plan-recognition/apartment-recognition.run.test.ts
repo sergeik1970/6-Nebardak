@@ -10,6 +10,8 @@ import {
     type ApartmentScore,
     type ApartmentTruth,
 } from "./apartment";
+import { checkLayout, renderLayout, type LayoutCheck } from "./layout";
+import type { ApartmentRoomReading } from "./apartment";
 import {
     answerJson,
     askModel,
@@ -45,6 +47,31 @@ const MAX_SIDE = 2800;
 
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 
+/** The sheet and the rooms as the model placed them, side by side, for checking by eye. */
+const saveLayoutPicture = async (name: string, sheet: Buffer, rooms: ApartmentRoomReading[]) => {
+    const left = await sharp(sheet).resize(1200, 1200, { fit: "inside" }).png().toBuffer();
+    const right = await sharp(Buffer.from(renderLayout(rooms, 1200)))
+        .resize(1200, 1200, { fit: "inside" })
+        .png()
+        .toBuffer();
+    const [a, b] = await Promise.all([sharp(left).metadata(), sharp(right).metadata()]);
+    fs.mkdirSync(path.join(OUTPUT, "layouts"), { recursive: true });
+    await sharp({
+        create: {
+            width: (a.width ?? 0) + (b.width ?? 0) + 20,
+            height: Math.max(a.height ?? 0, b.height ?? 0),
+            channels: 3,
+            background: "#ffffff",
+        },
+    })
+        .composite([
+            { input: left, left: 0, top: 0 },
+            { input: right, left: (a.width ?? 0) + 20, top: 0 },
+        ])
+        .png()
+        .toFile(path.join(OUTPUT, "layouts", `${name}.png`));
+};
+
 describe.runIf(process.env.PLAN_RECOGNITION === "apartments")("apartment plan reading", () => {
     it("reads every apartment plan and reports", { timeout: 3_600_000 }, async () => {
         const settings = modelSettingsFrom(
@@ -73,6 +100,7 @@ describe.runIf(process.env.PLAN_RECOGNITION === "apartments")("apartment plan re
         const results: {
             name: string;
             score?: ApartmentScore;
+            layout?: LayoutCheck;
             error?: string;
             ms: number;
             usage: ModelUsage | null;
@@ -101,11 +129,15 @@ describe.runIf(process.env.PLAN_RECOGNITION === "apartments")("apartment plan re
                         MODEL,
                     ));
                 const parsed = apartmentFromModel(answerJson(answer));
+                if (!("error" in parsed)) await saveLayoutPicture(name, png, parsed.rooms);
                 results.push({
                     name,
                     ...("error" in parsed
                         ? { error: parsed.error }
-                        : { score: scoreApartment(truth, parsed.rooms) }),
+                        : {
+                              score: scoreApartment(truth, parsed.rooms),
+                              layout: checkLayout(parsed.rooms),
+                          }),
                     ms: Math.round(performance.now() - started),
                     usage,
                     answer,
@@ -124,12 +156,12 @@ describe.runIf(process.env.PLAN_RECOGNITION === "apartments")("apartment plan re
         const lines = [
             `# Распознавание квартир: ${relay.provider} ${MODEL ?? relay.model}`,
             "",
-            "| План | Комнаты найдены | Лишние | Площадь, медиана ошибки | Стены точнее 5 см | Ошибка стены, медиана, мм | Окна верно | Вход | Общая площадь | Время | Цена, $ |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: | ---: | ---: | ---: |",
-            ...results.map(({ name, score, error, ms, usage }) =>
+            "| План | Комнаты найдены | Лишние | Площадь, медиана ошибки | Стены точнее 5 см | Ошибка стены, медиана, мм | Окна верно | Вход | Общая площадь | Наложение комнат | Время | Цена, $ |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: | ---: | ---: | ---: | ---: |",
+            ...results.map(({ name, score, layout, error, ms, usage }) =>
                 score
-                    ? `| ${name} | ${score.roomsFound}/${score.rooms} | ${score.roomsExtra} | ${percent(score.areaErrorMedian)} | ${score.wallsExact}/${score.walls} | ${score.wallErrorMedian} | ${score.windowsRight}/${score.windowsChecked} | ${score.entranceRight ? "да" : "нет"} | ${score.totalAreaError === null ? "" : percent(score.totalAreaError)} | ${Math.round(ms / 1000)} с | ${usage?.cost?.toFixed(4) ?? ""} |`
-                    : `| ${name} | ошибка: ${error} | | | | | | | | ${Math.round(ms / 1000)} с | ${usage?.cost?.toFixed(4) ?? ""} |`,
+                    ? `| ${name} | ${score.roomsFound}/${score.rooms} | ${score.roomsExtra} | ${percent(score.areaErrorMedian)} | ${score.wallsExact}/${score.walls} | ${score.wallErrorMedian} | ${score.windowsRight}/${score.windowsChecked} | ${score.entranceRight ? "да" : "нет"} | ${score.totalAreaError === null ? "" : percent(score.totalAreaError)} | ${layout ? `${percent(layout.overlap)}${layout.overlappingRooms.length ? ` (${layout.overlappingRooms.join(", ")})` : ""}` : ""} | ${Math.round(ms / 1000)} с | ${usage?.cost?.toFixed(4) ?? ""} |`
+                    : `| ${name} | ошибка: ${error} | | | | | | | | | ${Math.round(ms / 1000)} с | ${usage?.cost?.toFixed(4) ?? ""} |`,
             ),
             "",
         ];
