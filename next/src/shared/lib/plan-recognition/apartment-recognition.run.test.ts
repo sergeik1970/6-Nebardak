@@ -124,12 +124,12 @@ describe.runIf(process.env.PLAN_RECOGNITION === "apartments")("apartment plan re
         const lines = [
             `# Распознавание квартир: ${relay.provider} ${MODEL ?? relay.model}`,
             "",
-            "| План | Комнаты найдены | Лишние | Площадь, медиана ошибки | Стены точнее 5 см | Ошибка стены, медиана, мм | Окна верно | Вход | Время | Цена, $ |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: | ---: | ---: |",
+            "| План | Комнаты найдены | Лишние | Площадь, медиана ошибки | Стены точнее 5 см | Ошибка стены, медиана, мм | Окна верно | Вход | Общая площадь | Время | Цена, $ |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: | ---: | ---: | ---: |",
             ...results.map(({ name, score, error, ms, usage }) =>
                 score
-                    ? `| ${name} | ${score.roomsFound}/${score.rooms} | ${score.roomsExtra} | ${percent(score.areaErrorMedian)} | ${score.wallsExact}/${score.walls} | ${score.wallErrorMedian} | ${score.windowsRight}/${score.windowsChecked} | ${score.entranceRight ? "да" : "нет"} | ${Math.round(ms / 1000)} с | ${usage?.cost?.toFixed(4) ?? ""} |`
-                    : `| ${name} | ошибка: ${error} | | | | | | | ${Math.round(ms / 1000)} с | ${usage?.cost?.toFixed(4) ?? ""} |`,
+                    ? `| ${name} | ${score.roomsFound}/${score.rooms} | ${score.roomsExtra} | ${percent(score.areaErrorMedian)} | ${score.wallsExact}/${score.walls} | ${score.wallErrorMedian} | ${score.windowsRight}/${score.windowsChecked} | ${score.entranceRight ? "да" : "нет"} | ${score.totalAreaError === null ? "" : percent(score.totalAreaError)} | ${Math.round(ms / 1000)} с | ${usage?.cost?.toFixed(4) ?? ""} |`
+                    : `| ${name} | ошибка: ${error} | | | | | | | | ${Math.round(ms / 1000)} с | ${usage?.cost?.toFixed(4) ?? ""} |`,
             ),
             "",
         ];
@@ -137,7 +137,7 @@ describe.runIf(process.env.PLAN_RECOGNITION === "apartments")("apartment plan re
         const sum = (pick: (score: ApartmentScore) => number) =>
             scored.reduce((total, score) => total + pick(score), 0);
         lines.push(
-            `**Итого:** ответ разобран в ${scored.length} из ${results.length}; комнат найдено ${sum((score) => score.roomsFound)} из ${sum((score) => score.rooms)} (без размеров ${sum((score) => score.roomsUnmeasured)}), лишних ${sum((score) => score.roomsExtra)}; стен точнее 5 см ${sum((score) => score.wallsExact)} из ${sum((score) => score.walls)}; окна верно в ${sum((score) => score.windowsRight)} комнатах из ${sum((score) => score.windowsChecked)}.`,
+            `**Итого:** ответ разобран в ${scored.length} из ${results.length}; комнат найдено ${sum((score) => score.roomsFound)} из ${sum((score) => score.rooms)} (без размеров ${sum((score) => score.roomsUnmeasured)}, с оценёнными по чертежу размерами ${sum((score) => score.roomsEstimated)}), лишних ${sum((score) => score.roomsExtra)}; стен точнее 5 см ${sum((score) => score.wallsExact)} из ${sum((score) => score.walls)}; окна верно в ${sum((score) => score.windowsRight)} комнатах из ${sum((score) => score.windowsChecked)}.`,
             "",
             `**Расход прогона:** ${results.reduce((total, result) => total + (result.usage?.cost ?? 0), 0).toFixed(4)} $, токенов на выходе ${results.reduce((total, result) => total + (result.usage?.outputTokens ?? 0), 0)}.`,
             "",

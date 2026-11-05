@@ -17,6 +17,7 @@ Return only JSON of this shape:
     {
       "name": string,
       "contour": [{"x": number, "y": number}, ...],
+      "estimated": boolean,
       "openings": [{"kind": "window" | "door" | "entrance", "wall": number, "offset": number, "width": number}, ...]
     }
   ]
@@ -25,6 +26,8 @@ Return only JSON of this shape:
 Rules:
 - One entry per room, bathroom, corridor, storeroom, balcony or loggia that walls or partitions enclose. Use the name written on the sheet if there is one, otherwise a short description such as "room at the top right".
 - contour: the room's inner wall faces, corners in order, in millimetres, in the room's own coordinates: put the room's top-left corner at x=0, y=0, x to the right, y downwards, as on the sheet. Slanted and curved walls: use straight edges between their ends.
+- Always give a complete contour with numbers, never null or an empty list. Where the sheet states a size, use it. Where it does not (an open-plan zone bounded by dashed lines, a room with no dimension chain), measure it on the drawing: the sheet is to scale, so take the scale from the stated dimensions nearby.
+- estimated: true when any of this room's sizes was measured on the drawing rather than read from a stated number; false when every size was stated.
 - wall: the index of the contour edge holding the opening; edge i runs from contour[i] to contour[i+1], the last edge closes to contour[0].
 - offset: millimetres along that edge from contour[wall] to the nearer end of the opening; width: the opening's width in millimetres.
 - kind: "window" for windows, "door" for doors and doorways between rooms or onto a balcony, "entrance" for the apartment's front door (list it once, in the room it opens into).
@@ -45,6 +48,16 @@ export interface ApartmentTruth {
     entrance: boolean;
     /** False when the sheet names no rooms and the truth's names are made up: match by size only. */
     namesOnSheet?: boolean;
+    /**
+     * m² without balconies and loggias, for plans that state only the total
+     * (developers' plans): compared with the sum of the rooms the model read.
+     */
+    totalArea?: number;
+    /**
+     * Dimensions the sheet states without saying whose room they bound (open
+     * plans split by dashed lines): each must appear among any room's walls.
+     */
+    walls?: number[];
     note?: string;
 }
 
@@ -56,6 +69,8 @@ export interface ApartmentRoomReading {
     unplacedWindows: number;
     /** False when the model named the room but gave no usable contour. */
     measured: boolean;
+    /** True when the model measured some of the room's sizes on the drawing instead of reading them. */
+    estimated: boolean;
 }
 
 const placed = (opening: unknown) => {
@@ -77,7 +92,12 @@ export const apartmentFromModel = (
     const parsed: ApartmentRoomReading[] = [];
     for (let index = 0; index < rooms.length; index += 1) {
         const room: unknown = rooms[index];
-        const source = (room ?? {}) as { name?: unknown; contour?: unknown; openings?: unknown };
+        const source = (room ?? {}) as {
+            name?: unknown;
+            contour?: unknown;
+            openings?: unknown;
+            estimated?: unknown;
+        };
         const openings = (Array.isArray(source.openings) ? source.openings : []).filter((opening) =>
             ["window", "door", "entrance"].includes(
                 (opening as { kind?: unknown })?.kind as string,
@@ -96,6 +116,7 @@ export const apartmentFromModel = (
             // A room the sheet gives no sizes for (a BTI toilet) is still a room found.
             reading: "error" in result ? { contour: [], openings: [] } : result.reading,
             measured: !("error" in result),
+            estimated: source.estimated === true,
             entrances: openings.filter((opening) => opening.kind === "entrance").length,
             unplacedWindows: openings.filter(
                 (opening) => opening.kind === "window" && !placed(opening),
@@ -153,6 +174,8 @@ export interface ApartmentScore {
     roomsExtra: number;
     /** Rooms found that the model left without sizes (the sheet gives none). */
     roomsUnmeasured: number;
+    /** Rooms found whose sizes the model partly measured on the drawing. */
+    roomsEstimated: number;
     /** Median |area − truth| / truth over matched rooms with a known area. */
     areaErrorMedian: number;
     walls: number;
@@ -161,10 +184,15 @@ export interface ApartmentScore {
     wallErrorMedian: number;
     windowsChecked: number;
     windowsRight: number;
+    /** |sum of read rooms without balconies − totalArea| / totalArea, when the truth gives it. */
+    totalAreaError: number | null;
     entranceRight: boolean;
     /** Truth room → model room name, for the report. */
     matches: { truth: string; read: string | null; areaError: number | null }[];
 }
+
+/** Balconies and loggias stay out of a flat's total area. */
+const OUTDOOR = /балкон|лодж|террас|balcon|loggia|terrace/i;
 
 const AREA_LIMIT = 0.3;
 const WALL_FIT_LIMIT = 0.2;
@@ -249,12 +277,31 @@ export const scoreApartment = (
         return { truth: room.name, read: candidate.room.name, areaError };
     });
 
+    if (truth.walls?.length) {
+        walls += truth.walls.length;
+        allWallErrors.push(
+            ...wallErrors(
+                truth.walls,
+                read.flatMap((candidate) => candidate.walls),
+            ),
+        );
+    }
+    const indoor = read.filter(
+        (candidate) => candidate.room.measured && !OUTDOOR.test(candidate.room.name),
+    );
+    const totalAreaError = truth.totalArea
+        ? Math.abs(indoor.reduce((sum, candidate) => sum + candidate.area, 0) - truth.totalArea) /
+          truth.totalArea
+        : null;
+
     return {
+        totalAreaError,
         rooms: truth.rooms.length,
         roomsFound: matched.size,
         roomsExtra: unused.size,
         roomsUnmeasured: Array.from(matched.values()).filter((index) => !read[index].room.measured)
             .length,
+        roomsEstimated: read.filter((candidate) => candidate.room.estimated).length,
         areaErrorMedian: median(areaErrors),
         walls,
         wallsExact: allWallErrors.filter((error) => error <= 50).length,

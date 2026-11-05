@@ -194,6 +194,24 @@ describe("apartment plan reading", () => {
         });
     });
 
+    it("checks a developer plan's total area and stated dimensions", () => {
+        const parsed = apartmentFromModel({
+            rooms: [
+                { name: "Кухня-гостиная", contour: rectangle(6000, 4000), openings: [] },
+                { name: "Санузел", contour: rectangle(2000, 1500), openings: [] },
+                { name: "Балкон", contour: rectangle(3000, 1000), openings: [] },
+            ],
+        });
+        if ("error" in parsed) throw new Error(parsed.error);
+
+        expect(
+            scoreApartment(
+                { entrance: false, totalArea: 27, walls: [6000, 1500, 3333], rooms: [] },
+                parsed.rooms,
+            ),
+        ).toMatchObject({ totalAreaError: 0, walls: 3, wallsExact: 2 });
+    });
+
     it("turns a malformed answer into an error and keeps an unmeasured room", () => {
         expect(apartmentFromModel({ rooms: [] })).toEqual({ error: "В ответе нет комнат." });
         expect(apartmentFromModel({ rooms: [{ name: "x", contour: [] }] })).toMatchObject({
